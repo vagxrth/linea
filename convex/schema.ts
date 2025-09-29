@@ -30,6 +30,44 @@ const schema = defineSchema({
     userId: v.id('users'),
     nextProjectNumber: v.number(),
   }).index('by_userId', ['userId']),
+
+  // Credits ledger
+  credits_ledger: defineTable({
+    userId: v.id('users'),
+    subscriptionId: v.id('subscriptions'),
+    amount: v.number(),
+    type: v.string(),
+    reasons: v.optional(v.string()),
+    idempotencyKey: v.optional(v.string()),
+    meta: v.optional(v.any()),
+  })
+    .index('by_subscriptionId', ['subscriptionId'])
+    .index('by_userId', ['userId'])
+    .index('by_idempotencyKey', ['idempotencyKey']),
+
+  // Subscriptions
+  subscriptions: defineTable({
+    userId: v.id('users'),
+    polarCustomerId: v.string(),
+    polarSubscriptionId: v.string(),
+    productId: v.optional(v.string()),
+    priceId: v.optional(v.string()),
+    planCode: v.optional(v.string()),
+    status: v.string(),
+    currentPeriodEnd: v.optional(v.number()),
+    trailEndsAt: v.optional(v.number()),
+    cancelAt: v.optional(v.number()),
+    cancelledAt: v.optional(v.number()),
+    seats: v.optional(v.number()),
+    metadata: v.optional(v.any()),
+    creditsBalance: v.number(),
+    creditsGrantPerPeriod: v.number(),
+    creditsRolloverLimit: v.number(),
+    lastGrantCursor: v.optional(v.string()),
+  })
+    .index('by_userId', ['userId'])
+    .index('by_polarSubscriptionId', ['polarSubscriptionId'])
+    .index('by_status', ['status'])
 });
  
 export default schema;
