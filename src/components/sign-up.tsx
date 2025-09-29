@@ -79,7 +79,7 @@ export default function LoginPage() {
                         asChild
                         variant="link"
                         className="px-2">
-                        <Link href="/signin">Sign In</Link>
+                        <Link href="/auth/signin">Sign In</Link>
                     </Button>
                 </p>
             </form>
