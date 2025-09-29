@@ -55,7 +55,7 @@ const schema = defineSchema({
     planCode: v.optional(v.string()),
     status: v.string(),
     currentPeriodEnd: v.optional(v.number()),
-    trailEndsAt: v.optional(v.number()),
+    trialEndsAt: v.optional(v.number()),
     cancelAt: v.optional(v.number()),
     cancelledAt: v.optional(v.number()),
     seats: v.optional(v.number()),
