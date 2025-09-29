@@ -118,7 +118,7 @@ export default function LoginPage() {
               asChild
               variant="link"
               className="px-2">
-              <Link href="/signup">Create account</Link>
+              <Link href="/auth/signup">Create account</Link>
             </Button>
           </p>
         </div>
