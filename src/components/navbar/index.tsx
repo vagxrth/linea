@@ -10,6 +10,7 @@ import { CircleQuestionMark, Hash, LayoutTemplate, User } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { useAppSelector } from '@/redux/store';
+import CreateProject from '../buttons/create-project';
 
 type TabProps = {
     label: string
@@ -96,6 +97,7 @@ const Navbar = () => {
                         <User className='size-5 text-black' />
                     </AvatarFallback>
                 </Avatar>
+                {!hasCanvas && !hasStyleGuide && <CreateProject />}
             </div>
         </div>
     )
