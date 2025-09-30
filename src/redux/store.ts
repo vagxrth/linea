@@ -1,4 +1,4 @@
-import { combineReducers, configureStore, Middleware, ReducersMapObject  } from '@reduxjs/toolkit'
+import { combineReducers, configureStore, Middleware, ReducersMapObject } from '@reduxjs/toolkit'
 import { slices } from './slice';
 import { apis } from './api';
 import { TypedUseSelectorHook, useSelector, useDispatch } from 'react-redux';
@@ -13,16 +13,14 @@ const rootReducer = combineReducers({
     }, {} as ReducersMapObject)
 });
 
-const makeStore = (preloadedState?: Partial<RootState>) => {
+export const makeStore = (preloadedState?: Partial<RootState>) => {
     return configureStore({
         reducer: rootReducer,
         middleware: (getDM) => getDM().concat(...apis.map((api) => api.middleware as Middleware)),
         preloadedState,
         devTools: process.env.NODE_ENV !== 'production',
-     })
+    })
 }
-
-export const store = makeStore();
 
 export type AppStore = ReturnType<typeof makeStore>
 export type AppDispatch = AppStore['dispatch']
