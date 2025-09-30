@@ -13,7 +13,7 @@ const CreateProject = () => {
     <Button
         variant='default'
         onClick={() => createProject()}
-        disabled={!canCreate || !isCreating}
+        disabled={!canCreate || isCreating}
         className='flex items-center gap-2 cursor-pointer rounded-full'
     >
         { isCreating ? (
