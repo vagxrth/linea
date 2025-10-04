@@ -81,3 +81,32 @@ export const removeMoodboardImage = mutation({
         return { success: true, imageCount: updatedImages.length }
     }
 })
+
+export const addMoodboardImage = mutation({
+    args: {
+        projectId: v.id('projects'),
+        storageId: v.id('_storage'),
+    },
+    handler: async (ctx, { projectId, storageId }) => {
+        const userId = await getAuthUserId(ctx);
+        if (!userId) throw new Error("User not authenticated!")
+
+        const project = await ctx.db.get(projectId)
+        if (!project) throw new Error('Project not found')
+
+        if (project.userId !== userId) throw new Error('Access denied')
+
+        const currentImages = project.moodboardImages || []
+        if (currentImages.length >= 5) {
+            throw new Error('You can only add up to 5 images')
+        }
+
+        const updatedImages = [...currentImages, storageId]
+        await ctx.db.patch(projectId, {
+            moodboardImages: updatedImages,
+            lastModified: Date.now()
+        })
+
+        return { success: true, imageCount: updatedImages.length }
+    }
+})
