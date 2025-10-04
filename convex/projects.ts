@@ -49,9 +49,11 @@ export const createProject = mutation({
     }
 })
 
-const getNextProjectNumber = async(ctx: any, userId: string): Promise<number> => {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const getNextProjectNumber = async (ctx: any, userId: string): Promise<number> => {
     const counter = await ctx.db
         .query('project_counters')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .withIndex('by_userId', (q: any) => q.eq('userId', userId))
         .first()
 
@@ -71,3 +73,29 @@ const getNextProjectNumber = async(ctx: any, userId: string): Promise<number> =>
 
     return projectNumber
 }
+
+export const getProjects = query({
+    args: {
+        userId: v.id('users'),
+        limit: v.optional(v.number()),
+    },
+    handler: async (ctx, { userId, limit = 20 }) => {
+        const allProjects = await ctx.db
+            .query('projects')
+            .withIndex('by_userId', (q) => q.eq('userId', userId))
+            .order('desc')
+            .collect()
+
+        const projects = allProjects.slice(0, limit)
+
+        return projects.map((project) => ({
+            _id: project._id,
+            name: project.name,
+            projectNumber: project.projectNumber,
+            thumbnail: project.thumbnail,
+            lastModified: project.lastModified,
+            createdAt: project.createdAt,
+            isPublic: project.isPublic
+        }));
+    }
+})
