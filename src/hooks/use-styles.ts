@@ -1,3 +1,5 @@
+'use client'
+
 import { useMutation } from "convex/react"
 import { useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
@@ -238,4 +240,25 @@ export const useMoodboard = (guideImages: MoodboardImage[]) => {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [images, setValue, getValues])
+
+    useEffect(() => {
+        return () => {
+            images.forEach((image) => {
+                URL.revokeObjectURL(image.preview)
+            })
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+
+    return {
+        form,
+        images,
+        dragActive,
+        addImage,
+        removeImage,
+        handleDrag,
+        handleDrop,
+        handleFileInput,
+        canAddMore: images.length < 5
+    }
 }

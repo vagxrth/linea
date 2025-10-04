@@ -1,6 +1,8 @@
 import React from 'react'
 
-type Props = {}
+type Props = {
+    children: React.ReactNode
+}
 
 const layout = (props: Props) => {
   return (
