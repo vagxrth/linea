@@ -7,6 +7,7 @@ const Dashboard = async () => {
     const { entitlement, profileName } = await SubscriptionQuery();
 
     if (!entitlement._valueJSON) {
+        // TODO: hook up billing logic
         redirect(`/dashboard/${combinedSlug(profileName!)}`)
     }
     redirect(`/dashboard/${combinedSlug(profileName!)}`)

@@ -17,7 +17,7 @@ export const SubscriptionQuery = async () => {
     const rawProfile = await ProfileQuery();
 
     const profile = normalizeProfile(
-        rawProfile._valueJSON as unknown as ConvexUserRaw| null
+        rawProfile._valueJSON as unknown as ConvexUserRaw | null
     )
 
     const entitlement = await preloadQuery(
@@ -28,4 +28,23 @@ export const SubscriptionQuery = async () => {
 
     return { entitlement, profileName: profile?.name };
 
+}
+
+export const ProjectQuery = async () => {
+    const rawProfile = await ProfileQuery();
+    const profile = normalizeProfile(
+        rawProfile._valueJSON as unknown as ConvexUserRaw | null
+    )
+
+    if (!profile?.id) {
+        return { projects: null, profile: null }
+    }
+
+    const projects = await preloadQuery(
+        api.projects.getProjects,
+        { userId: profile.id as Id<'users'>},
+        { token: await convexAuthNextjsToken() }
+    )
+
+    return { projects, profile }
 }
