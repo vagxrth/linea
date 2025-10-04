@@ -76,6 +76,7 @@ export const useProjectCreation = () => {
             }))
             dispatch(createProjectSuccess())
             toast.success('Project created successfully!')
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         } catch (error) {
             dispatch(createProjectFailure('Failed to create project'))
             toast.error('Failed to create project')
