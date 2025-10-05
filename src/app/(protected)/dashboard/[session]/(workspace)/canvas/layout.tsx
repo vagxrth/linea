@@ -1,12 +1,16 @@
+import Toolbar from '@/components/toolbar'
 import React from 'react'
 
 type Props = {
     children: React.ReactNode
 }
 
-const layout = (props: Props) => {
+const layout = ({ children }: Props) => {
   return (
-    <div>layout</div>
+    <div className='w-full h-screen'>
+        {children}
+        <Toolbar />
+    </div>
   )
 }
 
