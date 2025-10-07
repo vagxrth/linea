@@ -1,5 +1,5 @@
-import { addArrow, addEllipse, addFrame, addFreeDrawShape, addLine, addRect, addText, clearSelection, removeShape, selectShape, setTool, Shape, updateShape } from "@/redux/slice/shapes"
-import { panEnd, panMove, panStart, Point, screenToWorld, wheelPan, wheelZoom } from "@/redux/slice/viewport"
+import { addArrow, addEllipse, addFrame, addFreeDrawShape, addLine, addRect, addText, clearSelection, removeShape, selectShape, setTool, Shape, Tool, updateShape } from "@/redux/slice/shapes"
+import { handToolDisable, handToolEnable, panEnd, panMove, panStart, Point, screenToWorld, wheelPan, wheelZoom } from "@/redux/slice/viewport"
 import { AppDispatch, useAppSelector } from "@/redux/store"
 import { useEffect, useRef, useState } from "react"
 import { useDispatch } from "react-redux"
@@ -552,5 +552,213 @@ export const useCanvas = () => {
 
     const onPointerCancel: React.PointerEventHandler<HTMLDivElement> = (e) => {
         onPointerUp(e)
+    }
+
+    const onKeyDown = (e: KeyboardEvent): void => {
+        if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !e.repeat) {
+            e.preventDefault()
+            spacePress.current = true
+            dispatch(handToolEnable());
+        }
+    }
+
+    const onKeyUp = (e: KeyboardEvent): void => {
+        if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight')) {
+            e.preventDefault()
+            spacePress.current = false
+            dispatch(handToolDisable());
+        }
+    }
+
+    useEffect(() => {
+        document.addEventListener('keydown', onKeyDown)
+        document.addEventListener('keyup', onKeyUp)
+
+        return () => {
+            document.removeEventListener('keydown', onKeyDown)
+            document.removeEventListener('keyup', onKeyUp)
+            if (freehandRef.current) window.cancelAnimationFrame(freehandRef.current)
+            if (panRef.current) window.cancelAnimationFrame(panRef.current)
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+
+    useEffect(() => {
+        const handleResizeStart = (e: CustomEvent) => {
+            const { shapeId, corner, bounds } = e.detail
+            resizingRef.current = true
+            resizingDataRef.current = { shapeId, corner, initialBounds: bounds, startPoint: { x: e.detail.clientX || 0, y: e.detail.clientY || 0 } }
+        }
+
+        const handleResizeMove = (e: CustomEvent) => {
+            if (!resizingRef.current || !resizingDataRef.current) return
+            const { shapeId, corner, initialBounds } = resizingDataRef.current
+            const { clientX, clientY } = e.detail
+
+            const canvasElement = canvasRef.current
+            if (!canvasElement) return
+
+            const rect = canvasElement.getBoundingClientRect()
+            const localX = clientX - rect.left
+            const localY = clientY - rect.top
+
+            const world = screenToWorld({ x: localX, y: localY }, viewport.translate, viewport.scale)
+
+            const shape = entityState.entities[shapeId]
+            if (!shape) return
+
+            const newBounds = { ...initialBounds }
+
+            switch (corner) {
+                case 'nw':
+                    newBounds.w = Math.max(10, initialBounds.w + (initialBounds.x - world.x))
+                    newBounds.h = Math.max(10, initialBounds.h + (initialBounds.y - world.y))
+                    newBounds.x = world.x
+                    newBounds.y = world.y
+                    break
+
+                case 'ne':
+                    newBounds.w = Math.max(10, world.x - initialBounds.x)
+                    newBounds.h = Math.max(10, initialBounds.h + (initialBounds.y - world.y))
+                    newBounds.y = world.y
+                    break
+
+                case 'sw':
+                    newBounds.w = Math.max(10, initialBounds.w + (initialBounds.x - world.x))
+                    newBounds.h = Math.max(10, world.y - initialBounds.y)
+                    newBounds.x = world.x
+                    break
+
+                case 'se':
+                    newBounds.w = Math.max(10, world.x - initialBounds.x)
+                    newBounds.h = Math.max(10, world.y - initialBounds.y)
+                    break
+            }
+
+            if (
+                shape.type === 'frame' ||
+                shape.type === 'rect' ||
+                shape.type === 'ellipse'
+            ) {
+                dispatch(updateShape({ id: shapeId, patch: { x: newBounds.x, y: newBounds.y, w: newBounds.w, h: newBounds.h } }))
+            } else if (shape.type === 'freedraw') {
+                const xs = shape.points.map((p: { x: number; y: number }) => p.x)
+                const ys = shape.points.map((p: { x: number; y: number }) => p.y)
+
+                const actualMinX = Math.min(...xs)
+                const actualMaxX = Math.max(...xs)
+                const actualMinY = Math.min(...ys)
+                const actualMaxY = Math.max(...ys)
+
+                const actualWidth = actualMaxX - actualMinX
+                const actualHeight = actualMaxY - actualMinY
+
+                const newActualX = newBounds.x + 5
+                const newActualY = newBounds.y + 5
+                const newActualWidth = Math.max(10, newBounds.w - 10)
+                const newActualHeight = Math.max(10, newBounds.h - 10)
+
+                const scaleX = actualWidth > 0 ? newActualWidth / actualWidth : 1
+                const scaleY = actualHeight > 0 ? newActualHeight / actualHeight : 1
+
+                const scaledPoints = shape.points.map((point: { x: number; y: number }) => ({
+                    x: newActualX + (point.x - actualMinX) * scaleX,
+                    y: newActualY + (point.y - actualMinY) * scaleY,
+                }))
+
+                dispatch(updateShape({ id: shapeId, patch: { points: scaledPoints}}))
+            } else if (shape.type === 'arrow' || shape.type === 'line') {
+                const actualMinX = Math.min(shape.startX, shape.endX)
+                const actualMaxX = Math.max(shape.startX, shape.endX)
+                const actualMinY = Math.min(shape.startY, shape.endY)
+                const actualMaxY = Math.max(shape.startY, shape.endY)
+
+                const actualWidth = actualMaxX - actualMinX
+                const actualHeight = actualMaxY - actualMinY
+
+                const newActualX = newBounds.x + 5
+                const newActualY = newBounds.y + 5
+                const newActualWidth = Math.max(10, newBounds.w - 10)
+                const newActualHeight = Math.max(10, newBounds.h - 10)
+
+                let newStartX, newStartY, newEndX, newEndY
+
+                if (actualWidth === 0) {
+                    newStartX = newActualX + newActualWidth / 2
+                    newEndX = newActualX + newActualWidth / 2
+                    newStartY = shape.startY < shape.endY ? newActualY : newActualY + newActualHeight
+                    newEndY = shape.startY < shape.endY ? newActualY + newActualHeight : newActualY
+                } else if (actualHeight === 0) {
+                    newStartY = newActualY + newActualHeight / 2
+                    newEndY = newActualY + newActualHeight / 2
+                    newStartX = shape.startX < shape.endX ? newActualX : newActualX + newActualWidth
+                    newEndX = shape.startX < shape.endX ? newActualX + newActualWidth : newActualX
+                } else {
+                    const scaleX = newActualWidth / actualWidth
+                    const scaleY = newActualHeight / actualHeight
+
+                    newStartX = newActualX + (shape.startX - actualMinX) * scaleX
+                    newStartY = newActualY + (shape.startY - actualMinY) * scaleY
+                    newEndX = newActualX + (shape.endX - actualMinX) * scaleX
+                    newEndY = newActualY + (shape.endY - actualMinY) * scaleY
+                }
+
+                dispatch(updateShape({ id: shapeId, patch: { startX: newStartX, startY: newStartY, endX: newEndX, endY: newEndY } }))
+            }
+        }
+
+        const handleResizeEnd = () => {
+            resizingRef.current = false
+            resizingDataRef.current = null
+        }
+
+        window.addEventListener('shape-resize-start', handleResizeStart as EventListener)
+        window.addEventListener('shape-resize-move', handleResizeMove as EventListener)
+        window.addEventListener('shape-resize-end', handleResizeEnd as EventListener)
+
+        return () => {
+            window.removeEventListener('shape-resize-start', handleResizeStart as EventListener)
+            window.removeEventListener('shape-resize-move', handleResizeMove as EventListener)
+            window.removeEventListener('shape-resize-end', handleResizeEnd as EventListener)
+        }
+    }, [dispatch, entityState.entities, viewport.translate, viewport.scale])
+
+    const attachCanvasRef = (ref: HTMLDivElement | null): void => {
+        if (canvasRef.current) {
+            canvasRef.current.removeEventListener('wheel', onWheel)
+        }
+        canvasRef.current = ref
+
+        if (ref) {
+            ref.addEventListener('wheel', onWheel, { passive: false })
+        }
+    }
+
+    const selectTool = (tool: Tool): void => {
+        dispatch(setTool(tool))
+    }
+
+    const getDraftShapes = (): DraftShape | null => draftShapeRef.current
+    const getFreeDrawPoints = (): ReadonlyArray<Point> => freeDrawPointRef.current
+
+    return {
+        viewport,
+        shapes: shapeList,
+        currentTool,
+        selectedShapes,
+
+        onPointerDown,
+        onPointerMove,
+        onPointerUp,
+        onPointerCancel,
+
+        attachCanvasRef,
+        selectTool,
+        getDraftShapes,
+        getFreeDrawPoints,
+        
+        sidebarOpen,
+        setSidebarOpen,
+        selectedText,
     }
 }
