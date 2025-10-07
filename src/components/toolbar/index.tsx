@@ -1,7 +1,7 @@
 import React from 'react'
 import History from '../history'
 import Zoom from '../zoom'
-import ToolbarShapes from '../shapes'
+import ToolbarShapes from '../toolbar-shapes'
 
 const Toolbar = () => {
   return (
