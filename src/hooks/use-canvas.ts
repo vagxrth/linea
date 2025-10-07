@@ -468,12 +468,10 @@ export const useCanvas = () => {
             })
         }
         if (draftShapeRef.current) {
-            if (draftShapeRef.current) {
-                draftShapeRef.current.current = world
-                requestRender()
-            } else if (currentTool === 'freedraw') {
-                freeDrawPointRef.current.push(world)
-            }
+            draftShapeRef.current.current = world
+            requestRender()
+        } else if (currentTool === 'freedraw') {
+            freeDrawPointRef.current.push(world)
         }
     }
 
@@ -666,7 +664,7 @@ export const useCanvas = () => {
                     y: newActualY + (point.y - actualMinY) * scaleY,
                 }))
 
-                dispatch(updateShape({ id: shapeId, patch: { points: scaledPoints}}))
+                dispatch(updateShape({ id: shapeId, patch: { points: scaledPoints } }))
             } else if (shape.type === 'arrow' || shape.type === 'line') {
                 const actualMinX = Math.min(shape.startX, shape.endX)
                 const actualMaxX = Math.max(shape.startX, shape.endX)
@@ -756,7 +754,7 @@ export const useCanvas = () => {
         selectTool,
         getDraftShapes,
         getFreeDrawPoints,
-        
+
         sidebarOpen,
         setSidebarOpen,
         selectedText,
