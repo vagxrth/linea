@@ -1,5 +1,3 @@
-'use client'
-
 import InfiniteCanvas from '@/components/canvas'
 import ProjectProvider from '@/components/projects/provider/index'
 import { ProjectQuery } from '@/convex/query.config'

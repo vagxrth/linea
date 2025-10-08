@@ -1,3 +1,5 @@
+'use client'
+
 import { loadProject } from '@/redux/slice/shapes';
 import { restoreViewport } from '@/redux/slice/viewport';
 import { useAppDispatch } from '@/redux/store';

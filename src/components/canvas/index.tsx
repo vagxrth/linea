@@ -59,16 +59,16 @@ const InfiniteCanvas = () => {
                 transformOrigin: '0 0',
                 willChange: 'transform',
             }}>
-                {shapes.map((shape) => (
+                {/* {shapes.map((shape) => (
                     <ShapeRenderer 
                         key={shape.id}
                         shape={shape}
-                        // toggleInspiration={toggleInspiration}
-                        // toggleChat={toggleChat}
-                        // generateWorkflow={generateWorkflow}
-                        // exportDesign={exportDesign}
+                        toggleInspiration={toggleInspiration}
+                        toggleChat={toggleChat}
+                        generateWorkflow={generateWorkflow}
+                        exportDesign={exportDesign}
                     />
-                ))}
+                ))} */}
 
                 {shapes.map((shape) => (
                     <SelectionOverlay key={`select-${shape.id}`} shape={shape} isSelected={!!selectedShapes[shape.id]} />
