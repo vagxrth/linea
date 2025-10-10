@@ -90,7 +90,7 @@ export interface PolarOrder {
 export const extractOrder = (data: unknown): PolarOrder | null => {
     if (!data || typeof data !== 'object') return null
     const d = data as Record<string, unknown>
-    const id = d.Id
+    const id = d.id
     if (typeof id !== 'string') return null
     return {
         id,
