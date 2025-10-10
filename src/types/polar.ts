@@ -108,3 +108,5 @@ export const toMs = (x: string | number | null | undefined): number | undefined 
     const t = Date.parse(x)
     return Number.isNaN(t) ? undefined : t
 }
+
+export const entitledStatus= (status: string): boolean => /^(active|trailing)$/i.test(status)
