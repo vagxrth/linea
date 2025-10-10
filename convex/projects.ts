@@ -116,3 +116,28 @@ export const getStyleGuide = query({
         return project.styleGuide ? JSON.parse(project.styleGuide) : null;
     }
 })
+
+export const updateProjectSketches = mutation({
+    args: {
+        projectId: v.id('projects'),
+        sketchesData: v.any(),
+        viewportData: v.optional(v.any())
+    },
+    handler: async (ctx, { projectId, sketchesData, viewportData }) => {
+        const project = await ctx.db.get(projectId);
+        if (!project) throw new Error("Project not found")
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const updateData: any = {
+            sketchesData,
+            lastModified: Date.now(),
+        }
+
+        if (viewportData) {
+            updateData.viewportData = viewportData;
+        }
+
+        await ctx.db.patch(projectId, updateData);
+        return { success: true }
+    }
+})
