@@ -1,4 +1,3 @@
-import { Id } from './../../convex/_generated/dataModel.d';
 export interface PolarWebhookEvent<TData = unknown> {
     id: string | number;
     type: string;
