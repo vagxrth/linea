@@ -1,7 +1,7 @@
 import { fetchMutation, fetchQuery } from "convex/nextjs";
 import { inngest } from "./client";
 import { api } from "../../convex/_generated/api";
-import { extractOrder, extractSubscription, isPolarWebhookEvent, PolarOrder, PolarSubscription, ReceivedEvent } from "@/types/polar";
+import { extractOrder, extractSubscription, isPolarWebhookEvent, PolarOrder, PolarSubscription, ReceivedEvent, toMs } from "@/types/polar";
 import { Id } from "../../convex/_generated/dataModel";
 
 export const autosaveProjectWorkflow = inngest.createFunction(
@@ -65,5 +65,52 @@ export const handlePolarEvent = inngest.createFunction(
 
         const polarSubscriptionId = subscription?.id ?? order?.subscription_id ?? ''
         if (!polarSubscriptionId) return
+
+        const currentPeriodEnd = toMs(subscription?.current_period_end)
+
+        const payload = {
+            userId,
+            polarCustomerId: subscription?.customer?.id ?? subscription?.customer_id ?? order?.customer_id ?? '',
+            polarSubscriptionId,
+            productId: subscription?.product_id ?? subscription?.product?.id ?? undefined,
+            priceId: subscription?.prices?.[0]?.id ?? undefined,
+            planCode: subscription?.plan_code ?? subscription?.product?.name ?? undefined,
+            status: subscription?.status ?? 'updated',
+            currentPeriodEnd,
+            trialEndsAt: toMs(subscription?.trial_ends_at),
+            cancelAt: toMs(subscription?.cancel_at),
+            cancelledAt: toMs(subscription?.cancelled_at),
+            seats: subscription?.seats ?? undefined,
+            metadata: data,
+            creditsGrantPerPeriod: 10,
+            creditsRolloverLimit: 100
+        }
+
+        const subscriptionId = await step.run('upsert-subscription', async () => {
+            try {
+                const existingByPolar = await fetchQuery(api.subscription.getPolarSubscriptionId, {
+                    polarSubscriptionId: payload.polarSubscriptionId
+                })
+
+                const existingByUser = await fetchQuery(api.subscription.getSubscriptionByUser, { userId: payload.userId })
+
+                if (existingByPolar && existingByUser && existingByPolar._id !== existingByUser._id) {
+                    console.log('Subscription already exists for another user')
+                }
+
+                const result = await fetchMutation(api.subscription.upsertFromPolar, payload)
+
+                const allUserSubs = await fetchQuery(api.subscription.getAllForUser, { userId: payload.userId })
+
+                if (allUserSubs && allUserSubs.length > 1) {
+                    allUserSubs.forEach((sub, index) => {
+                        console.error(`${index + 1}. ID: ${sub._id}, Polar Subscription ID: ${sub.polarSubscriptionId}`)
+                    })
+                }
+                return result
+            } catch (error) {
+                throw error
+            }
+        })
     }
 )
