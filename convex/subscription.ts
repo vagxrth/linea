@@ -3,6 +3,7 @@ import { mutation, query } from "./_generated/server";
 
 const DEFAULT_GRANT = 10
 const DEFAULT_ROLLOVER_LIMIT = 100
+const ENTITLED = new Set(['active', 'trailing'])
 
 export const hasEntitlement = query({
     args: { userId: v.id('users') },
@@ -154,5 +155,56 @@ export const upsertFromPolar = mutation({
             lastGrantCursor: undefined
         })
         return newId
+    }
+})
+
+export const grantCredits = mutation({
+    args: {
+        subscriptionId: v.id('subscriptions'),
+        idempotencyKey: v.string(),
+        amount: v.optional(v.number()),
+        reason: v.optional(v.string()),
+    },
+    handler: async (ctx, { subscriptionId, idempotencyKey, amount, reason }) => {
+        const duplicate = await ctx.db
+            .query('credits_ledger')
+            .withIndex('by_idempotencyKey', (q) => q.eq('idempotencyKey', idempotencyKey))
+            .first();
+
+        if (duplicate) return { ok: true, skipped: true, reason: 'duplicate-key' }
+
+        const sub = await ctx.db.get(subscriptionId);
+        if (!sub) return { ok: false, reason: 'subscription-not-found' }
+
+        if (sub.lastGrantCursor === idempotencyKey) {
+            return { ok: true, skipped: true, reason: 'cursor-match' }
+        }
+
+        if (!ENTITLED.has(sub.status)) {
+            return { ok: true, skipped: true, reason: 'not-entitled' }
+        }
+
+        const grant = amount ?? sub.creditsGrantPerPeriod ?? DEFAULT_GRANT
+
+        if (grant <= 0) return { ok: true, skipped: true, reason: 'zero-grant' }
+
+        const next = Math.min(sub.creditsBalance + grant, sub.creditsRolloverLimit ?? DEFAULT_ROLLOVER_LIMIT)
+
+        await ctx.db.patch(subscriptionId, {
+            creditsBalance: next,
+            lastGrantCursor: idempotencyKey,
+        })
+
+        await ctx.db.insert('credits_ledger', {
+            userId: sub.userId,
+            subscriptionId,
+            amount: grant,
+            type: 'grant',
+            reasons: reason ?? 'period-grant',
+            idempotencyKey,
+            meta: { prev: sub.creditsBalance, next },
+        })
+
+        return { ok: true, granted: grant, balance: next }
     }
 })

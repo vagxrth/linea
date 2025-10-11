@@ -1,7 +1,7 @@
 import { fetchMutation, fetchQuery } from "convex/nextjs";
 import { inngest } from "./client";
 import { api } from "../../convex/_generated/api";
-import { extractOrder, extractSubscription, isPolarWebhookEvent, PolarOrder, PolarSubscription, ReceivedEvent, toMs } from "@/types/polar";
+import { entitledStatus, extractOrder, extractSubscription, isPolarWebhookEvent, PolarOrder, PolarSubscription, ReceivedEvent, toMs } from "@/types/polar";
 import { Id } from "../../convex/_generated/dataModel";
 
 export const autosaveProjectWorkflow = inngest.createFunction(
@@ -21,6 +21,11 @@ export const autosaveProjectWorkflow = inngest.createFunction(
         }
     }
 )
+
+const grantKey = (subId: string, periodEndMs?: number, eventId?: string | number): string => periodEndMs != null
+    ? `${subId}:${periodEndMs}`
+    : eventId != null ? `${subId}:evt:${eventId}` : `${subId}:first`
+
 
 export const handlePolarEvent = inngest.createFunction(
     { id: 'polar-webhook-handler' },
@@ -112,5 +117,82 @@ export const handlePolarEvent = inngest.createFunction(
                 throw error
             }
         })
+
+        const createSubscription = /subscription\.created/i.test(type)
+        const renewSubscription = /subscription\.renew|order\.created|invoice\.paid|order\.paid/i.test(type)
+
+        const entitled = entitledStatus(payload.status)
+
+        const idempotencyKey = grantKey(polarSubscriptionId, currentPeriodEnd, incoming.id)
+
+        if (entitled && (createSubscription || renewSubscription || true)) {
+            const grant = await step.run('grant-credits', async () => {
+                try {
+                    const result = await fetchMutation(api.subscription.grantCredits, {
+                        subscriptionId,
+                        idempotencyKey,
+                        amount: 10,
+                        reason: createSubscription ? 'initial-grant' : 'period-grant'
+                    })
+                    return result
+                } catch (error) {
+                    throw error
+                }
+            })
+            if (grant.ok && !('skipped' in grant && grant.skipped)) {
+                await step.sendEvent('credits-granted', {
+                    name: 'billing/credits.granted',
+                    id: `credits-granted:${polarSubscriptionId}:${currentPeriodEnd ?? 'first'}`,
+                    data: {
+                        userId,
+                        amount: 'granted' in grant ? (grant.granted ?? 10) : 10,
+                        balance: 'balance' in grant ? grant.balance : undefined,
+                        periodEnd: currentPeriodEnd
+                    }
+                })
+            } else {
+                console.log('Credits not granted')
+            }
+        } else {
+            console.log('Not entitled for credits grant')
+        }
+
+        await step.sendEvent('sub-synced', {
+            name: 'billing/subscription.synced',
+            id: `sub-synced:${polarSubscriptionId}:${currentPeriodEnd ?? 'first'}`,
+            data: {
+                userId,
+                polarSubscriptionId,
+                status: payload.status,
+                currentPeriodEnd
+            }
+        })
+
+        if (currentPeriodEnd && currentPeriodEnd > Date.now()) {
+            const runAt = new Date(Math.max(Date.now() + 5000, currentPeriodEnd - 3 * 24 * 60 * 60 * 1000))
+            await step.sleepUntil('wait-until-expiry', runAt)
+
+            const stillEntitled = await step.run('check-entitlement', async () => {
+                try {
+                    const result = await fetchQuery(api.subscription.hasEntitlement, {
+                        userId
+                    })
+                    return result
+                } catch (error) {
+                    throw error
+                }
+            })
+
+            if (stillEntitled) {
+                await step.sendEvent('pre-expiry', {
+                    name: 'billing/subscription.pre_expiry',
+                    data: {
+                        userId,
+                        runAt: runAt.toISOString(),
+                        periodEnd: currentPeriodEnd
+                    }
+                })
+            }
+        }
     }
 )

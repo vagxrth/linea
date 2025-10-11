@@ -90,7 +90,7 @@ export interface PolarOrder {
 export const extractOrder = (data: unknown): PolarOrder | null => {
     if (!data || typeof data !== 'object') return null
     const d = data as Record<string, unknown>
-    const id = d.Id
+    const id = d.id
     if (typeof id !== 'string') return null
     return {
         id,
@@ -108,3 +108,5 @@ export const toMs = (x: string | number | null | undefined): number | undefined 
     const t = Date.parse(x)
     return Number.isNaN(t) ? undefined : t
 }
+
+export const entitledStatus= (status: string): boolean => /^(active|trailing)$/i.test(status)
