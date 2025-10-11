@@ -208,3 +208,11 @@ export const grantCredits = mutation({
         return { ok: true, granted: grant, balance: next }
     }
 })
+
+export const getCreditsBalance = query({
+    args: { userId: v.id('users') },
+    handler: async (ctx, { userId }) => {
+        const sub = await ctx.db.query('subscriptions').withIndex('by_userId', (q) => q.eq('userId', userId)).first();
+        return sub?.creditsBalance ?? 0;
+    }
+})
