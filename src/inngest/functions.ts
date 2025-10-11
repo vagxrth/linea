@@ -156,5 +156,43 @@ export const handlePolarEvent = inngest.createFunction(
         } else {
             console.log('Not entitled for credits grant')
         }
+
+        await step.sendEvent('sub-synced', {
+            name: 'billing/subscription.synced',
+            id: `sub-synced:${polarSubscriptionId}:${currentPeriodEnd ?? 'first'}`,
+            data: {
+                userId,
+                polarSubscriptionId,
+                status: payload.status,
+                currentPeriodEnd
+            }
+        })
+
+        if (currentPeriodEnd && currentPeriodEnd > Date.now()) {
+            const runAt = new Date(Math.max(Date.now() + 5000, currentPeriodEnd - 3 * 24 * 60 * 60 * 1000))
+            await step.sleepUntil('wait-until-expiry', runAt)
+
+            const stillEntitled = await step.run('check-entitlement', async () => {
+                try {
+                    const result = await fetchQuery(api.subscription.hasEntitlement, {
+                        userId
+                    })
+                    return result
+                } catch (error) {
+                    throw error
+                }
+            })
+
+            if (stillEntitled) {
+                await step.sendEvent('pre-expiry', {
+                    name: 'billing/subscription.pre_expiry',
+                    data: {
+                        userId,
+                        runAt: runAt.toISOString(),
+                        periodEnd: currentPeriodEnd
+                    }
+                })
+            }
+        }
     }
 )
