@@ -1,3 +1,4 @@
-import { projectApi } from "./project";
+import { ProjectApi } from "./project";
+import { BillingApi } from "./billing";
 
-export const apis = [projectApi]
+export const apis = [ProjectApi, BillingApi]

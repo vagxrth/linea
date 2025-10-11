@@ -24,7 +24,7 @@ interface AutosaveProjectResponse {
     eventId: string
 }
 
-export const projectApi = createApi({
+export const ProjectApi = createApi({
     reducerPath: 'projectApi',
     baseQuery: fetchBaseQuery({ baseUrl: '/api/project' }),
     tagTypes: ['Project'],
@@ -39,4 +39,4 @@ export const projectApi = createApi({
     })
 })
 
-export const { useAutosaveProjectMutation } = projectApi
+export const { useAutosaveProjectMutation } = ProjectApi
