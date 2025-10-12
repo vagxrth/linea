@@ -1,10 +1,14 @@
-import { CreditsBalanceQuery, MoodboardImagesQuery } from "@/convex/query.config";
+import { ConsumeCreditsQuery, CreditsBalanceQuery, MoodboardImagesQuery } from "@/convex/query.config";
 import { MoodboardImage } from "@/hooks/use-styles";
 import { prompts } from "@/prompts";
 import { NextRequest, NextResponse } from "next/server";
 import { generateObject } from "ai";
 import { google } from "@ai-sdk/google"
 import z from "zod";
+import { fetchMutation } from "convex/nextjs";
+import { api } from "../../../../../convex/_generated/api";
+import { Id } from "../../../../../convex/_generated/dataModel";
+import { convexAuthNextjsToken } from "@convex-dev/auth/nextjs/server";
 
 const ColorSwatchSchema = z.object({
     name: z.string(),
@@ -132,7 +136,37 @@ export async function POST(request: NextRequest) {
             ]
         })
 
-    } catch (error) {
+        const { ok, balance } = await ConsumeCreditsQuery({ amount: 1 })
 
+        if (!ok) {
+            return NextResponse.json(
+                { error: 'Failed to generate style guide' },
+                { status: 500 }
+            )
+        }
+
+        await fetchMutation(
+            api.projects.updateProjectStyleGuide,
+            {
+                projectId: projectId as Id<'projects'>,
+                styleGuideData: result.object,
+            },
+            { token: await convexAuthNextjsToken() }
+        )
+
+        return NextResponse.json({
+            success: true,
+            styleGuide: result.object,
+            message: 'Style guide generated successfully',
+            balance,
+        })
+
+    } catch (error) {
+        return NextResponse.json({
+            error: 'Failed to generate style guide',
+            details: error instanceof Error ? error.message : 'Unknown error',
+        }, {
+            status: 500,
+        })
     }
 }
