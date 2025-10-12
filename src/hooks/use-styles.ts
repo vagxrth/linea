@@ -7,6 +7,8 @@ import { useForm } from "react-hook-form"
 import { api } from "../../convex/_generated/api"
 import { toast } from "sonner"
 import { Id } from "../../convex/_generated/dataModel"
+import { useGenerateStyleGuideMutation } from "@/redux/api/style-guide"
+import { useRouter } from "next/navigation"
 
 export interface MoodboardImage {
     id: string
@@ -260,5 +262,54 @@ export const useMoodboard = (guideImages: MoodboardImage[]) => {
         handleDrop,
         handleFileInput,
         canAddMore: images.length < 5
+    }
+}
+
+export const useStyleGuide = (projectId: string, images: MoodboardImage[], fileInputRef: React.RefObject<HTMLInputElement | null>) => {
+    const [generateStyleGuide, { isLoading: isGenerating }] = useGenerateStyleGuideMutation()
+    const router = useRouter()
+
+    const handleUploadClick = () => fileInputRef.current?.click()
+
+    const handleGenerateStyleGuide = async () => {
+        if (!projectId) {
+            toast.error('No Project selected')
+            return
+        }
+        if (images.length === 0) {
+            toast.error('No images uploaded')
+            return
+        }
+        if (images.some((img) => img.uploading)) {
+            toast.error('Please wait for images to finish uploading')
+            return
+        }
+        try {
+            toast.loading('Generating style guide...', {
+                id: 'style-guide-generation'
+            })
+            const result = await generateStyleGuide({ projectId }).unwrap()
+
+            if (!result.success) {
+                toast.error(result.message, { id: 'style-guide-generation' })
+                return
+            }
+            router.refresh()
+            toast.success('Style guide generated successfully', { id: 'style-guide-generation' })
+            setTimeout(() => {
+                toast.success('Switch to Colors tab to see the results', { duration: 5000 })
+            }, 1000)
+        } catch (error) {
+            const errorMessage = error && typeof error === 'object' && 'error' in error
+                ? (error as { error: string }).error
+                : 'Failed to generate style guide'
+            toast.error(errorMessage, { id: 'style-guide-generation' })
+        }
+    }
+
+    return {
+        handleUploadClick,
+        handleGenerateStyleGuide,
+        isGenerating
     }
 }

@@ -6,6 +6,8 @@ import React, { useRef } from 'react'
 import ImagesBoard from './images-board'
 import { Upload } from 'lucide-react'
 import { Button } from '../ui/button'
+import { useSearchParams } from 'next/navigation'
+import GenerateStyleGuide from '../buttons/style-guide'
 
 type Props = {
     guideImages: MoodboardImage[]
@@ -19,6 +21,9 @@ const Moodboard = ({ guideImages }: Props) => {
     const handleUpload = () => {
         fileInput.current?.click()
     }
+
+    const searchParams = useSearchParams()
+    const projectId = searchParams.get('project')
 
     return (
         <div className='flex flex-col gap-10'>
@@ -124,8 +129,7 @@ const Moodboard = ({ guideImages }: Props) => {
                 )}
                 <input ref={fileInput} type="file" multiple className='hidden' onChange={handleFileInput} accept='image/*'/>
             </div>
-            {/* TODO: Add logic for style guide generation */}
-            <Button className='w-fit'>Generate Style Guide</Button>
+            <GenerateStyleGuide images={images} fileInputRef={fileInput} projectId={projectId ?? ''}/>
             {images.length > 5 && (
                 <div className='text-center p-4 bg-muted/50 rounded-2xl'>
                     <p className='text-sm text-muted-foreground'>

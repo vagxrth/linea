@@ -1,5 +1,5 @@
 import { convexAuthNextjsToken } from "@convex-dev/auth/nextjs/server"
-import { preloadQuery } from "convex/nextjs"
+import { fetchMutation, preloadQuery } from "convex/nextjs"
 import { api } from "../../convex/_generated/api"
 import { ConvexUserRaw, normalizeProfile } from "@/types/user"
 import { Id } from "../../convex/_generated/dataModel"
@@ -84,4 +84,42 @@ export const MoodboardImagesQuery = async (projectId: string) => {
     )
 
     return { images };
+}
+
+export const CreditsBalanceQuery = async () => {
+    const rawProfile = await ProfileQuery();
+    const profile = normalizeProfile(rawProfile._valueJSON as unknown as ConvexUserRaw | null)
+
+    if (!profile?.id) {
+        return { ok: false, balance: 0, profile: null }
+    }
+
+    const balance = await preloadQuery(
+        api.subscription.getCreditsBalance,
+        { userId: profile.id as Id<'users'>},
+        { token: await convexAuthNextjsToken() }
+    )
+
+    return { ok: true, balance: balance._valueJSON, profile }
+}
+
+export const ConsumeCreditsQuery = async ({ amount }: { amount?: number }) => {
+    const rawProfile = await ProfileQuery();
+    const profile = normalizeProfile(rawProfile._valueJSON as unknown as ConvexUserRaw | null)
+
+    if (!profile?.id) {
+        return { ok: false, balance: 0, profile: null }
+    }
+
+    const credits = await fetchMutation(
+        api.subscription.consumeCredits,
+        {
+            reason: 'ai-generation',
+            userId: profile.id as Id<'users'>,
+            amount: amount ?? 1,
+        },
+        { token: await convexAuthNextjsToken() }
+    )
+
+    return { ok: credits.ok, balance: credits.balance, profile }
 }

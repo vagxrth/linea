@@ -141,3 +141,28 @@ export const updateProjectSketches = mutation({
         return { success: true }
     }
 })
+
+export const updateProjectStyleGuide = mutation({
+    args: {
+        projectId: v.id('projects'),
+        styleGuideData: v.any()
+    },
+    handler: async (ctx, { projectId, styleGuideData }) => {
+        const userId = await getAuthUserId(ctx);
+        if (!userId) throw new Error("User not authenticated!")
+
+        const project = await ctx.db.get(projectId);
+        if (!project) throw new Error("Project not found")
+
+        if (project.userId !== userId) {
+            throw new Error("Access denied")
+        }
+
+        await ctx.db.patch(projectId, {
+            styleGuide: JSON.stringify(styleGuideData),
+            lastModified: Date.now(),
+        })
+
+        return { success: true, styleGuide: styleGuideData }
+    }
+})
