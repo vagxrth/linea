@@ -140,7 +140,7 @@ format: {
 }
       `,
   },
-  generativeUi: {
+  generatedUi: {
     system: `
 You are a design engineer that converts wireframes into production-ready HTML.
 Input Processing Order (CRITICAL)

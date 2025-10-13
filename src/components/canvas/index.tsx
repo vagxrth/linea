@@ -1,6 +1,6 @@
 'use client'
 
-import { useCanvas } from '@/hooks/use-canvas'
+import { useCanvas, useInspiration } from '@/hooks/use-canvas'
 import React from 'react'
 import TextSidebar from '../text-sidebar'
 import { cn } from '@/lib/utils'
@@ -12,6 +12,7 @@ import { ArrowPreview } from '../shapes/arrow/preview'
 import { LinePreview } from '../shapes/line/preview'
 import { FreeDrawStrokePreview } from '../shapes/stroke/preview'
 import { SelectionOverlay } from '../overlay'
+import InspirationSidebar from '../inspiration-sidebar'
 
 const InfiniteCanvas = () => {
 
@@ -31,12 +32,20 @@ const InfiniteCanvas = () => {
         selectedText
     } = useCanvas()
 
+    const { isInspirationOpen, closeInspiration, toggleInspiration } = useInspiration()
+
     const draftShape = getDraftShapes()
     const freeDrawPoints = getFreeDrawPoints()
 
   return (
     <>
         <TextSidebar isOpen={ sidebarOpen && selectedText } />
+
+        <InspirationSidebar 
+            isOpen={isInspirationOpen} 
+            onClose={closeInspiration}
+        />
+
         <div ref={attachCanvasRef} role='application' aria-label='Infinite Canvas' className={cn(
             'relative w-full h-full overflow-hidden select-none z-0',
             {

@@ -1075,3 +1075,27 @@ export const useFrame = (shape: FrameShape) => {
         handleGenerateDesign,
     }
 }
+
+export const useInspiration = () => {
+    const [isInspirationOpen, setIsInspirationOpen] = useState(false)
+
+    const toggleInspiration = () => {
+        setIsInspirationOpen(!isInspirationOpen)
+    }
+
+    const openInspiration = () => {
+        setIsInspirationOpen(true)
+    }
+
+    const closeInspiration = () => {
+        setIsInspirationOpen(false)
+    }
+
+    return {
+        isInspirationOpen,
+        toggleInspiration,
+        openInspiration,
+        closeInspiration,
+    }
+    
+}
