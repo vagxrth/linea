@@ -7,6 +7,7 @@ import { Line } from '../shapes/line'
 import { Arrow } from '../shapes/arrow'
 import { Stroke } from '../shapes/stroke'
 import { Text } from '../shapes/text'
+import GeneratedUI from '../shapes/generated-ui'
 
 const ShapeRenderer = ({
     shape,
@@ -36,6 +37,8 @@ const ShapeRenderer = ({
         return <Line shape={shape}/>
     case 'text':
         return <Text shape={shape}/>
+    case 'generatedui':
+        return <GeneratedUI shape={shape} toggleChat={toggleChat} generateWorkflow={generateWorkflow} exportDesign={exportDesign}/>
   }
 }
 
