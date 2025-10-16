@@ -109,6 +109,13 @@ export async function POST(request: NextRequest) {
         const images = moodboardImages.images._valueJSON as unknown as MoodboardImage[]
         const imageUrls = images.map((img) => img.url).filter(Boolean)
 
+        if (imageUrls.length === 0) {
+            return NextResponse.json(
+                { error: 'No valid image URLs' },
+                { status: 400 }
+            )
+        }
+
         const systemPrompt = prompts.styleGuide.system
 
         const userPrompt = `Analyze these ${imageUrls.length} mood board images and generate a design system:
@@ -116,7 +123,7 @@ export async function POST(request: NextRequest) {
         Return ONLY the JSON object matching the exact schema structure above.`;
 
         const result = await generateObject({
-            model: google('gemini-2.0-flash'),
+            model: google('gemini-2.5-flash'),
             schema: StyleGuideSchema,
             system: systemPrompt,
             messages: [
