@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import { ImageIcon, Trash2, Upload, X } from 'lucide-react'
+import { ImageIcon, Loader2, Plus, Trash2, Upload, X } from 'lucide-react'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Label } from '../ui/label'
 import { Button } from '../ui/button'
@@ -8,6 +8,7 @@ import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { Id } from '../../../convex/_generated/dataModel'
 import { toast } from 'sonner'
+import Image from 'next/image'
 
 type InspirationSidebarProps = {
     isOpen: boolean
@@ -147,6 +148,24 @@ const InspirationSidebar = ({ isOpen, onClose }: InspirationSidebarProps) => {
         setImages([])
     }
 
+    const removeImage = async (imageId: string) => {
+        const image = images.find((img) => img.id === imageId)
+        if (!image) return
+
+        if (image.storageId && image.isFromServer && projectId) {
+            try {
+                await removeInspirationImage({
+                    projectId: projectId as Id<'projects'>,
+                    storageId: image.storageId as Id<'_storage'>
+                })
+            } catch (error) {
+                console.error('Failed to remove image', error)
+            }
+        }
+
+        setImages((prev) => prev.filter((img) => img.id !== imageId))
+    }
+
     useEffect(() => {
         if (existingImages && existingImages.length > 0) {
             const serverImages: Props[] = existingImages.map((img) => ({
@@ -233,6 +252,50 @@ const InspirationSidebar = ({ isOpen, onClose }: InspirationSidebarProps) => {
                                 <Trash2 className='w-3 h-3 mr-1' />
                                 Clear all
                             </Button>
+                        </div>
+                        <div className='grid grid-cols-2 gap-2'>
+                            {images.map((image) => (
+                                <div key={image.id} className='relative group asepct-square rounded-lg overflow-hidden border border-white/10 bg-white/5'>
+                                    <Image 
+                                        src={image.url || ''}
+                                        alt={'Inspiration Image'}
+                                        width={100}
+                                        height={100}
+                                        className='w-full h-full object-cover'
+                                    />
+                                    {image.uploading && (
+                                        <div className='absolute inset-0 bg-black/50 flex items-center justify-center'>
+                                            <Loader2 className='w-6 h-6 text-white animate-spin' />
+                                        </div>
+                                    )}
+                                    {image.error && (
+                                        <div className='absolute inset-0 bg-red-500/20 flex items-center justify-center'>
+                                            <p className='text-xs text-red-300 text-center px-2'>
+                                                {image.error}
+                                            </p>
+                                        </div>
+                                    )}
+                                    <Button
+                                        variant='ghost'
+                                        size='sm'
+                                        onClick={() => removeImage(image.id)}
+                                        className='absolute top-1 right-1 h-6 w-6 p-0 bg-black/50 hover:bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity'
+                                    >
+                                        <X className='w-3 h-3 text-white' />
+                                    </Button>
+                                    {image.uploaded && !image.uploading && (
+                                        <div className='absolute bottom-1 right-1 w-3 h-3 bg-green-500 rounded-full border border-white/20' />
+                                    )}
+                                </div>
+                            ))}
+                            {images.length < 6 && (
+                                <Button
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className='aspect-square rounded-lg border-2 border-dashed border-white/20 bg-white/5 hover:border-white/40 hover:bg-white/10 transition-all duration-200 flex items-center justify-center group'
+                                >
+                                    <Plus className='w-6 h-6 text-white/40 group-hover:text-white/60 transition-colors' />
+                                </Button>
+                            )}
                         </div>
                     </div>
                 )}

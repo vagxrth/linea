@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
         Return ONLY the JSON object matching the exact schema structure above.`;
 
         const result = await generateObject({
-            model: google('gemini-2.0-flash'),
+            model: google('gemini-2.5-flash'),
             schema: StyleGuideSchema,
             system: systemPrompt,
             messages: [
