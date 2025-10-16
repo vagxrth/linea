@@ -48,6 +48,7 @@
     "cmdk": "^1.1.1",
     "convex": "^1.27.3",
     "date-fns": "^4.1.0",
+    "dompurify": "^3.3.0",
     "embla-carousel-react": "^8.6.0",
     "inngest": "^3.44.2",
     "input-otp": "^1.4.2",

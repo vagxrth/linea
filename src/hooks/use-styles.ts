@@ -11,6 +11,7 @@ import { useGenerateStyleGuideMutation } from "@/redux/api/style-guide"
 import { useRouter } from "next/navigation"
 import { GeneratedUIShape, updateShape } from "@/redux/slice/shapes"
 import { useAppDispatch } from "@/redux/store"
+import DOMPurify from 'dompurify'
 
 export interface MoodboardImage {
     id: string
@@ -342,14 +343,14 @@ export const useUpdateContainer = (shape: GeneratedUIShape) => {
     }, [shape.uiSpecData, shape.id, shape.h, dispatch])
 
     const sanitize = (html: string) => {
-        const sanitized = html
-            .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-            .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
-            .replace(/on\w+="[^"]*"/gi, '')
-            .replace(/javascript:/gi, '')
-            .replace(/data:/gi, '')
-
-        return sanitized
+        return DOMPurify.sanitize(html, {
+            ALLOWED_TAGS: ['div', 'span', 'img', 'a', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote', 'code', 'pre', 'hr', 'br', 'table', 'tbody', 'thead', 'tr', 'td', 'th'],
+            ALLOWED_ATTR: ['src', 'alt', 'href', 'target', 'rel', 'class', 'style', 'id'],
+            FORBID_TAGS: ['script', 'iframe'],
+            FORBID_ATTR: ['on*'],
+            ALLOWED_URI_REGEXP: /^(?:(?!\s*(?:javascript|data):).)*$/i,
+            USE_PROFILES: { html: true }
+        })
     }
 
     return {
