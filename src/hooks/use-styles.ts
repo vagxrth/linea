@@ -345,9 +345,9 @@ export const useUpdateContainer = (shape: GeneratedUIShape) => {
     const sanitize = (html: string) => {
         return DOMPurify.sanitize(html, {
             ALLOWED_TAGS: ['div', 'span', 'img', 'a', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote', 'code', 'pre', 'hr', 'br', 'table', 'tbody', 'thead', 'tr', 'td', 'th'],
-            ALLOWED_ATTR: ['src', 'alt', 'href', 'target', 'rel', 'class', 'style', 'id'],
+            ALLOWED_ATTR: ['src', 'alt', 'href', 'target', 'rel', 'class', 'id'],
             FORBID_TAGS: ['script', 'iframe'],
-            FORBID_ATTR: ['on*'],
+            FORBID_ATTR: ['onerror', 'onload', 'onclick'],
             ALLOWED_URI_REGEXP: /^(?:(?!\s*(?:javascript|data):).)*$/i,
             USE_PROFILES: { html: true }
         })
