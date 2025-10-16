@@ -7,7 +7,6 @@ import { useSearchParams } from 'next/navigation'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { Id } from '../../../convex/_generated/dataModel'
-import { toast } from 'sonner'
 import Image from 'next/image'
 
 type InspirationSidebarProps = {
@@ -96,7 +95,7 @@ const InspirationSidebar = ({ isOpen, onClose }: InspirationSidebarProps) => {
                                 ? { ...img, storageId, uploaded: true, uploading: false, isFromServer: true } : img
                         )
                     )
-                } catch (error) {
+                } catch (error) { // eslint-disable-line @typescript-eslint/no-unused-vars
                     setImages((prev) =>
                         prev.map((img) =>
                             img.id === image.id

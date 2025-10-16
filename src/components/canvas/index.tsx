@@ -1,6 +1,6 @@
 'use client'
 
-import { useCanvas, useInspiration } from '@/hooks/use-canvas'
+import { useCanvas, useGlobalChat, useInspiration } from '@/hooks/use-canvas'
 import React from 'react'
 import TextSidebar from '../text-sidebar'
 import { cn } from '@/lib/utils'
@@ -34,6 +34,8 @@ const InfiniteCanvas = () => {
 
     const { isInspirationOpen, closeInspiration, toggleInspiration } = useInspiration()
 
+    const { isChatOpen, activeGeneratedUIId, generateWorkflow } = useGlobalChat()
+
     const draftShape = getDraftShapes()
     const freeDrawPoints = getFreeDrawPoints()
 
@@ -45,6 +47,8 @@ const InfiniteCanvas = () => {
             isOpen={isInspirationOpen} 
             onClose={closeInspiration}
         />
+
+        
 
         <div ref={attachCanvasRef} role='application' aria-label='Infinite Canvas' className={cn(
             'relative w-full h-full overflow-hidden select-none z-0',
