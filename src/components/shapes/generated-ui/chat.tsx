@@ -37,26 +37,26 @@ const ChatWindow = ({ generatedUIId, isOpen, onClose }: Props) => {
                 <div className='flex items-center gap-2'>
                     <RefreshCw className='w-5 h-5 text-white/80' />
                     <Label className='text-white/80 font-medium'>AI Chat</Label>
-                    <div className='flex items-center gap-1'>
-                        {chatState?.messages && chatState.messages.length > 0 && (
-                            <Button
-                                variant='ghost'
-                                size='sm'
-                                onClick={handleClearChat}
-                                className='h-8 w-8 p-0 text-white/60 hover:text-white hover:bg-white/10'
-                            >
-                                <Trash2 className='w-4 h-4' />
-                            </Button>
-                        )}
+                </div>
+                <div className='flex items-center gap-1'>
+                    {chatState?.messages && chatState.messages.length > 0 && (
                         <Button
                             variant='ghost'
                             size='sm'
-                            onClick={onClose}
+                            onClick={handleClearChat}
                             className='h-8 w-8 p-0 text-white/60 hover:text-white hover:bg-white/10'
                         >
-                            <X className='w-4 h-4' />
+                            <Trash2 className='w-4 h-4' />
                         </Button>
-                    </div>
+                    )}
+                    <Button
+                        variant='ghost'
+                        size='sm'
+                        onClick={onClose}
+                        className='h-8 w-8 p-0 text-white/60 hover:text-white hover:bg-white/10'
+                    >
+                        <X className='w-4 h-4' />
+                    </Button>
                 </div>
                 <ScrollArea ref={scrollAreaRef} className='flex-1 p-4 overflow-y-auto'>
                     <div className='space-y-4'>
@@ -92,7 +92,7 @@ const ChatWindow = ({ generatedUIId, isOpen, onClose }: Props) => {
                 <div className='p-4 border-t border-white/[0.12]'>
                     <div className='space-y-3'>
                         <div className='flex gap-2'>
-                            <Input 
+                            <Input
                                 ref={inputRef}
                                 value={inputValue}
                                 onChange={(e) => setInputValue(e.target.value)}
