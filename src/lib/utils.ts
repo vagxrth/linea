@@ -42,8 +42,8 @@ export const polylineBox = (
 };
 
 const captureVisualContent = async (ctx: CanvasRenderingContext2D, contentDiv: HTMLElement, width: number, height: number) => {
-  const { toPNG } = await import('html-to-image')
-  const dataUrl = await toPNG(contentDiv, {
+  const { toPng } = await import('html-to-image')
+  const dataUrl = await toPng(contentDiv, {
     width,
     height,
     backgroundColor: '#ffffff',
@@ -51,7 +51,7 @@ const captureVisualContent = async (ctx: CanvasRenderingContext2D, contentDiv: H
     cacheBust: true,
     includeQueryParams: false,
     skipAutoScale: true,
-    skipAutoFonts: true,
+    skipFonts: true,
     filter: (node) => {
       if (node.nodeType === Node.TEXT_NODE) return true
       if (node.nodeType === Node.ELEMENT_NODE) {
