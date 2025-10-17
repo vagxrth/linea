@@ -1285,3 +1285,34 @@ export const useGlobalChat = () => {
         closeChat,
     }
 }
+
+export const useChatWindow = (generatedUIId: string, isOpen: boolean) => {
+    const [inputValue, setInputValue] = useState('')
+    const scrollAreaRef = useRef<HTMLDivElement>(null)
+    const inputRef = useRef<HTMLInputElement>(null)
+
+    const dispatch = useAppDispatch()
+
+    const chatState = useAppSelector((state) => state.chat.chats[generatedUIId])
+
+    const currentShape = useAppSelector((state) => state.shapes.shapes.entities[generatedUIId])
+    const allShapes = useAppSelector((state) => state.shapes.shapes.entities)
+
+    const getSourceFrame = (): FrameShape | null => {
+        if (!currentShape || currentShape.type !== 'generatedui') return null
+
+        const sourceFrameId = currentShape.sourceFrameId
+        if (!sourceFrameId) return null
+
+        const sourceFrame = allShapes[sourceFrameId]
+        if (!sourceFrame || sourceFrame.type !== 'frame') return null
+
+        return sourceFrame as FrameShape
+    }
+
+    useEffect(() => {
+        if (isOpen) {
+            dispatch(initializeChat(generatedUIId))
+        }
+    }, [isOpen, dispatch, generatedUIId])
+}

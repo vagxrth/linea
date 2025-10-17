@@ -13,6 +13,7 @@ import { LinePreview } from '../shapes/line/preview'
 import { FreeDrawStrokePreview } from '../shapes/stroke/preview'
 import { SelectionOverlay } from '../overlay'
 import InspirationSidebar from '../inspiration-sidebar'
+import ChatWindow from '../shapes/generated-ui/chat'
 
 const InfiniteCanvas = () => {
 
