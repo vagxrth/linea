@@ -59,10 +59,6 @@ const captureVisualContent = async (ctx: CanvasRenderingContext2D, contentDiv: H
         return ![
           'SCRIPT',
           'STYLE',
-          'BUTTON',
-          'INPUT',
-          'SELECT',
-          'TEXTAREA',
         ].includes(element.tagName)
       }
       return true
