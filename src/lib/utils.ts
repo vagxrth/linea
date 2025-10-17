@@ -1,3 +1,4 @@
+import { downloadBlob } from "@/hooks/use-canvas";
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 
@@ -39,3 +40,84 @@ export const polylineBox = (
   }
   return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
 };
+
+const captureVisualContent = async (ctx: CanvasRenderingContext2D, contentDiv: HTMLElement, width: number, height: number) => {
+  const { toPNG } = await import('html-to-image')
+  const dataUrl = await toPNG(contentDiv, {
+    width,
+    height,
+    backgroundColor: '#ffffff',
+    pixelRatio: 1,
+    cacheBust: true,
+    includeQueryParams: false,
+    skipAutoScale: true,
+    skipAutoFonts: true,
+    filter: (node) => {
+      if (node.nodeType === Node.TEXT_NODE) return true
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const element = node as Element
+        return ![
+          'SCRIPT',
+          'STYLE',
+          'BUTTON',
+          'INPUT',
+          'SELECT',
+          'TEXTAREA',
+        ].includes(element.tagName)
+      }
+      return true
+    }
+  })
+  const img = new Image()
+  await new Promise((resolve, reject) => {
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0, width, height)
+      resolve(void 0)
+    }
+    img.onerror = () => {
+      reject(new Error('Failed to load captured image'))
+    }
+    img.src = dataUrl
+  })
+}
+
+export const exportGeneratedUI = async (element: HTMLElement, filename: string) => {
+  try {
+    const rect = element.getBoundingClientRect()
+    const canvas = document.createElement('canvas')
+    canvas.width = rect.width
+    canvas.height = rect.height
+    const ctx = canvas.getContext('2d')
+
+    if (!ctx) throw new Error('Failed to get canvas context')
+
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+    const contentDiv = element.querySelector(
+      'div[style*="pointer-events: auto"]'
+    ) as HTMLElement
+
+    if (contentDiv) {
+      await captureVisualContent(ctx, contentDiv, rect.width, rect.height)
+    } else {
+      throw new Error('No content div found')
+    }
+
+    canvas.toBlob((blob) => {
+      if (blob) {
+        console.log('Snapshot generated successfully', {
+          size: blob.size,
+          type: blob.type,
+          filename
+        })
+        downloadBlob(blob, filename)
+      } else {
+        throw new Error('Failed to create blob')
+      }
+    }, 'image/png', 1.0)
+  } catch (error) {
+    console.error('Error exporting generated UI:', error)
+    throw error
+  }
+}

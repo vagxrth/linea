@@ -34,7 +34,7 @@ const InfiniteCanvas = () => {
 
     const { isInspirationOpen, closeInspiration, toggleInspiration } = useInspiration()
 
-    const { isChatOpen, activeGeneratedUIId, generateWorkflow } = useGlobalChat()
+    const { isChatOpen, activeGeneratedUIId, generateWorkflow, exportDesign, toggleChat, closeChat } = useGlobalChat()
 
     const draftShape = getDraftShapes()
     const freeDrawPoints = getFreeDrawPoints()
@@ -48,7 +48,11 @@ const InfiniteCanvas = () => {
             onClose={closeInspiration}
         />
 
-        
+        {activeGeneratedUIId && (
+            <ChatWindow generatedUIId={activeGeneratedUIId} isOpen={isChatOpen} onClose={closeChat} />
+        )}
+
+
 
         <div ref={attachCanvasRef} role='application' aria-label='Infinite Canvas' className={cn(
             'relative w-full h-full overflow-hidden select-none z-0',
@@ -72,7 +76,7 @@ const InfiniteCanvas = () => {
                 transformOrigin: '0 0',
                 willChange: 'transform',
             }}>
-                {/* {shapes.map((shape) => (
+                {shapes.map((shape) => (
                     <ShapeRenderer 
                         key={shape.id}
                         shape={shape}
@@ -81,7 +85,7 @@ const InfiniteCanvas = () => {
                         generateWorkflow={generateWorkflow}
                         exportDesign={exportDesign}
                     />
-                ))} */}
+                ))}
 
                 {shapes.map((shape) => (
                     <SelectionOverlay key={`select-${shape.id}`} shape={shape} isSelected={!!selectedShapes[shape.id]} />

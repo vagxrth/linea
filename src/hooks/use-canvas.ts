@@ -7,6 +7,7 @@ import { nanoid } from "@reduxjs/toolkit"
 import { useEffect, useRef, useState } from "react"
 import { useDispatch } from "react-redux"
 import { toast } from "sonner"
+import { exportGeneratedUI } from '@/lib/utils';
 
 interface TouchPointer {
     id: number
@@ -959,7 +960,7 @@ const generateFrameSnapshot = async (frame: FrameShape, allShapes: Shape[]): Pro
     })
 }
 
-const downloadBlob = (blob: Blob, fileName: string): void => {
+export const downloadBlob = (blob: Blob, fileName: string): void => {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -1240,9 +1241,47 @@ export const useGlobalChat = () => {
     const { generateWorkflow } = useWorkflowGeneration()
     const [activeGeneratedUIId, setActiveGeneratedUIId] = useState<string | null>(null)
 
+    const exportDesign = async (generatedUIId: string, element: HTMLElement | null) => {
+        if (!element) {
+            toast.error('No element to export')
+            return
+        }
+
+        try {
+            const filename = `generated-ui-${generatedUIId.slice(0, 8)}.png`
+            await exportGeneratedUI(element, filename)
+            toast.success('Design exported successfully')
+        } catch (error) {
+            console.error('Error exporting design:', error)
+            toast.error('Failed to export design')
+        }
+    }
+
+    const openChat = (generatedUIId: string) => {
+        setActiveGeneratedUIId(generatedUIId)
+        setIsChatOpen(true)
+    }
+
+    const closeChat = () => {
+        setActiveGeneratedUIId(null)
+        setIsChatOpen(false)
+    }
+
+    const toggleChat = (generatedUIId: string) => {
+        if (isChatOpen && activeGeneratedUIId === generatedUIId) {
+            closeChat()
+        } else {
+            openChat(generatedUIId)
+        }
+    }
+
     return {
         isChatOpen,
         activeGeneratedUIId,
-        generateWorkflow
+        generateWorkflow,
+        exportDesign,
+        toggleChat,
+        openChat,
+        closeChat,
     }
 }
