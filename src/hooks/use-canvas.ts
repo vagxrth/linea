@@ -1,4 +1,5 @@
-import { success } from 'zod';
+'use client'
+
 import { useGenerateWorkflowMutation } from "@/redux/api/generation"
 import { addArrow, addEllipse, addFrame, addFreeDrawShape, addGeneratedUI, addLine, addRect, addText, clearSelection, FrameShape, removeShape, selectShape, setTool, Shape, Tool, updateShape } from "@/redux/slice/shapes"
 import { handToolDisable, handToolEnable, panEnd, panMove, panStart, Point, screenToWorld, wheelPan, wheelZoom } from "@/redux/slice/viewport"
@@ -7,6 +8,8 @@ import { nanoid } from "@reduxjs/toolkit"
 import { useEffect, useRef, useState } from "react"
 import { useDispatch } from "react-redux"
 import { toast } from "sonner"
+import { exportGeneratedUI } from '@/lib/utils';
+import { addErrorMessage, addUserMessage, clearChat, finishedStreamingResponse, initializeChat, startStreamingResponse, updateStreamingContent } from '@/redux/slice/chat';
 
 interface TouchPointer {
     id: number
@@ -959,7 +962,7 @@ const generateFrameSnapshot = async (frame: FrameShape, allShapes: Shape[]): Pro
     })
 }
 
-const downloadBlob = (blob: Blob, fileName: string): void => {
+export const downloadBlob = (blob: Blob, fileName: string): void => {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -1240,9 +1243,203 @@ export const useGlobalChat = () => {
     const { generateWorkflow } = useWorkflowGeneration()
     const [activeGeneratedUIId, setActiveGeneratedUIId] = useState<string | null>(null)
 
+    const exportDesign = async (generatedUIId: string, element: HTMLElement | null) => {
+        if (!element) {
+            toast.error('No element to export')
+            return
+        }
+
+        try {
+            const filename = `generated-ui-${generatedUIId.slice(0, 8)}.png`
+            await exportGeneratedUI(element, filename)
+            toast.success('Design exported successfully')
+        } catch (error) {
+            console.error('Error exporting design:', error)
+            toast.error('Failed to export design')
+        }
+    }
+
+    const openChat = (generatedUIId: string) => {
+        setActiveGeneratedUIId(generatedUIId)
+        setIsChatOpen(true)
+    }
+
+    const closeChat = () => {
+        setActiveGeneratedUIId(null)
+        setIsChatOpen(false)
+    }
+
+    const toggleChat = (generatedUIId: string) => {
+        if (isChatOpen && activeGeneratedUIId === generatedUIId) {
+            closeChat()
+        } else {
+            openChat(generatedUIId)
+        }
+    }
+
     return {
         isChatOpen,
         activeGeneratedUIId,
-        generateWorkflow
+        generateWorkflow,
+        exportDesign,
+        toggleChat,
+        openChat,
+        closeChat,
+    }
+}
+
+export const useChatWindow = (generatedUIId: string, isOpen: boolean) => {
+    const [inputValue, setInputValue] = useState('')
+    const scrollAreaRef = useRef<HTMLDivElement>(null)
+    const inputRef = useRef<HTMLInputElement>(null)
+
+    const dispatch = useAppDispatch()
+
+    const chatState = useAppSelector((state) => state.chat.chats[generatedUIId])
+
+    const currentShape = useAppSelector((state) => state.shapes.shapes.entities[generatedUIId])
+    const allShapes = useAppSelector((state) => state.shapes.shapes.entities)
+
+    const getSourceFrame = (): FrameShape | null => {
+        if (!currentShape || currentShape.type !== 'generatedui') return null
+
+        const sourceFrameId = currentShape.sourceFrameId
+        if (!sourceFrameId) return null
+
+        const sourceFrame = allShapes[sourceFrameId]
+        if (!sourceFrame || sourceFrame.type !== 'frame') return null
+
+        return sourceFrame as FrameShape
+    }
+
+    useEffect(() => {
+        if (isOpen) {
+            dispatch(initializeChat(generatedUIId))
+        }
+    }, [isOpen, dispatch, generatedUIId])
+
+    useEffect(() => {
+        if (scrollAreaRef.current) {
+            scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight
+        }
+    }, [chatState?.messages])
+
+    useEffect(() => {
+        if (isOpen && inputRef.current) {
+            setTimeout(() => inputRef.current?.focus(), 100)
+        }
+    }, [isOpen])
+
+    const handleSendMessage = async () => {
+        if (!inputValue.trim() || chatState?.isStreaming) return
+
+        const message = inputValue.trim()
+        setInputValue('')
+
+        try {
+            dispatch(addUserMessage({ generatedUIId, content: message }))
+            const responseId = `response-${Date.now()}`
+            dispatch(startStreamingResponse({ generatedUIId, messageId: responseId }))
+
+            const isWorkflowPage = currentShape?.type === 'generatedui' && currentShape.isWorkflowPage
+
+            const urlParams = new URLSearchParams(window.location.search)
+            const projectId = urlParams.get('project')
+
+            if (!projectId) throw new Error('Project ID not found')
+
+            const baseRequestData = {
+                userMessage: message,
+                generatedUIId: generatedUIId,
+                currentHTML: currentShape?.type === 'generatedui' ? currentShape.uiSpecData : null,
+                projectId: projectId,
+            }
+
+            let apiEndpoint = '/api/generate/redesign'
+            let wireframeSnapshot: string | null = null
+
+            if (isWorkflowPage) {
+                apiEndpoint = '/api/generate/workflow-redesign'
+            } else {
+                const sourceFrame = getSourceFrame()
+                if (sourceFrame && sourceFrame.type === 'frame') {
+                    try {
+                        const allShapesArray = Object.values(allShapes).filter(Boolean) as Shape[]
+                        const snapshot = await generateFrameSnapshot(sourceFrame, allShapesArray)
+
+                        const arrayBuffer = await snapshot.arrayBuffer()
+                        const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
+                        wireframeSnapshot = base64
+                    } catch (error) {
+                        console.error('Error generating wireframe snapshot:', error)
+                    }
+                } else {
+                    console.error('No source frame found for wireframe snapshot')
+                }
+            }
+
+            const requestData = isWorkflowPage ? baseRequestData : {...baseRequestData, wireframeSnapshot}
+
+            const response = await fetch(apiEndpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestData),
+            })
+
+            if (!response.ok) {
+                throw new Error(`API Request Failed: ${response.status}`)
+            }
+            const reader = response.body?.getReader()
+            const decoder = new TextDecoder()
+
+            let accumulatedHTML = ''
+
+            if (reader) {
+                while(true) {
+                    const { done, value } = await reader.read()
+                    if (done) break
+
+                    const chunk = decoder.decode(value)
+                    accumulatedHTML += chunk
+
+                    dispatch(updateStreamingContent({ generatedUIId, messageId: responseId, content: 'Regenerating design...' }))
+
+                    dispatch(updateShape({
+                        id: generatedUIId,
+                        patch: {
+                            uiSpecData: accumulatedHTML,
+                        }
+                    }))
+                }
+            }
+            dispatch(finishedStreamingResponse({ generatedUIId, messageId: responseId, finalContent: 'Design regenerated successfully' }))
+        } catch (error) {
+            dispatch(addErrorMessage({ generatedUIId, error: error instanceof Error ? error.message : 'Unknown error' }))
+            toast.error('Failed to regenerate design')
+        }
+    }
+
+    const handleKeyPress = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault()
+            handleSendMessage()
+        }
+    }
+
+    const handleClearChat = () => {
+        dispatch(clearChat(generatedUIId))
+    }
+
+    return {
+        inputValue,
+        setInputValue,
+        scrollAreaRef,
+        inputRef,
+        handleSendMessage,
+        handleKeyPress,
+        handleClearChat,
+        chatState,
     }
 }

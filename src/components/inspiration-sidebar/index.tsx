@@ -26,7 +26,7 @@ type Props = {
 }
 
 
-const InspirationSidebar = ({ isOpen, onClose }: InspirationSidebarProps) => {
+const InspirationSidebar = ({ onClose }: InspirationSidebarProps) => {
 
     const [images, setImages] = useState<Props[]>([])
     const [dragActive, setDragActive] = useState(false)
