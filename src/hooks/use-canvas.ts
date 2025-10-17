@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react"
 import { useDispatch } from "react-redux"
 import { toast } from "sonner"
 import { exportGeneratedUI } from '@/lib/utils';
+import { addErrorMessage, addUserMessage, finishedStreamingResponse, initializeChat, startStreamingResponse, updateStreamingContent } from '@/redux/slice/chat';
 
 interface TouchPointer {
     id: number
@@ -1315,4 +1316,109 @@ export const useChatWindow = (generatedUIId: string, isOpen: boolean) => {
             dispatch(initializeChat(generatedUIId))
         }
     }, [isOpen, dispatch, generatedUIId])
+
+    useEffect(() => {
+        if (scrollAreaRef.current) {
+            scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight
+        }
+    }, [chatState?.messages])
+
+    useEffect(() => {
+        if (isOpen && inputRef.current) {
+            setTimeout(() => inputRef.current?.focus(), 100)
+        }
+    }, [isOpen])
+
+    const handleSendMessage = async () => {
+        if (!inputValue.trim() || chatState?.isStreaming) return
+
+        const message = inputValue.trim()
+        setInputValue('')
+
+        try {
+            dispatch(addUserMessage({ generatedUIId, content: message }))
+            const responseId = `response-${Date.now()}`
+            dispatch(startStreamingResponse({ generatedUIId, messageId: responseId }))
+
+            const isWorkflowPage = currentShape?.type === 'generatedui' && currentShape.isWorkflowPage
+
+            const urlParams = new URLSearchParams(window.location.search)
+            const projectId = urlParams.get('project')
+
+            if (!projectId) throw new Error('Project ID not found')
+
+            const baseRequestData = {
+                userMessage: message,
+                generatedUIId: generatedUIId,
+                currentHTML: currentShape?.type === 'generatedui' ? currentShape.uiSpecData : null,
+                projectId: projectId,
+            }
+
+            let apiEndpoint = '/api/generate/redesign'
+            let wireframeSnapshot: string | null = null
+
+            if (isWorkflowPage) {
+                apiEndpoint = '/api/generate/workflow-redesign'
+            } else {
+                const sourceFrame = getSourceFrame()
+                if (sourceFrame && sourceFrame.type === 'frame') {
+                    try {
+                        const allShapesArray = Object.values(allShapes).filter(Boolean) as Shape[]
+                        const snapshot = await generateFrameSnapshot(sourceFrame, allShapesArray)
+
+                        const arrayBuffer = await snapshot.arrayBuffer()
+                        const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
+                        wireframeSnapshot = base64
+                    } catch (error) {
+                        console.error('Error generating wireframe snapshot:', error)
+                    }
+                } else {
+                    console.error('No source frame found for wireframe snapshot')
+                }
+            }
+
+            const requestData = isWorkflowPage ? baseRequestData : {...baseRequestData, wireframeSnapshot}
+
+            const response = await fetch(apiEndpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestData),
+            })
+
+            if (!response.ok) {
+                throw new Error(`API Request Failed: ${response.status}`)
+            }
+            const reader = response.body?.getReader()
+            const decoder = new TextDecoder()
+
+            let accumulatedHTML = ''
+
+            if (reader) {
+                while(true) {
+                    const { done, value } = await reader.read()
+                    if (done) break
+
+                    const chunk = decoder.decode(value)
+                    accumulatedHTML += chunk
+
+                    dispatch(updateStreamingContent({ generatedUIId, messageId: responseId, content: 'Regenerating design...' }))
+
+                    dispatch(updateShape({
+                        id: generatedUIId,
+                        patch: {
+                            uiSpecData: accumulatedHTML,
+                        }
+                    }))
+                }
+            }
+            dispatch(finishedStreamingResponse({ generatedUIId, messageId: responseId, finalContent: 'Design regenerated successfully' }))
+        } catch (error) {
+            dispatch(addErrorMessage({ generatedUIId, error: error instanceof Error ? error.message : 'Unknown error' }))
+            toast.error('Failed to regenerate design')
+        }
+    }
+
+    
 }
