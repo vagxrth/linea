@@ -12,8 +12,12 @@ const Layout = async ({ children }: Props) => {
 
     const { profileName, entitlement } = await SubscriptionQuery();
     
+    if (!profileName) {
+        redirect('/auth/signin');
+    }
+
     if (!entitlement._valueJSON) {
-        redirect(`/billing/${combinedSlug(profileName!)}`)
+        redirect(`/billing/${combinedSlug(profileName)}`)
     }
 
     return (

@@ -31,7 +31,7 @@ export const normalizeProfile = (
             .join(' ');
     }
 
-    const name = combinedSlug(raw.name!) || extractNameFromEmail(raw.email);
+    const name = raw.name ? combinedSlug(raw.name) : extractNameFromEmail(raw.email);
     return {
         id: raw._id,
         createdAtMs: raw._creationTime,

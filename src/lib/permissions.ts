@@ -12,4 +12,5 @@ export const isPublicRoute = [
 
 export const isProtectedRoute = [
     "/dashboard(.*)",
+    "/billing(.*)",
 ]

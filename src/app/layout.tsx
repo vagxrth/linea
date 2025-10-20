@@ -32,8 +32,8 @@ export default async function RootLayout({
 
   let profile = null;
   try {
-    const rawProflie = await ProfileQuery();
-    profile = normalizeProfile( rawProflie._valueJSON as unknown as ConvexUserRaw | null );
+    const rawProfile = await ProfileQuery();
+    profile = normalizeProfile( rawProfile._valueJSON as unknown as ConvexUserRaw | null );
   } catch (error) {
     // User is not authenticated or query failed
     console.log("Profile query failed:", error);
