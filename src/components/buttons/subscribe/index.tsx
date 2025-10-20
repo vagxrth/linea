@@ -1,3 +1,5 @@
+'use client'
+
 import { Button } from '@/components/ui/button'
 import { useSubscription } from '@/hooks/use-subscription'
 import { cn } from '@/lib/utils'

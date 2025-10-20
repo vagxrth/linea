@@ -5,10 +5,14 @@ import { toast } from "sonner";
 export const useSubscription = () => {
     const [trigger, { isFetching }] = useLazyGetCheckoutQuery()
 
-    const { id } = useAppSelector((state) => state.profile)
+    const profile = useAppSelector((state) => state.profile)
     const onSubscribe = async () => {
+        if (!profile?.id) {
+            toast.error('Please sign in to subscribe')
+            return
+        }
         try {
-            const res = await trigger(id).unwrap()
+            const res = await trigger(profile.id).unwrap()
             window.location.href = res.url
         } catch (error) {
             console.error(error)
