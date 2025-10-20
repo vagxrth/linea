@@ -20,13 +20,17 @@ export const SubscriptionQuery = async () => {
         rawProfile._valueJSON as unknown as ConvexUserRaw | null
     )
 
+    if (!profile?.id) {
+        return { entitlement: { _valueJSON: null }, profileName: null };
+    }
+
     const entitlement = await preloadQuery(
         api.subscription.hasEntitlement,
-        { userId: profile?.id as Id<'users'>},
+        { userId: profile.id as Id<'users'>},
         { token: await convexAuthNextjsToken()}
     )
 
-    return { entitlement, profileName: profile?.name };
+    return { entitlement, profileName: profile.name };
 
 }
 

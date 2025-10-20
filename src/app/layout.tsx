@@ -30,8 +30,14 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
 
-  const rawProflie = await ProfileQuery();
-  const profile = normalizeProfile( rawProflie._valueJSON as unknown as ConvexUserRaw | null )
+  let profile = null;
+  try {
+    const rawProfile = await ProfileQuery();
+    profile = normalizeProfile( rawProfile._valueJSON as unknown as ConvexUserRaw | null );
+  } catch (error) {
+    // User is not authenticated or query failed
+    console.log("Profile query failed:", error);
+  }
 
   return (
     <ConvexAuthNextjsServerProvider>
