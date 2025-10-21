@@ -1,3 +1,5 @@
+'use client'
+
 import React from 'react'
 import { useProjectCreation } from '@/hooks/use-project';
 import { Plus } from 'lucide-react';
