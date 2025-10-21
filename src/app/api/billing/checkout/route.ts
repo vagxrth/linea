@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     })
 
     const session = await polar.checkouts.create({
-        products: [process.env.POLAR_STANDARD_PLAN!],
+        products: [process.env.POLAR_PLAN!],
         successUrl: `${process.env.NEXT_PUBLIC_APP_URL}/billing/success`,
         metadata: {
             userId
