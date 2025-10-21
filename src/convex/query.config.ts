@@ -5,135 +5,180 @@ import { ConvexUserRaw, normalizeProfile } from "@/types/user"
 import { Id } from "../../convex/_generated/dataModel"
 
 export const ProfileQuery = async () => {
-    return await preloadQuery(
-        api.user.getCurrentUser,
-        {}, {
-            token: await convexAuthNextjsToken()
-        }
-    )
+    try {
+        return await preloadQuery(
+            api.user.getCurrentUser,
+            {}, {
+                token: await convexAuthNextjsToken()
+            }
+        )
+    } catch (error) {
+        console.error('Error in ProfileQuery:', error);
+        return { _valueJSON: null };
+    }
 }
 
 export const SubscriptionQuery = async () => {
-    const rawProfile = await ProfileQuery();
+    try {
+        const rawProfile = await ProfileQuery();
 
-    const profile = normalizeProfile(
-        rawProfile._valueJSON as unknown as ConvexUserRaw | null
-    )
+        const profile = normalizeProfile(
+            rawProfile._valueJSON as unknown as ConvexUserRaw | null
+        )
 
-    if (!profile?.id) {
+        if (!profile?.id) {
+            return { entitlement: { _valueJSON: null }, profileName: null };
+        }
+
+        const entitlement = await preloadQuery(
+            api.subscription.hasEntitlement,
+            { userId: profile.id as Id<'users'>},
+            { token: await convexAuthNextjsToken()}
+        )
+
+        return { entitlement, profileName: profile.name };
+    } catch (error) {
+        console.error('Error in SubscriptionQuery:', error);
         return { entitlement: { _valueJSON: null }, profileName: null };
     }
-
-    const entitlement = await preloadQuery(
-        api.subscription.hasEntitlement,
-        { userId: profile.id as Id<'users'>},
-        { token: await convexAuthNextjsToken()}
-    )
-
-    return { entitlement, profileName: profile.name };
 
 }
 
 export const ProjectsQuery = async () => {
-    const rawProfile = await ProfileQuery();
-    const profile = normalizeProfile(
-        rawProfile._valueJSON as unknown as ConvexUserRaw | null
-    )
+    try {
+        const rawProfile = await ProfileQuery();
+        const profile = normalizeProfile(
+            rawProfile._valueJSON as unknown as ConvexUserRaw | null
+        )
 
-    if (!profile?.id) {
+        if (!profile?.id) {
+            return { projects: null, profile: null }
+        }
+
+        const projects = await preloadQuery(
+            api.projects.getProjects,
+            { userId: profile.id as Id<'users'>},
+            { token: await convexAuthNextjsToken() }
+        )
+
+        return { projects, profile }
+    } catch (error) {
+        console.error('Error in ProjectsQuery:', error);
         return { projects: null, profile: null }
     }
-
-    const projects = await preloadQuery(
-        api.projects.getProjects,
-        { userId: profile.id as Id<'users'>},
-        { token: await convexAuthNextjsToken() }
-    )
-
-    return { projects, profile }
 }
 
 export const ProjectQuery = async (projectId: string) => {
-    const rawProfile = await ProfileQuery();
-    const profile = normalizeProfile(rawProfile._valueJSON as unknown as ConvexUserRaw | null)
+    try {
+        const rawProfile = await ProfileQuery();
+        const profile = normalizeProfile(rawProfile._valueJSON as unknown as ConvexUserRaw | null)
 
-    if (!profile?.id || !projectId) {
+        if (!profile?.id || !projectId) {
+            return { project: null, profile: null }
+        }
+
+        const project = await preloadQuery(
+            api.projects.getProject,
+            { projectId: projectId as Id<'projects'>},
+            { token: await convexAuthNextjsToken() }
+        )
+
+        return { project, profile }
+    } catch (error) {
+        console.error('Error in ProjectQuery:', error);
         return { project: null, profile: null }
     }
-
-    const project = await preloadQuery(
-        api.projects.getProject,
-        { projectId: projectId as Id<'projects'>},
-        { token: await convexAuthNextjsToken() }
-    )
-
-    return { project, profile }
 }
 
 export const StyleGuideQuery = async (projectId: string) => {
-    const styleGuide = await preloadQuery(
-        api.projects.getStyleGuide,
-        { projectId: projectId as Id<'projects'>},
-        { token: await convexAuthNextjsToken() }
-    )
+    try {
+        const styleGuide = await preloadQuery(
+            api.projects.getStyleGuide,
+            { projectId: projectId as Id<'projects'>},
+            { token: await convexAuthNextjsToken() }
+        )
 
-    return {styleGuide};
+        return {styleGuide};
+    } catch (error) {
+        console.error('Error in StyleGuideQuery:', error);
+        return { styleGuide: null };
+    }
 }
 
 export const MoodboardImagesQuery = async (projectId: string) => {
-    const images = await preloadQuery(
-        api.moodboard.getMoodboardImages,
-        { projectId: projectId as Id<'projects'>},
-        { token: await convexAuthNextjsToken() }
-    )
+    try {
+        const images = await preloadQuery(
+            api.moodboard.getMoodboardImages,
+            { projectId: projectId as Id<'projects'>},
+            { token: await convexAuthNextjsToken() }
+        )
 
-    return { images };
+        return { images };
+    } catch (error) {
+        console.error('Error in MoodboardImagesQuery:', error);
+        return { images: null };
+    }
 }
 
 export const CreditsBalanceQuery = async () => {
-    const rawProfile = await ProfileQuery();
-    const profile = normalizeProfile(rawProfile._valueJSON as unknown as ConvexUserRaw | null)
+    try {
+        const rawProfile = await ProfileQuery();
+        const profile = normalizeProfile(rawProfile._valueJSON as unknown as ConvexUserRaw | null)
 
-    if (!profile?.id) {
+        if (!profile?.id) {
+            return { ok: false, balance: 0, profile: null }
+        }
+
+        const balance = await preloadQuery(
+            api.subscription.getCreditsBalance,
+            { userId: profile.id as Id<'users'>},
+            { token: await convexAuthNextjsToken() }
+        )
+
+        return { ok: true, balance: balance._valueJSON, profile }
+    } catch (error) {
+        console.error('Error in CreditsBalanceQuery:', error);
         return { ok: false, balance: 0, profile: null }
     }
-
-    const balance = await preloadQuery(
-        api.subscription.getCreditsBalance,
-        { userId: profile.id as Id<'users'>},
-        { token: await convexAuthNextjsToken() }
-    )
-
-    return { ok: true, balance: balance._valueJSON, profile }
 }
 
 export const ConsumeCreditsQuery = async ({ amount }: { amount?: number }) => {
-    const rawProfile = await ProfileQuery();
-    const profile = normalizeProfile(rawProfile._valueJSON as unknown as ConvexUserRaw | null)
+    try {
+        const rawProfile = await ProfileQuery();
+        const profile = normalizeProfile(rawProfile._valueJSON as unknown as ConvexUserRaw | null)
 
-    if (!profile?.id) {
+        if (!profile?.id) {
+            return { ok: false, balance: 0, profile: null }
+        }
+
+        const credits = await fetchMutation(
+            api.subscription.consumeCredits,
+            {
+                reason: 'ai-generation',
+                userId: profile.id as Id<'users'>,
+                amount: amount ?? 1,
+            },
+            { token: await convexAuthNextjsToken() }
+        )
+
+        return { ok: credits.ok, balance: credits.balance, profile }
+    } catch (error) {
+        console.error('Error in ConsumeCreditsQuery:', error);
         return { ok: false, balance: 0, profile: null }
     }
-
-    const credits = await fetchMutation(
-        api.subscription.consumeCredits,
-        {
-            reason: 'ai-generation',
-            userId: profile.id as Id<'users'>,
-            amount: amount ?? 1,
-        },
-        { token: await convexAuthNextjsToken() }
-    )
-
-    return { ok: credits.ok, balance: credits.balance, profile }
 }
 
 export const InspirationImagesQuery = async (projectId: string) => {
-    const images = await preloadQuery(
-        api.inspiration.getInspirationImages,
-        { projectId: projectId as Id<'projects'>},
-        { token: await convexAuthNextjsToken() }
-    )
+    try {
+        const images = await preloadQuery(
+            api.inspiration.getInspirationImages,
+            { projectId: projectId as Id<'projects'>},
+            { token: await convexAuthNextjsToken() }
+        )
 
-    return { images };
+        return { images };
+    } catch (error) {
+        console.error('Error in InspirationImagesQuery:', error);
+        return { images: null };
+    }
 }
