@@ -9,10 +9,10 @@ const Dashboard = async () => {
     if (!profileName) {
         redirect('/auth/signin');
     }
-
-    if (!entitlement._valueJSON) {
-        redirect(`/billing/${combinedSlug(profileName)}`)
-    }
+    // TODO: Uncomment this when the billing is implemented
+    // if (!entitlement._valueJSON) {
+    //     redirect(`/billing/${combinedSlug(profileName)}`)
+    // }
     redirect(`/dashboard/${combinedSlug(profileName)}`)
 }
 
