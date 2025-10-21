@@ -22,10 +22,10 @@ const Billing = () => {
                     <CardHeader className="text-center pb-4">
                         <div className="flex items-center justify-center mb-3">
                             <Badge variant='secondary' className="bg-primary/20 text-primary border-primary/20 px-3 py-1 text-xs font-medium rounded-full">
-                                Pro
+                                Premium
                             </Badge>
                         </div>
-                        <CardTitle className="text-2xl font-bold text-foreground mb-2">Pro Plan</CardTitle>
+                        <CardTitle className="text-2xl font-bold text-foreground mb-2">Linea Premium</CardTitle>
                         <div className="flex items-baseline justify-center gap-2">
                             <span className="text-4xl font-bold text-foreground">$0.69</span>
                             <span className="text-sm text-muted-foreground">/month</span>
