@@ -59,7 +59,7 @@ const TypographySectionSchema = z.object({
 const StyleGuideSchema = z.object({
     theme: z.string(),
     description: z.string(),
-    colorSection: z.tuple([
+    colorSections: z.tuple([
         PrimaryColorsSchema,
         SecondaryColorsSchema,
         UIComponentColorsSchema,
