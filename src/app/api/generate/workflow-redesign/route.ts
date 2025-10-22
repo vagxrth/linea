@@ -39,6 +39,17 @@ export async function POST(request: NextRequest) {
         const styleGuideData = styleGuide.styleGuide._valueJSON as unknown as {
             colorSections: unknown[]
             typographySections: unknown[]
+        } | null
+
+        // Check if style guide exists
+        if (!styleGuideData || !styleGuideData.colorSections || !styleGuideData.typographySections) {
+            return NextResponse.json(
+                { 
+                    error: 'Style guide not found', 
+                    details: 'Please generate a style guide first before redesigning workflow. Go to the Style Guide tab and create one from your moodboard images.' 
+                },
+                { status: 400 }
+            )
         }
 
         let userPrompt = `CRITICAL: You are redesigning a SPECIFIC WORKFLOW PAGE, not creating a new page from scratch.

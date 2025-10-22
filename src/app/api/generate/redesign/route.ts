@@ -36,6 +36,17 @@ export async function POST(request: NextRequest) {
         const styleGuideData = styleGuide.styleGuide._valueJSON as unknown as {
             colorSections: unknown[]
             typographySections: unknown[]
+        } | null
+
+        // Check if style guide exists
+        if (!styleGuideData || !styleGuideData.colorSections || !styleGuideData.typographySections) {
+            return NextResponse.json(
+                { 
+                    error: 'Style guide not found', 
+                    details: 'Please generate a style guide first before redesigning. Go to the Style Guide tab and create one from your moodboard images.' 
+                },
+                { status: 400 }
+            )
         }
 
         const inspirationResult = await InspirationImagesQuery(projectId)
@@ -45,8 +56,8 @@ export async function POST(request: NextRequest) {
 
         const imageUrls = images.map((img) => img.url).filter(Boolean)
 
-        const colors = styleGuideData?.colorSections || []
-        const typography = styleGuideData?.typographySections || []
+        const colors = styleGuideData.colorSections || []
+        const typography = styleGuideData.typographySections || []
 
         let userPrompt = `Please redesign this UI based on my request: "${userMessage}"`
 

@@ -59,6 +59,17 @@ export async function POST(request: NextRequest) {
         const guide = styleGuide.styleGuide._valueJSON as unknown as {
             colorSections: string[]
             typographySections: string[]
+        } | null
+
+        // Check if style guide exists
+        if (!guide || !guide.colorSections || !guide.typographySections) {
+            return NextResponse.json(
+                { 
+                    error: 'Style guide not found', 
+                    details: 'Please generate a style guide first before generating designs. Go to the Style Guide tab and create one from your moodboard images.' 
+                },
+                { status: 400 }
+            )
         }
 
         const inspirationImages = await InspirationImagesQuery(projectId)
