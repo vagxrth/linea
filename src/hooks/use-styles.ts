@@ -80,11 +80,12 @@ export const useMoodboard = (guideImages: MoodboardImage[]) => {
         if (guideImages && guideImages.length > 0) {
             const serverImages: MoodboardImage[] = guideImages.map((image) => ({
                 id: image.id,
-                preview: image.preview,
+                preview: image.url || image.preview,
                 storageId: image.storageId,
                 uploaded: true,
                 uploading: false,
                 url: image.url,
+                isFromServer: true,
             }))
             const currentImages = getValues('images')
 
@@ -147,7 +148,7 @@ export const useMoodboard = (guideImages: MoodboardImage[]) => {
 
         const updatedImages = images.filter((image) => {
             if (image.id === imageId) {
-                if (!image.isFromServer && image.preview.startsWith('blob:')) {
+                if (!image.isFromServer && image.preview && image.preview.startsWith('blob:')) {
                     URL.revokeObjectURL(image.preview)
                 }
                 return false
