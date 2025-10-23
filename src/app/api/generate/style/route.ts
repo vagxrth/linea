@@ -161,12 +161,9 @@ export async function POST(request: NextRequest) {
         })
 
     } catch (error) {
-        console.error('Style guide generation error:', error)
         return NextResponse.json({
             error: 'Failed to generate style guide',
             details: error instanceof Error ? error.message : 'Unknown error',
-            stack: error instanceof Error ? error.stack : undefined,
-            fullError: JSON.stringify(error, Object.getOwnPropertyNames(error))
         }, {
             status: 500,
         })

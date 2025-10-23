@@ -70,6 +70,12 @@ const InfiniteCanvas = () => {
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
         onContextMenu={(e) => e.preventDefault()}
+        onWheel={(e) => {
+            // Prevent browser navigation when scrolling horizontally
+            if (Math.abs(e.deltaX) > 0) {
+                e.preventDefault()
+            }
+        }}
         draggable={false}
         >
             <div className='absolute origin-top-left pointer-events-none z-10' style={{
