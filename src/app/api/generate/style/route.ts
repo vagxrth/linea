@@ -16,29 +16,9 @@ const ColorSwatchSchema = z.object({
     description: z.string().optional(),
 })
 
-const PrimaryColorsSchema = z.object({
-    title: z.literal('Primary Colors'),
-    swatches: z.array(ColorSwatchSchema).length(4),
-})
-
-const SecondaryColorsSchema = z.object({
-    title: z.literal('Secondary & Accent Colors'),
-    swatches: z.array(ColorSwatchSchema).length(4),
-})
-
-const UIComponentColorsSchema = z.object({
-    title: z.literal('UI Component Colors'),
-    swatches: z.array(ColorSwatchSchema).length(6),
-})
-
-const UtilityColorsSchema = z.object({
-    title: z.literal('Utility & Form Colors'),
-    swatches: z.array(ColorSwatchSchema).length(3),
-})
-
-const StatusColorsSchema = z.object({
-    title: z.literal('Status & Feedback Colors'),
-    swatches: z.array(ColorSwatchSchema).length(2),
+const ColorSectionSchema = z.object({
+    title: z.string(),
+    swatches: z.array(ColorSwatchSchema).min(2).max(6),
 })
 
 const TypographyStyleSchema = z.object({
@@ -53,20 +33,14 @@ const TypographyStyleSchema = z.object({
 
 const TypographySectionSchema = z.object({
     title: z.string(),
-    styles: z.array(TypographyStyleSchema),
+    styles: z.array(TypographyStyleSchema).min(1).max(5),
 })
 
 const StyleGuideSchema = z.object({
     theme: z.string(),
     description: z.string(),
-    colorSections: z.tuple([
-        PrimaryColorsSchema,
-        SecondaryColorsSchema,
-        UIComponentColorsSchema,
-        UtilityColorsSchema,
-        StatusColorsSchema,
-    ]),
-    typographySections: z.array(TypographySectionSchema).length(3),
+    colorSections: z.array(ColorSectionSchema).min(5).max(5),
+    typographySections: z.array(TypographySectionSchema).min(3).max(3),
 })
 
 export async function POST(request: NextRequest) {
@@ -119,7 +93,17 @@ export async function POST(request: NextRequest) {
         const systemPrompt = prompts.styleGuide.system
 
         const userPrompt = `Analyze these ${imageUrls.length} mood board images and generate a design system:
-        Extract colors that work harmoniously together and create typography that matches the aesthetic. 
+        Extract colors that work harmoniously together and create typography that matches the aesthetic.
+        
+        IMPORTANT: Generate exactly 5 color sections with these titles in order:
+        1. "Primary Colors" (4 swatches)
+        2. "Secondary & Accent Colors" (4 swatches)
+        3. "UI Component Colors" (6 swatches)
+        4. "Utility & Form Colors" (3 swatches)
+        5. "Status & Feedback Colors" (2 swatches)
+        
+        And exactly 3 typography sections with appropriate titles (e.g., "Headings", "Body", "UI Elements").
+        
         Return ONLY the JSON object matching the exact schema structure above.`;
 
         const result = await generateObject({
@@ -142,6 +126,14 @@ export async function POST(request: NextRequest) {
                 }
             ]
         })
+        
+        // Validate the structure
+        if (!result.object.colorSections || result.object.colorSections.length !== 5) {
+            throw new Error('Invalid color sections structure')
+        }
+        if (!result.object.typographySections || result.object.typographySections.length !== 3) {
+            throw new Error('Invalid typography sections structure')
+        }
 
         const { ok, balance } = await ConsumeCreditsQuery({ amount: 1 })
 
