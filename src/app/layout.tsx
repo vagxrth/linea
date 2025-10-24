@@ -8,6 +8,7 @@ import { ConvexClientProvider } from "./ConvexClientProvider";
 import ReduxProvider from "@/redux/provider";
 import { ProfileQuery } from "@/convex/query.config";
 import { ConvexUserRaw, normalizeProfile } from "@/types/user";
+import { Analytics } from '@vercel/analytics/next';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -57,6 +58,7 @@ export default async function RootLayout({
             >
               <ReduxProvider preloadedState={{ profile }}>
                 {children}
+                <Analytics />
                 <Toaster />
               </ReduxProvider>
             </ThemeProvider>
