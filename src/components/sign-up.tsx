@@ -1,7 +1,7 @@
-import { LogoIcon } from '@/components/logo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import Image from 'next/image'
 import Link from 'next/link'
 
 export default function LoginPage() {
@@ -11,14 +11,17 @@ export default function LoginPage() {
                 action=""
                 className="max-w-92 m-auto h-fit w-full">
                 <div className="p-6">
-                    <div>
+                    <div className="flex items-center gap-3 mb-4">
                         <Link
                             href="/"
-                            aria-label="go home">
-                            <LogoIcon />
+                            aria-label="go home"
+                            className="shrink-0">
+                            <Image src="/images/logo.webp" alt="Linea" width={75} height={75} className="rounded-lg" />
                         </Link>
-                        <h1 className="mb-1 mt-4 text-xl font-semibold">Create a Linea Account</h1>
-                        <p>Welcome! Create an account to get started</p>
+                        <div>
+                            <h1 className="text-xl font-semibold">Create a Linea Account</h1>
+                            <p>Hola! Get started now</p>
+                        </div>
                     </div>
 
                     <div className="mt-6">

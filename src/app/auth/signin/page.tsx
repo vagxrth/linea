@@ -1,6 +1,5 @@
 'use client'
 
-import { LogoIcon } from '@/components/logo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -8,6 +7,7 @@ import Link from 'next/link'
 import { useAuth } from '@/hooks/use-auth'
 import { Loader2 } from 'lucide-react'
 import Google from '@/components/google'
+import Image from 'next/image'
 
 export default function LoginPage() {
 
@@ -20,14 +20,17 @@ export default function LoginPage() {
         onSubmit={handleSubmit(handleSignIn)}
         className="bg-card m-auto h-fit w-full max-w-sm rounded-[calc(var(--radius)+.125rem)] border p-0.5 shadow-md dark:[--color-muted:var(--color-zinc-900)]">
         <div className="p-8 pb-6">
-          <div>
+          <div className="flex items-center gap-3 mb-4">
             <Link
               href="/"
-              aria-label="go home">
-              <LogoIcon />
+              aria-label="go home"
+              className="shrink-0">
+              <Image src="/images/logo.webp" alt="Linea" width={75} height={75} className="rounded-lg" />
             </Link>
-            <h1 className="mb-1 mt-4 text-xl font-semibold">Sign In to Linea</h1>
-            <p className="text-sm">Welcome back! Sign in to continue</p>
+            <div>
+              <h1 className="text-xl font-semibold">Sign In to Linea</h1>
+              <p className="text-sm">Welcome back! Sign in to continue</p>
+            </div>
           </div>
 
           <div className="mt-6 grid grid-cols-2 gap-3">
