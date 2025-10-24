@@ -1,6 +1,5 @@
 'use client'
 
-import { LogoIcon } from '@/components/logo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -8,6 +7,7 @@ import Link from 'next/link'
 import { useAuth } from '@/hooks/use-auth'
 import { Loader2 } from 'lucide-react'
 import Google from '@/components/google'
+import Image from 'next/image'
 
 export default function LoginPage() {
 
@@ -20,41 +20,21 @@ export default function LoginPage() {
         onSubmit={handleSubmit(handleSignIn)}
         className="bg-card m-auto h-fit w-full max-w-sm rounded-[calc(var(--radius)+.125rem)] border p-0.5 shadow-md dark:[--color-muted:var(--color-zinc-900)]">
         <div className="p-8 pb-6">
-          <div>
+          <div className="flex items-center gap-3 mb-4">
             <Link
               href="/"
-              aria-label="go home">
-              <LogoIcon />
+              aria-label="go home"
+              className="shrink-0">
+              <Image src="/images/logo.webp" alt="Linea" width={75} height={75} className="rounded-lg" />
             </Link>
-            <h1 className="mb-1 mt-4 text-xl font-semibold">Sign In to Linea</h1>
-            <p className="text-sm">Welcome back! Sign in to continue</p>
+            <div>
+              <h1 className="text-xl font-semibold">Sign In to Linea</h1>
+              <p className="text-sm">Welcome back! Sign in to continue</p>
+            </div>
           </div>
 
           <div className="mt-6 grid grid-cols-2 gap-3">
-            <Google />
-            <Button
-              type="button"
-              variant="outline">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="1em"
-                height="1em"
-                viewBox="0 0 256 256">
-                <path
-                  fill="#f1511b"
-                  d="M121.666 121.666H0V0h121.666z"></path>
-                <path
-                  fill="#80cc28"
-                  d="M256 121.666H134.335V0H256z"></path>
-                <path
-                  fill="#00adef"
-                  d="M121.663 256.002H0V134.336h121.663z"></path>
-                <path
-                  fill="#fbbc09"
-                  d="M256 256.002H134.335V134.336H256z"></path>
-              </svg>
-              <span>Microsoft</span>
-            </Button>
+            <Google className="col-span-2" />
           </div>
 
           <hr className="my-4 border-dashed" />

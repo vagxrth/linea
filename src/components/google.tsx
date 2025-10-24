@@ -3,7 +3,7 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { Button } from "./ui/button";
 
-const Google = () => {
+const Google = ({ className }: { className?: string }) => {
 
     const { signIn } = useAuthActions();
 
@@ -12,6 +12,7 @@ const Google = () => {
             onClick={() => signIn('google')}
             type="button"
             variant="outline"
+            className={className}
         >
             <svg
                 xmlns="http://www.w3.org/2000/svg"
