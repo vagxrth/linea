@@ -31,7 +31,7 @@ export default function Home() {
         </h1>
         <p className="font-serif text-lg md:text-2xl tracking-wide mt-4 opacity-90">Think. Sketch. Design</p>
         <Link href="/auth/signin" className="pointer-events-auto mt-16">
-          <button className="px-8 py-3 bg-white text-black font-serif text-lg rounded-lg hover:bg-gray-200 transition-all duration-300 flex items-center gap-2 group hover:gap-3">
+          <button className="px-8 py-3 bg-white text-black font-serif text-lg rounded-lg hover:bg-gray-200 transition-all duration-300 flex items-center gap-2 group hover:gap-3 cursor-pointer">
             Get Started
             <ArrowRight className="w-5 h-5 transition-transform duration-300 group-hover:translate-x-1" />
           </button>
