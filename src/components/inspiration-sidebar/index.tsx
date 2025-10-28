@@ -26,7 +26,7 @@ type Props = {
 }
 
 
-const InspirationSidebar = ({ onClose }: InspirationSidebarProps) => {
+const InspirationSidebar = ({ isOpen, onClose }: InspirationSidebarProps) => {
 
     const [images, setImages] = useState<Props[]>([])
     const [dragActive, setDragActive] = useState(false)
@@ -186,7 +186,9 @@ const InspirationSidebar = ({ onClose }: InspirationSidebarProps) => {
     }, [existingImages])
 
     return (
-        <div className={cn('fixed left-5 top-1/2 transform -translate-y-1/2 w-80 backdrop-blur-xl bg-white/[0.08] border-white/[0.12] gap-2 p-3 saturate-150 border rounded-lg z-50 transition-transform duration-300')}>
+        <div className={cn('fixed left-5 top-1/2 transform -translate-y-1/2 w-80 backdrop-blur-xl bg-white/[0.08] border-white/[0.12] gap-2 p-3 saturate-150 border rounded-lg z-50 transition-all duration-300',
+            isOpen ? 'translate-x-0 opacity-100' : '-translate-x-full opacity-0'
+        )}>
             <div className='p-4 flex flex-col gap-4 overflow-y-auto max-h-[calc(100vh-8rem)]'>
                 <div className='flex items-center justify-between'>
                     <Button
