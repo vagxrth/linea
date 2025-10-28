@@ -58,7 +58,8 @@ const ChatWindow = ({ generatedUIId, isOpen, onClose }: Props) => {
                         <X className='w-4 h-4' />
                     </Button>
                 </div>
-                <ScrollArea ref={scrollAreaRef} className='flex-1 p-4 overflow-y-auto'>
+            </div>
+            <ScrollArea ref={scrollAreaRef} className='flex-1 p-4 overflow-y-auto'>
                     <div className='space-y-4'>
                         {!chatState?.messages || chatState.messages.length === 0 ? (
                             <div className='text-center text-white/60 py-8'>
@@ -119,7 +120,6 @@ const ChatWindow = ({ generatedUIId, isOpen, onClose }: Props) => {
                         </div>
                     </div>
                 </div>
-            </div>
         </div>
     )
 }
