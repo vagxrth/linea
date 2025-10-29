@@ -56,7 +56,7 @@ const TextSidebar = ({ isOpen }: Props) => {
         }
     }
 
-    // if (!isOpen || !selectedTextShape) return null
+    if (!isOpen || !selectedTextShape) return null
 
     return (
         <div className={cn('fixed right-5 top-1/2 transform -translate-y-1/2 w-80 backdrop-blur-xl bg-white/[0.08] border-white/[0.12] gap-2 p-3 saturate-150 border rounded-lg z-50 transition-transform duration-300', isOpen ? 'translate-x-0' : 'translate-x-full')}>
