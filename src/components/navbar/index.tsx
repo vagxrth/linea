@@ -53,8 +53,8 @@ const Navbar = () => {
     return (
         <div className='grid grid-cols-2 lg:grid-cols-3 p-6 fixed top-0 left-0 right-0 z-50'>
             <div className='flex items-center gap-4'>
-                <Link href={`/dashboard/${me.name}`} className='w-8 h-8 rounded-full border-3 border-white bg-black flex items-center justify-center'>
-                    <Image src='/images/logo.webp' alt="Linea" width={32} height={32} />
+                <Link href={`/dashboard/${me.name}`} className='w-12 h-12 rounded-full border-none bg-transparent flex items-center justify-center'>
+                    <Image src='/images/logo.webp' alt="Linea" width={48} height={48} className='rounded-lg' />
                 </Link>
                 {(hasCanvas || hasStyleGuide) && (
                     <div className='lg:inline-block hidden rounded-full text-primary/60 border border-white/[0.12] backdrop-blur-xl bg-white/[0.08] px-4 py-2 text-sm saturate-150'>
