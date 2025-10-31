@@ -51,7 +51,7 @@ const Navbar = () => {
     ]
 
     return (
-        <div className='grid grid-cols-2 lg:grid-cols-3 p-6 fixed top-0 left-0 right-0 z-50'>
+        <div className='flex items-center justify-between p-6 fixed top-0 left-0 right-0 z-50'>
             <div className='flex items-center gap-4'>
                 <Link href={`/dashboard/${me.name}`} className='w-16 h-16 rounded-full border-none bg-transparent flex items-center justify-center'>
                     <Image src='/images/logo.webp' alt="Linea" width={64} height={64} className='rounded-lg' />
@@ -64,7 +64,7 @@ const Navbar = () => {
             </div>
 
             {projectId && (
-                <div className='lg:flex hidden items-center justify-center gap-2'>
+                <div className='lg:flex hidden items-center justify-center gap-2 absolute left-1/2 -translate-x-1/2'>
                     <div className='flex items-center gap-2 backdrop-blur-xl bg-white/[0.08] border border-white/[0.12] rounded-full p-2 saturate-150'>
                         {tabs.map((t) => (
                             <Link
