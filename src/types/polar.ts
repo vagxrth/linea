@@ -109,4 +109,4 @@ export const toMs = (x: string | number | null | undefined): number | undefined 
     return Number.isNaN(t) ? undefined : t
 }
 
-export const entitledStatus= (status: string): boolean => /^(active|trailing)$/i.test(status)
+export const entitledStatus= (status: string): boolean => /^(active|trailing|paid)$/i.test(status)
