@@ -3,7 +3,7 @@ import { mutation, query } from "./_generated/server";
 
 const DEFAULT_GRANT = 10
 const DEFAULT_ROLLOVER_LIMIT = 100
-const ENTITLED = new Set(['active', 'trailing'])
+const ENTITLED = new Set(['active', 'trailing', 'paid'])
 
 export const hasEntitlement = query({
     args: { userId: v.id('users') },
@@ -13,8 +13,11 @@ export const hasEntitlement = query({
             .query('subscriptions')
             .withIndex('by_userId', (q) => q.eq('userId', userId))) {
             const status = String(sub.status || '').toLowerCase();
+            // For subscriptions with period end: check if not expired
+            // For one-time purchases (no period end): check if status is entitled
             const periodOk = sub.currentPeriodEnd == null || sub.currentPeriodEnd > now
-            if (status === 'active' && periodOk) return true;
+            const entitled = status === 'active' || status === 'trailing' || status === 'paid'
+            if (entitled && periodOk) return true;
         }
         return false;
     }

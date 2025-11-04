@@ -139,7 +139,7 @@ export const handlePolarEvent = inngest.createFunction(
         })
 
         const createSubscription = /subscription\.created/i.test(type)
-        const renewSubscription = /subscription\.renew|order\.created|invoice\.paid|order\.paid/i.test(type)
+        const renewSubscription = /subscription\.renew|order\.created|order\.updated|invoice\.paid|order\.paid/i.test(type)
 
         const entitled = entitledStatus(payload.status)
 
