@@ -4,13 +4,10 @@ import { redirect } from "next/navigation";
 
 const Dashboard = async () => {
 
-    const { entitlement, profileName } = await SubscriptionQuery();
+    const { profileName } = await SubscriptionQuery();
 
     if (!profileName) {
         redirect('/auth/signin');
-    }
-    if (!entitlement._valueJSON) {
-        redirect(`/billing/${combinedSlug(profileName)}`)
     }
     redirect(`/dashboard/${combinedSlug(profileName)}`)
 }
