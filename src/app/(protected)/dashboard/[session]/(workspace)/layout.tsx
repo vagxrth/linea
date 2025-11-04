@@ -15,10 +15,9 @@ const Layout = async ({ children }: Props) => {
     if (!profileName) {
         redirect('/auth/signin');
     }
-    // TODO: Uncomment this when the billing is implemented
-    // if (!entitlement._valueJSON) {
-    //     redirect(`/billing/${combinedSlug(profileName)}`)
-    // }
+    if (!entitlement._valueJSON) {
+        redirect(`/billing/${combinedSlug(profileName)}`)
+    }
 
     return (
         <div className='grid grid-cols-1'>
