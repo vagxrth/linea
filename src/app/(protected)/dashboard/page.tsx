@@ -1,5 +1,4 @@
 import { ProfileQuery } from "@/convex/query.config";
-import { combinedSlug } from "@/lib/utils";
 import { redirect } from "next/navigation";
 import { ConvexUserRaw, normalizeProfile } from "@/types/user";
 
@@ -13,7 +12,7 @@ const Dashboard = async () => {
     if (!profile?.name) {
         redirect('/auth/signin');
     }
-    redirect(`/dashboard/${combinedSlug(profile.name)}`)
+    redirect(`/dashboard/${profile.name}`)
 }
 
 export default Dashboard;
