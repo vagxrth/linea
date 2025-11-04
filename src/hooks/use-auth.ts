@@ -1,5 +1,4 @@
 import { useAuthActions } from "@convex-dev/auth/react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { z } from 'zod'
 import { useForm } from "react-hook-form";
@@ -22,7 +21,6 @@ type signUpData = z.infer<typeof signUpSchema>
 
 export const useAuth = () => {
     const { signIn, signOut } = useAuthActions();
-    const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
 
 
@@ -52,7 +50,8 @@ export const useAuth = () => {
                 password: data.password,
                 flow: 'signIn',
             });
-            router.push('/dashboard');
+            // Use full page navigation to ensure server-side profile fetch
+            window.location.href = '/dashboard';
         } catch (error) {
             console.error(error);
             signInForm.setError('password', { message: 'Invalid email or password' });
@@ -70,7 +69,8 @@ export const useAuth = () => {
                 name: `${data.firstName} ${data.lastName}`,
                 flow: 'signUp',
             });
-            router.push('/dashboard');
+            // Use full page navigation to ensure server-side profile fetch
+            window.location.href = '/dashboard';
         } catch (error) {
             console.error(error);
             signUpForm.setError('root', { message: 'Failed to create account' });
@@ -82,7 +82,8 @@ export const useAuth = () => {
     const handleSignOut = async () => {
         try {
             await signOut();
-            router.push('/auth/signin');
+            // Use full page navigation to ensure server-side profile cleanup
+            window.location.href = '/auth/signin';
         } catch (error) {
             console.error(error);
         }
