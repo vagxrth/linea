@@ -12,7 +12,8 @@ export const hasEntitlement = query({
         for await (const sub of ctx.db
             .query('subscriptions')
             .withIndex('by_userId', (q) => q.eq('userId', userId))) {
-            const status = String(sub.status || '').toLowerCase();
+            // Normalize status: lowercase and trim whitespace
+            const status = String(sub.status || '').toLowerCase().trim();
             // For subscriptions with period end: check if not expired
             // For one-time purchases (no period end): check if status is entitled
             const periodOk = sub.currentPeriodEnd == null || sub.currentPeriodEnd > now
@@ -183,7 +184,11 @@ export const grantCredits = mutation({
             return { ok: true, skipped: true, reason: 'cursor-match' }
         }
 
-        if (!ENTITLED.has(sub.status)) {
+        // Normalize status: lowercase and trim whitespace
+        const normalizedStatus = String(sub.status || '').toLowerCase().trim();
+        console.log('grantCredits - Raw status:', JSON.stringify(sub.status), 'Normalized:', normalizedStatus, 'Is entitled:', ENTITLED.has(normalizedStatus));
+        
+        if (!ENTITLED.has(normalizedStatus)) {
             return { ok: true, skipped: true, reason: 'not-entitled' }
         }
 
@@ -208,6 +213,7 @@ export const grantCredits = mutation({
             meta: { prev: sub.creditsBalance, next },
         })
 
+        console.log('grantCredits - SUCCESS! Granted:', grant, 'New balance:', next);
         return { ok: true, granted: grant, balance: next }
     }
 })
@@ -245,7 +251,10 @@ export const consumeCredits = mutation({
             .first()
 
         if (!sub) return { ok: false, reason: 'subscription-not-found' }
-        if (!ENTITLED.has(sub.status)) return { ok: false, reason: 'not-entitled' }
+        
+        // Normalize status: lowercase and trim whitespace
+        const normalizedStatus = String(sub.status || '').toLowerCase().trim();
+        if (!ENTITLED.has(normalizedStatus)) return { ok: false, reason: 'not-entitled' }
 
         if (sub.creditsBalance < amount) {
             return { ok: false, error: 'insufficient-balance', balance: sub.creditsBalance }
