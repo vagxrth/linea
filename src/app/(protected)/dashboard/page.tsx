@@ -1,18 +1,18 @@
-import { SubscriptionQuery } from "@/convex/query.config";
-import { combinedSlug } from "@/lib/utils";
+import { ProfileQuery } from "@/convex/query.config";
 import { redirect } from "next/navigation";
+import { ConvexUserRaw, normalizeProfile } from "@/types/user";
 
 const Dashboard = async () => {
 
-    const { entitlement, profileName } = await SubscriptionQuery();
+    const rawProfile = await ProfileQuery();
+    const profile = normalizeProfile(
+        rawProfile._valueJSON as unknown as ConvexUserRaw | null
+    );
 
-    if (!profileName) {
+    if (!profile?.name) {
         redirect('/auth/signin');
     }
-    if (!entitlement._valueJSON) {
-        redirect(`/billing/${combinedSlug(profileName)}`)
-    }
-    redirect(`/dashboard/${combinedSlug(profileName)}`)
+    redirect(`/dashboard/${profile.name}`)
 }
 
 export default Dashboard;

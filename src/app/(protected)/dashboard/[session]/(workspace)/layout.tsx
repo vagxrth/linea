@@ -1,8 +1,8 @@
 import Navbar from '@/components/navbar';
-import { SubscriptionQuery } from '@/convex/query.config';
-import { combinedSlug } from '@/lib/utils';
+import { ProfileQuery } from '@/convex/query.config';
 import { redirect } from 'next/navigation';
 import React from 'react'
+import { ConvexUserRaw, normalizeProfile } from '@/types/user';
 
 type Props = {
     children: React.ReactNode
@@ -10,13 +10,13 @@ type Props = {
 
 const Layout = async ({ children }: Props) => {
 
-    const { profileName, entitlement } = await SubscriptionQuery();
+    const rawProfile = await ProfileQuery();
+    const profile = normalizeProfile(
+        rawProfile._valueJSON as unknown as ConvexUserRaw | null
+    );
     
-    if (!profileName) {
+    if (!profile?.name) {
         redirect('/auth/signin');
-    }
-    if (!entitlement._valueJSON) {
-        redirect(`/billing/${combinedSlug(profileName)}`)
     }
 
     return (
