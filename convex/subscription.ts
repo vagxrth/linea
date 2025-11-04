@@ -186,8 +186,7 @@ export const grantCredits = mutation({
 
         // Normalize status: lowercase and trim whitespace
         const normalizedStatus = String(sub.status || '').toLowerCase().trim();
-        console.log('grantCredits - Raw status:', JSON.stringify(sub.status), 'Normalized:', normalizedStatus, 'Is entitled:', ENTITLED.has(normalizedStatus));
-        
+
         if (!ENTITLED.has(normalizedStatus)) {
             return { ok: true, skipped: true, reason: 'not-entitled' }
         }
@@ -213,7 +212,6 @@ export const grantCredits = mutation({
             meta: { prev: sub.creditsBalance, next },
         })
 
-        console.log('grantCredits - SUCCESS! Granted:', grant, 'New balance:', next);
         return { ok: true, granted: grant, balance: next }
     }
 })
