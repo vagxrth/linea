@@ -46,8 +46,10 @@ const Success = () => {
             if (redirected.current) return;
             setTimedOut(true);
             redirected.current = true;
-            router.replace(`/billing/${me.name}`);
-        }, 45_000)
+            // Redirect to dashboard even if webhook is still processing
+            // Credits will update automatically once webhook completes
+            router.replace('/dashboard');
+        }, 90_000)
 
         return () => clearTimeout(t);
     }, [me, entitled, router])
@@ -62,14 +64,19 @@ const Success = () => {
             </div>
             <div className='text-sm text-gray-500' aria-live="polite">
                 {me === undefined
-                    ? "Checking..."
+                    ? "Checking your account..."
                     : entitled === undefined
-                        ? "Confirming..."
+                        ? "Confirming your payment..."
                         : timedOut
-                            ? "Taking a little longer..."
+                            ? "Almost done! Redirecting you to the dashboard..."
                             : "This should only take a moment..."
                 }
             </div>
+            {timedOut && (
+                <div className='mt-4 text-xs text-gray-400'>
+                    Your credits will appear in your account shortly.
+                </div>
+            )}
         </div>
     )
 }

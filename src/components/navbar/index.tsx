@@ -6,7 +6,7 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import React from 'react'
 import { Id } from '../../../convex/_generated/dataModel';
 import { api } from '../../../convex/_generated/api';
-import { Hash, LayoutTemplate, User, Plus } from 'lucide-react';
+import { Hash, LayoutTemplate, User, Coins } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { useAppSelector } from '@/redux/store';
 import CreateProject from '../buttons/create-project';
@@ -97,7 +97,7 @@ const Navbar = () => {
                     onClick={() => router.push(`/billing/${me.name}`)}
                     className='backdrop-blur-xl bg-white/[0.08] border border-white/[0.12] saturate-150 rounded-full hover:bg-white/[0.12] hover:border-white/[0.16] transition-all duration-200 active:bg-white/[0.06] active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-white/20 text-white font-medium text-sm px-4 py-2 h-auto'
                 >
-                    <Plus className='h-4 w-4 mr-1' />
+                    <Coins className='h-4 w-4 mr-1' />
                     Get Credits
                 </Button>
                 <Avatar className='size-12 ml-2'>
