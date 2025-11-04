@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation, mutation, query } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 
 const DEFAULT_GRANT = 10
 const DEFAULT_ROLLOVER_LIMIT = 100
@@ -262,47 +262,5 @@ export const consumeCredits = mutation({
         })
 
         return { ok: true, balance: next }
-    }
-})
-
-export const createInitialSubscription = internalMutation({
-    args: {
-        userId: v.id('users'),
-    },
-    handler: async (ctx, { userId }) => {
-        // Check if user already has a subscription
-        const existingSub = await ctx.db
-            .query('subscriptions')
-            .withIndex('by_userId', (q) => q.eq('userId', userId))
-            .first();
-
-        if (existingSub) {
-            return { ok: true, subscriptionId: existingSub._id, skipped: true };
-        }
-
-        // Create a new subscription with 10 initial credits
-        const subscriptionId = await ctx.db.insert('subscriptions', {
-            userId,
-            polarCustomerId: '',
-            polarSubscriptionId: `free-${userId}`,
-            status: 'active',
-            creditsBalance: 10,
-            creditsGrantPerPeriod: DEFAULT_GRANT,
-            creditsRolloverLimit: DEFAULT_ROLLOVER_LIMIT,
-            lastGrantCursor: undefined,
-        });
-
-        // Record the initial credit grant in the ledger
-        await ctx.db.insert('credits_ledger', {
-            userId,
-            subscriptionId,
-            amount: 10,
-            type: 'grant',
-            reasons: 'signup-bonus',
-            idempotencyKey: `signup-${userId}`,
-            meta: { prev: 0, next: 10 },
-        });
-
-        return { ok: true, subscriptionId, skipped: false };
     }
 })

@@ -52,11 +52,11 @@ export const useAuth = () => {
                 password: data.password,
                 flow: 'signIn',
             });
-            // Use full page reload to ensure auth cookies are set
-            window.location.href = '/dashboard';
+            router.push('/dashboard');
         } catch (error) {
             console.error(error);
             signInForm.setError('password', { message: 'Invalid email or password' });
+        } finally {
             setIsLoading(false);
         }
     };
@@ -70,11 +70,11 @@ export const useAuth = () => {
                 name: `${data.firstName} ${data.lastName}`,
                 flow: 'signUp',
             });
-            // Use full page reload to ensure auth cookies are set
-            window.location.href = '/dashboard';
+            router.push('/dashboard');
         } catch (error) {
             console.error(error);
             signUpForm.setError('root', { message: 'Failed to create account' });
+        } finally {
             setIsLoading(false);
         }
     };
