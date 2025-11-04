@@ -248,7 +248,6 @@ export const useCanvas = () => {
         if (!isButton) {
             e.preventDefault()
         } else {
-            console.log('Clicked on interactive element: ', target)
             return
         }
 
@@ -366,7 +365,6 @@ export const useCanvas = () => {
                         currentTool === 'arrow' ||
                         currentTool === 'line'
                     ) {
-                        console.log('Starting to draw: ', currentTool, 'at: ', world)
                         draftShapeRef.current = {
                             type: currentTool,
                             start: world,
