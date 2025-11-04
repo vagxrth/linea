@@ -39,15 +39,23 @@ export const handlePolarEvent = inngest.createFunction(
         const type = incoming.type
         const data = incoming.data
 
+        console.log('🎯 Webhook received - Type:', type)
+
         const subscription: PolarSubscription | null = extractSubscription(data)
         const order: PolarOrder | null = extractOrder(data)
 
-        if (!subscription && !order) return
+        console.log('📦 Extracted - Subscription:', subscription ? '✓' : '✗', 'Order:', order ? '✓' : '✗')
+
+        if (!subscription && !order) {
+            console.log('⚠️ No subscription or order data found, exiting')
+            return
+        }
 
         const userId: Id<'users'> | null = await step.run('resolve-user', async () => {
             const metaUserId = (subscription?.metadata?.userId as string | undefined) ?? (order?.metadata?.userId as string | undefined)
 
             if (metaUserId) {
+                console.log('Found userId in metadata:', metaUserId)
                 return metaUserId as Id<'users'>
             }
 
@@ -55,6 +63,7 @@ export const handlePolarEvent = inngest.createFunction(
 
             if (email) {
                 try {
+                    console.log('Looking up user by email:', email)
                     const foundUserId = await fetchQuery(api.user.getUserIdByEmail, { email })
                     return foundUserId
                 } catch (error) {
@@ -68,10 +77,21 @@ export const handlePolarEvent = inngest.createFunction(
         console.log('Resolved user', userId)
         if (!userId) return
 
-        const polarSubscriptionId = subscription?.id ?? order?.subscription_id ?? ''
+        // For one-time purchases, use order ID; for subscriptions, use subscription ID
+        const polarSubscriptionId = subscription?.id ?? order?.subscription_id ?? order?.id ?? ''
+        console.log('Using ID:', polarSubscriptionId, 'from', subscription ? 'subscription' : 'order')
         if (!polarSubscriptionId) return
 
         const currentPeriodEnd = toMs(subscription?.current_period_end)
+
+        // Detect if this is a one-time purchase (order without subscription)
+        const isOneTimePurchase = !subscription && !!order
+        
+        // For one-time purchases, set status to 'active' to pass entitlement checks
+        // For subscriptions, use actual status
+        const status = subscription?.status ?? (isOneTimePurchase ? 'active' : 'updated')
+        
+        console.log('Purchase type:', isOneTimePurchase ? 'one-time' : 'subscription', 'Status:', status)
 
         const payload = {
             userId,
@@ -79,8 +99,8 @@ export const handlePolarEvent = inngest.createFunction(
             polarSubscriptionId,
             productId: subscription?.product_id ?? subscription?.product?.id ?? undefined,
             priceId: subscription?.prices?.[0]?.id ?? undefined,
-            planCode: subscription?.plan_code ?? subscription?.product?.name ?? undefined,
-            status: subscription?.status ?? 'updated',
+            planCode: subscription?.plan_code ?? subscription?.product?.name ?? 'credit-purchase',
+            status,
             currentPeriodEnd,
             trialEndsAt: toMs(subscription?.trial_ends_at),
             cancelAt: toMs(subscription?.cancel_at),
@@ -123,9 +143,15 @@ export const handlePolarEvent = inngest.createFunction(
 
         const entitled = entitledStatus(payload.status)
 
+        console.log('Event type:', type)
+        console.log('Is create subscription:', createSubscription)
+        console.log('Is renew/order:', renewSubscription)
+        console.log('Entitled:', entitled, '(status:', payload.status, ')')
+
         const idempotencyKey = grantKey(polarSubscriptionId, currentPeriodEnd, incoming.id)
 
         if (entitled && (createSubscription || renewSubscription || true)) {
+            console.log('Attempting to grant credits...')
             const grant = await step.run('grant-credits', async () => {
                 try {
                     const result = await fetchMutation(api.subscription.grantCredits, {
@@ -134,12 +160,15 @@ export const handlePolarEvent = inngest.createFunction(
                         amount: 10,
                         reason: createSubscription ? 'initial-grant' : 'period-grant'
                     })
+                    console.log('Grant result:', result)
                     return result
                 } catch (error) {
+                    console.error('Error granting credits:', error)
                     throw error
                 }
             })
             if (grant.ok && !('skipped' in grant && grant.skipped)) {
+                console.log('✅ Credits granted successfully!', grant)
                 await step.sendEvent('credits-granted', {
                     name: 'billing/credits.granted',
                     id: `credits-granted:${polarSubscriptionId}:${currentPeriodEnd ?? 'first'}`,
@@ -151,10 +180,10 @@ export const handlePolarEvent = inngest.createFunction(
                     }
                 })
             } else {
-                console.log('Credits not granted')
+                console.log('⚠️ Credits not granted, reason:', grant)
             }
         } else {
-            console.log('Not entitled for credits grant')
+            console.log('❌ Not entitled for credits grant - entitled:', entitled, 'create:', createSubscription, 'renew:', renewSubscription)
         }
 
         await step.sendEvent('sub-synced', {

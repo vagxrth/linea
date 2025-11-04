@@ -11,6 +11,13 @@ export const getCurrentUser = query({
     }
 })
 
+export const getCurrentUserById = query({
+    args: { userId: v.id('users') },
+    handler: async (ctx, { userId }) => {
+        return await ctx.db.get(userId);
+    }
+})
+
 export const getUserIdByEmail = query({
     args: { email: v.string() },
     handler: async (ctx, { email }) => {
