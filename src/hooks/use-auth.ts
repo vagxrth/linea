@@ -83,7 +83,7 @@ export const useAuth = () => {
         try {
             await signOut();
             // Use full page navigation to ensure server-side profile cleanup
-            window.location.href = '/auth/signin';
+            window.location.href = '/';
         } catch (error) {
             console.error(error);
         }

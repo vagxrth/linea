@@ -114,7 +114,7 @@ const Navbar = () => {
                 {hasCanvas && <Autosave />}
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <button className='cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/20 rounded-full'>
+                        <button className='cursor-pointer focus:outline-none rounded-full'>
                             <Avatar className='size-12 ml-2'>
                                 <AvatarImage src={me.image || ''}/>
                                 <AvatarFallback>
