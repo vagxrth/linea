@@ -23,8 +23,21 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://linea.vagarth.in'),
   title: "Linea",
   description: "Think. Sketch. Design",
+  openGraph: {
+    url: 'https://linea.vagarth.in',
+    siteName: 'Linea',
+    locale: 'en_US',
+    type: 'website',
+    images: [{
+      url: '/images/open-graph.png',
+      width: 1200,
+      height: 630,
+      alt: 'Linea'
+    }],
+  },
 };
 
 export default async function RootLayout({
