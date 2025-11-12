@@ -1,6 +1,6 @@
 import { FrameShape } from "@/redux/slice/shapes";
 import { LiquidGlassButton } from "@/components/liquid-glass";
-import { Brush, Palette } from "lucide-react";
+import { Brush, Download, Palette } from "lucide-react";
 import { useFrame } from "@/hooks/use-canvas";
 
 export const Frame = ({
@@ -10,7 +10,7 @@ export const Frame = ({
   shape: FrameShape;
   toggleInspiration: () => void;
 }) => {
-  const { isGenerating, handleGenerateDesign } = useFrame(shape);
+  const { isGenerating, handleGenerateDesign, handleDownload } = useFrame(shape);
 
   return (
     <>
@@ -37,7 +37,7 @@ export const Frame = ({
       <div
         className="absolute pointer-events-auto flex gap-4"
         style={{
-          left: shape.x + shape.w - 235, // Position at top right, accounting for button width
+          left: shape.x + shape.w - 340, // Position at top right, accounting for button width (3 buttons now)
           top: shape.y - 36, // Position above the frame with some spacing
           zIndex: 1000, // Ensure button is on top
         }}
@@ -51,6 +51,14 @@ export const Frame = ({
           style={{ pointerEvents: "auto" }}>
           <Palette size={12} />
           Inspiration
+        </LiquidGlassButton>
+        <LiquidGlassButton
+          size="sm"
+          variant="subtle"
+          onClick={handleDownload}
+          style={{ pointerEvents: "auto" }}>
+          <Download size={12} />
+          Download
         </LiquidGlassButton>
         <LiquidGlassButton
           size="sm"
