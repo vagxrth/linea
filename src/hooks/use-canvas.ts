@@ -980,11 +980,19 @@ export const useFrame = (shape: FrameShape) => {
         Object.values(state.shapes.shapes?.entities || {}).filter((shape): shape is Shape => shape !== undefined)
     )
 
+    const handleDownload = async () => {
+        try {
+            const snapshot = await generateFrameSnapshot(shape, allShapes)
+            downloadBlob(snapshot, `frame-${shape.frameNumber}-snapshot.png`)
+        } catch (error) {
+            toast.error(`Failed to download frame: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        }
+    }
+
     const handleGenerateDesign = async () => {
         try {
             setIsGenerating(true)
             const snapshot = await generateFrameSnapshot(shape, allShapes)
-            downloadBlob(snapshot, `frame-${shape.frameNumber}-snapshot.png`)
 
             const formData = new FormData()
             formData.append('image', snapshot, `frame-${shape.frameNumber}.png`)
@@ -1076,6 +1084,7 @@ export const useFrame = (shape: FrameShape) => {
     return {
         isGenerating,
         handleGenerateDesign,
+        handleDownload,
     }
 }
 
