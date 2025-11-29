@@ -43,7 +43,7 @@ const page = async ({ searchParams }: CanvasPageProps) => {
   }
 
   return (
-    <ProjectProvider initialProject={project}>
+    <ProjectProvider key={projectId} initialProject={project}>
       <InfiniteCanvas />
     </ProjectProvider>
   )
