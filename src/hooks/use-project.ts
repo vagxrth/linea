@@ -39,11 +39,18 @@ const generateGradientThumbnail = () => {
     return `data:image/svg+xml;base64,${btoa(svgContent)}`;
 };
 
+// Initial empty state for new projects (matches Redux initial state)
+const EMPTY_SKETCHES_DATA = {
+    shapes: { ids: [], entities: {} },
+    tool: "select" as const,
+    selected: {},
+    frameCounter: 0,
+}
+
 export const useProjectCreation = () => {
     const dispatch = useAppDispatch()
     const user = useAppSelector((state) => state.profile)
     const projectState = useAppSelector((state) => state.projects)
-    const shapesState = useAppSelector((state) => state.shapes)
 
     const createProject = async (name?: string) => {
         if (!user?.id) {
@@ -56,12 +63,7 @@ export const useProjectCreation = () => {
             const result = await fetchMutation(api.projects.createProject, {
                 userId: user.id as Id<'users'>,
                 name: name || undefined,
-                sketchesData: {
-                    shapes: shapesState.shapes,
-                    tool: shapesState.tool,
-                    selected: shapesState.selected,
-                    frameCounter: shapesState.frameCounter,
-                },
+                sketchesData: EMPTY_SKETCHES_DATA,
                 thumbnail,
             })
 
