@@ -475,9 +475,9 @@ export const useCanvas = () => {
         if (draftShapeRef.current) {
             draftShapeRef.current.current = world
             requestRender()
-        } else if (currentTool === 'freedraw') {
-            freeDrawPointRef.current.push(world)
-        }
+    } else if (currentTool === 'freedraw' && drawingRef.current) {
+        freeDrawPointRef.current.push(world)
+    }
     }
 
     const finalizeDrawing = (): void => {
