@@ -45,6 +45,8 @@ const EMPTY_SKETCHES_DATA = {
     tool: "select" as const,
     selected: {},
     frameCounter: 0,
+    past: [],
+    future: [],
 }
 
 export const useProjectCreation = () => {

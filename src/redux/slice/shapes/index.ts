@@ -4,6 +4,7 @@ import {
     nanoid,
     PayloadAction,
     EntityState,
+    current,
 } from "@reduxjs/toolkit";
 import type { Point } from "../viewport";
 
@@ -17,6 +18,9 @@ export type Tool =
     | "line"
     | "text"
     | "eraser";
+
+// History limit to cap memory growth
+const HISTORY_LIMIT = 100;
 
 export interface BaseShape {
     id: string;
@@ -107,11 +111,21 @@ const shapesAdapter = createEntityAdapter<Shape, string>({
 
 type SelectionMap = Record<string, true>;
 
-interface ShapesState {
+// A snapshot of the undoable portion of ShapesState
+export interface HistoryEntry {
+    shapes: EntityState<Shape, string>;
+    selected: SelectionMap;
+    frameCounter: number;
+}
+
+export interface ShapesState {
     tool: Tool;
     shapes: EntityState<Shape, string>;
     selected: SelectionMap;
     frameCounter: number;
+    // Undo/redo history stacks
+    past: HistoryEntry[];
+    future: HistoryEntry[];
 }
 
 const initialState: ShapesState = {
@@ -119,6 +133,27 @@ const initialState: ShapesState = {
     shapes: shapesAdapter.getInitialState(),
     selected: {},
     frameCounter: 0,
+    past: [],
+    future: [],
+};
+
+/**
+ * Snapshot the current undoable state into `past`, clear `future`, and trim to HISTORY_LIMIT.
+ * Call this at the START of any reducer that mutates shapes/selection/frameCounter.
+ */
+const pushHistory = (state: ShapesState): void => {
+    const snapshot: HistoryEntry = {
+        shapes: current(state.shapes),
+        selected: { ...state.selected },
+        frameCounter: state.frameCounter,
+    };
+    state.past.push(snapshot);
+    // Trim oldest entries if we exceed the limit
+    if (state.past.length > HISTORY_LIMIT) {
+        state.past = state.past.slice(state.past.length - HISTORY_LIMIT);
+    }
+    // Any new mutation clears the redo stack
+    state.future = [];
 };
 
 const DEFAULTS = { stroke: "#ffff", strokeWidth: 2 as const };
@@ -317,6 +352,7 @@ const shapesSlice = createSlice({
                 Omit<Parameters<typeof makeFrame>[0], "frameNumber">
             >
         ) {
+            pushHistory(state);
             state.frameCounter += 1;
             const frameWithNumber = {
                 ...action.payload,
@@ -325,12 +361,14 @@ const shapesSlice = createSlice({
             shapesAdapter.addOne(state.shapes, makeFrame(frameWithNumber));
         },
         addRect(state, action: PayloadAction<Parameters<typeof makeRect>[0]>) {
+            pushHistory(state);
             shapesAdapter.addOne(state.shapes, makeRect(action.payload));
         },
         addEllipse(
             state,
             action: PayloadAction<Parameters<typeof makeEllipse>[0]>
         ) {
+            pushHistory(state);
             shapesAdapter.addOne(state.shapes, makeEllipse(action.payload));
         },
         addFreeDrawShape(
@@ -339,33 +377,42 @@ const shapesSlice = createSlice({
         ) {
             const { points } = action.payload;
             if (!points || points.length === 0) return;
+            pushHistory(state);
             shapesAdapter.addOne(state.shapes, makeFree(action.payload));
         },
         addArrow(state, action: PayloadAction<Parameters<typeof makeArrow>[0]>) {
+            pushHistory(state);
             shapesAdapter.addOne(state.shapes, makeArrow(action.payload));
         },
         addLine(state, action: PayloadAction<Parameters<typeof makeLine>[0]>) {
+            pushHistory(state);
             shapesAdapter.addOne(state.shapes, makeLine(action.payload));
         },
         addText(state, action: PayloadAction<Parameters<typeof makeText>[0]>) {
+            pushHistory(state);
             shapesAdapter.addOne(state.shapes, makeText(action.payload));
         },
         addGeneratedUI(
             state,
             action: PayloadAction<Parameters<typeof makeGeneratedUI>[0]>
         ) {
+            pushHistory(state);
             shapesAdapter.addOne(state.shapes, makeGeneratedUI(action.payload));
         },
 
         updateShape(
             state,
-            action: PayloadAction<{ id: string; patch: Partial<Shape> }>
+            action: PayloadAction<{ id: string; patch: Partial<Shape>; skipHistory?: boolean }>
         ) {
-            const { id, patch } = action.payload;
+            const { id, patch, skipHistory } = action.payload;
+            if (!skipHistory) {
+                pushHistory(state);
+            }
             shapesAdapter.updateOne(state.shapes, { id, changes: patch });
         },
 
         removeShape(state, action: PayloadAction<string>) {
+            pushHistory(state);
             const id = action.payload;
             const shape = state.shapes.entities[id];
             if (shape?.type === "frame") {
@@ -379,6 +426,9 @@ const shapesSlice = createSlice({
             shapesAdapter.removeAll(state.shapes);
             state.selected = {};
             state.frameCounter = 0;
+            // Clear history when clearing all shapes (project switch)
+            state.past = [];
+            state.future = [];
         },
 
         selectShape(state, action: PayloadAction<string>) {
@@ -396,9 +446,17 @@ const shapesSlice = createSlice({
         },
         deleteSelected(state) {
             const ids = Object.keys(state.selected);
-            if (ids.length) shapesAdapter.removeMany(state.shapes, ids);
+            if (ids.length === 0) return;
+            pushHistory(state);
+            shapesAdapter.removeMany(state.shapes, ids);
             state.selected = {};
         },
+
+        // Explicitly record history snapshot (call at gesture start before drag/resize)
+        recordHistory(state) {
+            pushHistory(state);
+        },
+
         loadProject(
             state,
             action: PayloadAction<{
@@ -412,6 +470,41 @@ const shapesSlice = createSlice({
             state.tool = action.payload.tool;
             state.selected = action.payload.selected;
             state.frameCounter = action.payload.frameCounter;
+            // Clear history when loading a new project
+            state.past = [];
+            state.future = [];
+        },
+
+        // Undo: pop from past, push current to future, restore from popped entry
+        undo(state) {
+            if (state.past.length === 0) return;
+            const previous = state.past.pop()!;
+            // Push current state to future
+            state.future.push({
+                shapes: current(state.shapes),
+                selected: { ...state.selected },
+                frameCounter: state.frameCounter,
+            });
+            // Restore from previous
+            state.shapes = previous.shapes;
+            state.selected = previous.selected;
+            state.frameCounter = previous.frameCounter;
+        },
+
+        // Redo: pop from future, push current to past, restore from popped entry
+        redo(state) {
+            if (state.future.length === 0) return;
+            const next = state.future.pop()!;
+            // Push current state to past
+            state.past.push({
+                shapes: current(state.shapes),
+                selected: { ...state.selected },
+                frameCounter: state.frameCounter,
+            });
+            // Restore from next
+            state.shapes = next.shapes;
+            state.selected = next.selected;
+            state.frameCounter = next.frameCounter;
         },
     },
 });
@@ -434,7 +527,10 @@ export const {
     clearSelection,
     selectAll,
     deleteSelected,
+    recordHistory,
     loadProject,
+    undo,
+    redo,
 } = shapesSlice.actions;
 
 export default shapesSlice.reducer;

@@ -1,7 +1,7 @@
 'use client'
 
 import { useGenerateWorkflowMutation } from "@/redux/api/generation"
-import { addArrow, addEllipse, addFrame, addFreeDrawShape, addGeneratedUI, addLine, addRect, addText, clearSelection, FrameShape, removeShape, selectShape, setTool, Shape, Tool, updateShape } from "@/redux/slice/shapes"
+import { addArrow, addEllipse, addFrame, addFreeDrawShape, addGeneratedUI, addLine, addRect, addText, clearSelection, FrameShape, removeShape, selectShape, setTool, Shape, Tool, updateShape, undo, redo, recordHistory } from "@/redux/slice/shapes"
 import { handToolDisable, handToolEnable, panEnd, panMove, panStart, Point, screenToWorld, wheelPan, wheelZoom } from "@/redux/slice/viewport"
 import { AppDispatch, useAppDispatch, useAppSelector } from "@/redux/store"
 import { nanoid } from "@reduxjs/toolkit"
@@ -277,6 +277,9 @@ export const useCanvas = () => {
                         movingRef.current = true
                         moveStartRef.current = world
 
+                        // Record history once at drag start (not during movement)
+                        dispatch(recordHistory())
+
                         initialShapePositionRef.current = {}
                         Object.keys(selectedShapes).forEach((id) => {
                             const shape = entityState.entities[id]
@@ -429,7 +432,8 @@ export const useCanvas = () => {
                                     patch: {
                                         x: initialPostion.x + deltaX,
                                         y: initialPostion.y + deltaY,
-                                    }
+                                    },
+                                    skipHistory: true,
                                 })
                             )
                         }
@@ -445,7 +449,8 @@ export const useCanvas = () => {
                                     id,
                                     patch: {
                                         points: newPoints,
-                                    }
+                                    },
+                                    skipHistory: true,
                                 })
                             )
                         }
@@ -464,7 +469,8 @@ export const useCanvas = () => {
                                         startY: initialPostion.startY + deltaY,
                                         endX: initialPostion.endX + deltaX,
                                         endY: initialPostion.endY + deltaY,
-                                    }
+                                    },
+                                    skipHistory: true,
                                 })
                             )
                         }
@@ -558,10 +564,30 @@ export const useCanvas = () => {
     }
 
     const onKeyDown = (e: KeyboardEvent): void => {
+        // Skip keyboard shortcuts when user is typing in an input or textarea
+        const activeElement = document.activeElement
+        const isTyping = activeElement && (
+            activeElement.tagName === 'INPUT' ||
+            activeElement.tagName === 'TEXTAREA' ||
+            (activeElement as HTMLElement).isContentEditable
+        )
+
         if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !e.repeat) {
             e.preventDefault()
             spacePress.current = true
             dispatch(handToolEnable());
+        }
+
+        // Undo: Cmd+Z
+        if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey && !isTyping) {
+            e.preventDefault()
+            dispatch(undo())
+        }
+
+        // Redo: Cmd+Shift+Z
+        if ((e.metaKey || e.ctrlKey) && ((e.key === 'z' && e.shiftKey) || e.key === 'y') && !isTyping) {
+            e.preventDefault()
+            dispatch(redo())
         }
     }
 
@@ -591,6 +617,8 @@ export const useCanvas = () => {
             const { shapeId, corner, bounds } = e.detail
             resizingRef.current = true
             resizingDataRef.current = { shapeId, corner, initialBounds: bounds, startPoint: { x: e.detail.clientX || 0, y: e.detail.clientY || 0 } }
+            // Record history once at resize start (not during movement)
+            dispatch(recordHistory())
         }
 
         const handleResizeMove = (e: CustomEvent) => {
@@ -643,7 +671,7 @@ export const useCanvas = () => {
                 shape.type === 'rect' ||
                 shape.type === 'ellipse'
             ) {
-                dispatch(updateShape({ id: shapeId, patch: { x: newBounds.x, y: newBounds.y, w: newBounds.w, h: newBounds.h } }))
+                dispatch(updateShape({ id: shapeId, patch: { x: newBounds.x, y: newBounds.y, w: newBounds.w, h: newBounds.h }, skipHistory: true }))
             } else if (shape.type === 'freedraw') {
                 const xs = shape.points.map((p: { x: number; y: number }) => p.x)
                 const ys = shape.points.map((p: { x: number; y: number }) => p.y)
@@ -669,7 +697,7 @@ export const useCanvas = () => {
                     y: newActualY + (point.y - actualMinY) * scaleY,
                 }))
 
-                dispatch(updateShape({ id: shapeId, patch: { points: scaledPoints } }))
+                dispatch(updateShape({ id: shapeId, patch: { points: scaledPoints }, skipHistory: true }))
             } else if (shape.type === 'arrow' || shape.type === 'line') {
                 const actualMinX = Math.min(shape.startX, shape.endX)
                 const actualMaxX = Math.max(shape.startX, shape.endX)
@@ -706,7 +734,7 @@ export const useCanvas = () => {
                     newEndY = newActualY + (shape.endY - actualMinY) * scaleY
                 }
 
-                dispatch(updateShape({ id: shapeId, patch: { startX: newStartX, startY: newStartY, endX: newEndX, endY: newEndY } }))
+                dispatch(updateShape({ id: shapeId, patch: { startX: newStartX, startY: newStartY, endX: newEndX, endY: newEndY }, skipHistory: true }))
             }
         }
 
