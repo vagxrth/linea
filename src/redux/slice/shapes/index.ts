@@ -402,10 +402,12 @@ const shapesSlice = createSlice({
 
         updateShape(
             state,
-            action: PayloadAction<{ id: string; patch: Partial<Shape> }>
+            action: PayloadAction<{ id: string; patch: Partial<Shape>; skipHistory?: boolean }>
         ) {
-            pushHistory(state);
-            const { id, patch } = action.payload;
+            const { id, patch, skipHistory } = action.payload;
+            if (!skipHistory) {
+                pushHistory(state);
+            }
             shapesAdapter.updateOne(state.shapes, { id, changes: patch });
         },
 
@@ -449,6 +451,12 @@ const shapesSlice = createSlice({
             shapesAdapter.removeMany(state.shapes, ids);
             state.selected = {};
         },
+
+        // Explicitly record history snapshot (call at gesture start before drag/resize)
+        recordHistory(state) {
+            pushHistory(state);
+        },
+
         loadProject(
             state,
             action: PayloadAction<{
@@ -519,6 +527,7 @@ export const {
     clearSelection,
     selectAll,
     deleteSelected,
+    recordHistory,
     loadProject,
     undo,
     redo,
