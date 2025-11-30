@@ -1,7 +1,7 @@
 'use client'
 
 import { useGenerateWorkflowMutation } from "@/redux/api/generation"
-import { addArrow, addEllipse, addFrame, addFreeDrawShape, addGeneratedUI, addLine, addRect, addText, clearSelection, FrameShape, removeShape, selectShape, setTool, Shape, Tool, updateShape } from "@/redux/slice/shapes"
+import { addArrow, addEllipse, addFrame, addFreeDrawShape, addGeneratedUI, addLine, addRect, addText, clearSelection, FrameShape, removeShape, selectShape, setTool, Shape, Tool, updateShape, undo, redo } from "@/redux/slice/shapes"
 import { handToolDisable, handToolEnable, panEnd, panMove, panStart, Point, screenToWorld, wheelPan, wheelZoom } from "@/redux/slice/viewport"
 import { AppDispatch, useAppDispatch, useAppSelector } from "@/redux/store"
 import { nanoid } from "@reduxjs/toolkit"
@@ -558,10 +558,30 @@ export const useCanvas = () => {
     }
 
     const onKeyDown = (e: KeyboardEvent): void => {
+        // Skip keyboard shortcuts when user is typing in an input or textarea
+        const activeElement = document.activeElement
+        const isTyping = activeElement && (
+            activeElement.tagName === 'INPUT' ||
+            activeElement.tagName === 'TEXTAREA' ||
+            (activeElement as HTMLElement).isContentEditable
+        )
+
         if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !e.repeat) {
             e.preventDefault()
             spacePress.current = true
             dispatch(handToolEnable());
+        }
+
+        // Undo: Cmd+Z
+        if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey && !isTyping) {
+            e.preventDefault()
+            dispatch(undo())
+        }
+
+        // Redo: Cmd+Shift+Z
+        if ((e.metaKey || e.ctrlKey) && ((e.key === 'z' && e.shiftKey) || e.key === 'y') && !isTyping) {
+            e.preventDefault()
+            dispatch(redo())
         }
     }
 
