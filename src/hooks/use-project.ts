@@ -98,9 +98,10 @@ export const useProjectCreation = () => {
             })
             dispatch(removeProject(projectId))
             toast.success('Project deleted successfully!')
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         } catch (error) {
-            toast.error('Failed to delete project')
+            console.error('Failed to delete project:', error)
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+            toast.error(`Failed to delete project: ${errorMessage}`)
         }
     }
 
