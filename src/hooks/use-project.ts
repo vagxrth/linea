@@ -1,6 +1,6 @@
 'use client'
 
-import { addProject, createProjectFailure, createProjectStart, createProjectSuccess } from "@/redux/slice/projects"
+import { addProject, createProjectFailure, createProjectStart, createProjectSuccess, removeProject } from "@/redux/slice/projects"
 import { useAppDispatch, useAppSelector } from "@/redux/store"
 import { fetchMutation } from "convex/nextjs";
 import { toast } from "sonner"
@@ -87,12 +87,29 @@ export const useProjectCreation = () => {
         }
     }
 
+    const deleteProject = async (projectId: string) => {
+        if (!user?.id) {
+            toast.error('Please sign in to delete project')
+            return
+        }
+        try {
+            await fetchMutation(api.projects.deleteProject, {
+                projectId: projectId as Id<'projects'>,
+            })
+            dispatch(removeProject(projectId))
+            toast.success('Project deleted successfully!')
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        } catch (error) {
+            toast.error('Failed to delete project')
+        }
+    }
+
     return {
         createProject,
+        deleteProject,
         isCreating: projectState.isCreating,
         projects: projectState.projects,
         projectsTotal: projectState.total,
         canCreate: !!user?.id,
-
     }
 }
