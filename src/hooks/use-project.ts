@@ -94,7 +94,6 @@ export const useProjectCreation = () => {
         }
         try {
             await fetchMutation(api.projects.deleteProject, {
-                userId: user.id as Id<'users'>,
                 projectId: projectId as Id<'projects'>,
             })
             dispatch(removeProject(projectId))

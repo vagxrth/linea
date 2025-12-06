@@ -169,10 +169,12 @@ export const updateProjectStyleGuide = mutation({
 
 export const deleteProject = mutation({
     args: {
-        userId: v.id('users'),
         projectId: v.id('projects'),
     },
-    handler: async (ctx, { userId, projectId }) => {
+    handler: async (ctx, { projectId }) => {
+        const userId = await getAuthUserId(ctx);
+        if (!userId) throw new Error("User not authenticated!")
+
         const project = await ctx.db.get(projectId);
         if (!project) throw new Error("Project not found")
 

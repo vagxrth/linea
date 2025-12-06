@@ -22,8 +22,6 @@ const instrumentSerif = Instrument_Serif({
 	style: ['italic', 'normal'],
 });
 
-export const dynamic = 'force-dynamic';
-
 export const metadata: Metadata = {
   metadataBase: new URL('https://linea.vagarth.in'),
   title: "Linea",
