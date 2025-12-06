@@ -481,8 +481,9 @@ function GalleryScene({
 				const worldZ = plane.z - depthRange / 2;
 
 				// Calculate scale to maintain aspect ratio
-				const aspect = texture.image
-					? texture.image.width / texture.image.height
+				const img = texture.image as { width?: number; height?: number };
+				const aspect = img?.width && img?.height
+					? img.width / img.height
 					: 1;
 				const scale: [number, number, number] =
 					aspect > 1 ? [2 * aspect, 2, 1] : [2, 2 / aspect, 1];
