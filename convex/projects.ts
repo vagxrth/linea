@@ -166,3 +166,42 @@ export const updateProjectStyleGuide = mutation({
         return { success: true, styleGuide: styleGuideData }
     }
 })
+
+export const deleteProject = mutation({
+    args: {
+        userId: v.id('users'),
+        projectId: v.id('projects'),
+    },
+    handler: async (ctx, { userId, projectId }) => {
+        const project = await ctx.db.get(projectId);
+        if (!project) throw new Error("Project not found")
+
+        if (project.userId !== userId) {
+            throw new Error("Access denied")
+        }
+
+        if (project.moodboardImages && project.moodboardImages.length > 0) {
+            for (const storageId of project.moodboardImages) {
+                try {
+                    await ctx.storage.delete(storageId);
+                } catch (error) {
+                    console.error(`Failed to delete moodboard image ${storageId}:`, error);
+                }
+            }
+        }
+
+        if (project.inspirationImages && project.inspirationImages.length > 0) {
+            for (const storageId of project.inspirationImages) {
+                try {
+                    await ctx.storage.delete(storageId);
+                } catch (error) {
+                    console.error(`Failed to delete inspiration image ${storageId}:`, error);
+                }
+            }
+        }
+
+        await ctx.db.delete(projectId);
+
+        return { success: true }
+    }
+})
