@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { Id } from "./_generated/dataModel";
 
 export const getProject = query({
     args: { projectId: v.id('projects') },
@@ -185,7 +186,7 @@ export const deleteProject = mutation({
         if (project.moodboardImages && project.moodboardImages.length > 0) {
             for (const storageId of project.moodboardImages) {
                 try {
-                    await ctx.storage.delete(storageId);
+                    await ctx.storage.delete(storageId as Id<"_storage">);
                 } catch (error) {
                     console.error(`Failed to delete moodboard image ${storageId}:`, error);
                 }
@@ -195,7 +196,7 @@ export const deleteProject = mutation({
         if (project.inspirationImages && project.inspirationImages.length > 0) {
             for (const storageId of project.inspirationImages) {
                 try {
-                    await ctx.storage.delete(storageId);
+                    await ctx.storage.delete(storageId as Id<"_storage">);
                 } catch (error) {
                     console.error(`Failed to delete inspiration image ${storageId}:`, error);
                 }
