@@ -3,6 +3,7 @@
 import { addProject, createProjectFailure, createProjectStart, createProjectSuccess, removeProject } from "@/redux/slice/projects"
 import { useAppDispatch, useAppSelector } from "@/redux/store"
 import { fetchMutation } from "convex/nextjs";
+import { useMutation } from "convex/react";
 import { toast } from "sonner"
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
@@ -53,6 +54,7 @@ export const useProjectCreation = () => {
     const dispatch = useAppDispatch()
     const user = useAppSelector((state) => state.profile)
     const projectState = useAppSelector((state) => state.projects)
+    const deleteProjectMutation = useMutation(api.projects.deleteProject)
 
     const createProject = async (name?: string) => {
         if (!user?.id) {
@@ -93,7 +95,7 @@ export const useProjectCreation = () => {
             return
         }
         try {
-            await fetchMutation(api.projects.deleteProject, {
+            await deleteProjectMutation({
                 projectId: projectId as Id<'projects'>,
             })
             dispatch(removeProject(projectId))
