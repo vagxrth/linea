@@ -208,3 +208,33 @@ export const deleteProject = mutation({
         return { success: true }
     }
 })
+
+export const renameProject = mutation({
+    args: {
+        projectId: v.id('projects'),
+        name: v.string(),
+    },
+    handler: async (ctx, { projectId, name }) => {
+        const userId = await getAuthUserId(ctx);
+        if (!userId) throw new Error("User not authenticated!")
+
+        const project = await ctx.db.get(projectId);
+        if (!project) throw new Error("Project not found")
+
+        if (project.userId !== userId) {
+            throw new Error("Access denied")
+        }
+
+        const trimmedName = name.trim();
+        if (!trimmedName) {
+            throw new Error("Project name cannot be empty")
+        }
+
+        await ctx.db.patch(projectId, {
+            name: trimmedName,
+            lastModified: Date.now(),
+        });
+
+        return { success: true, name: trimmedName }
+    }
+})
