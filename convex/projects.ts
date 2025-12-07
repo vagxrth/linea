@@ -230,11 +230,12 @@ export const renameProject = mutation({
             throw new Error("Project name cannot be empty")
         }
 
+        const lastModified = Date.now();
         await ctx.db.patch(projectId, {
             name: trimmedName,
-            lastModified: Date.now(),
+            lastModified,
         });
 
-        return { success: true, name: trimmedName }
+        return { success: true, name: trimmedName, lastModified }
     }
 })
