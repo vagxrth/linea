@@ -1,6 +1,6 @@
 'use client'
 
-import { addProject, createProjectFailure, createProjectStart, createProjectSuccess, removeProject } from "@/redux/slice/projects"
+import { addProject, createProjectFailure, createProjectStart, createProjectSuccess, removeProject, updateProject } from "@/redux/slice/projects"
 import { useAppDispatch, useAppSelector } from "@/redux/store"
 import { fetchMutation } from "convex/nextjs";
 import { useMutation } from "convex/react";
@@ -55,6 +55,7 @@ export const useProjectCreation = () => {
     const user = useAppSelector((state) => state.profile)
     const projectState = useAppSelector((state) => state.projects)
     const deleteProjectMutation = useMutation(api.projects.deleteProject)
+    const renameProjectMutation = useMutation(api.projects.renameProject)
 
     const createProject = async (name?: string) => {
         if (!user?.id) {
@@ -107,9 +108,38 @@ export const useProjectCreation = () => {
         }
     }
 
+    const renameProject = async (projectId: string, name: string) => {
+        if (!user?.id) {
+            toast.error('Please sign in to rename project')
+            return false
+        }
+        try {
+            const result = await renameProjectMutation({
+                projectId: projectId as Id<'projects'>,
+                name,
+            })
+            if (result.success) {
+                dispatch(updateProject({
+                    _id: projectId,
+                    name: result.name,
+                    lastModified: result.lastModified,
+                }))
+                toast.success('Project renamed successfully!')
+                return true
+            }
+            return false
+        } catch (error) {
+            console.error('Failed to rename project:', error)
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+            toast.error(`Failed to rename project: ${errorMessage}`)
+            return false
+        }
+    }
+
     return {
         createProject,
         deleteProject,
+        renameProject,
         isCreating: projectState.isCreating,
         projects: projectState.projects,
         projectsTotal: projectState.total,

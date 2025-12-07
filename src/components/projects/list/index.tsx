@@ -1,8 +1,8 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { useProjectCreation } from '@/hooks/use-project';
-import { Plus, MoreVertical, Trash2 } from 'lucide-react';
+import { Plus, MoreVertical, Trash2, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import { useAppSelector } from '@/redux/store';
 import Image from 'next/image';
@@ -16,8 +16,62 @@ import {
 
 const ProjectsList = () => {
 
-  const { projects, canCreate, deleteProject } = useProjectCreation();
+  const { projects, canCreate, deleteProject, renameProject } = useProjectCreation();
   const user = useAppSelector((state) => state.profile);
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editingProjectId && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editingProjectId]);
+
+  const handleStartEditing = (e: React.MouseEvent, projectId: string, currentName: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditingProjectId(projectId);
+    setEditingName(currentName);
+  };
+
+  const handleSaveRename = async () => {
+    if (isSaving) return;
+    
+    if (!editingProjectId || !editingName.trim()) {
+      setEditingProjectId(null);
+      setEditingName('');
+      return;
+    }
+    
+    setIsSaving(true);
+    try {
+      const success = await renameProject(editingProjectId, editingName.trim());
+      if (success) {
+        setEditingProjectId(null);
+        setEditingName('');
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancelEditing = () => {
+    setEditingProjectId(null);
+    setEditingName('');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSaveRename();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      handleCancelEditing();
+    }
+  };
 
   if (!canCreate) {
     return (
@@ -66,9 +120,34 @@ const ProjectsList = () => {
                     )}
                   </div>
                   <div className='space-y-1'>
-                    <h3 className='font-medium text-foreground text-sm truncate group-hover:text-primary transition-colors'>
-                      {project.name}
-                    </h3>
+                    {editingProjectId === project._id ? (
+                      <input
+                        ref={inputRef}
+                        type='text'
+                        value={editingName}
+                        onChange={(e) => setEditingName(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        onBlur={handleSaveRename}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        className='font-medium text-foreground text-sm w-full bg-transparent border border-primary/50 rounded px-1 py-0.5 focus:outline-none focus:border-primary'
+                      />
+                    ) : (
+                      <div className='flex items-center gap-1'>
+                        <h3 className='font-medium text-foreground text-sm truncate group-hover:text-primary transition-colors'>
+                          {project.name}
+                        </h3>
+                        <button
+                          onClick={(e) => handleStartEditing(e, project._id, project.name)}
+                          className='p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-white/10 transition-all focus:outline-none'
+                          title='Rename project'
+                        >
+                          <Pencil className='w-3 h-3 text-muted-foreground hover:text-foreground' />
+                        </button>
+                      </div>
+                    )}
                     <p className='text-xs text-muted-foreground'>
                       {formatDistanceToNow(new Date(project.lastModified), { addSuffix: true })}
                     </p>
