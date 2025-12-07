@@ -20,6 +20,7 @@ const ProjectsList = () => {
   const user = useAppSelector((state) => state.profile);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -37,16 +38,23 @@ const ProjectsList = () => {
   };
 
   const handleSaveRename = async () => {
+    if (isSaving) return;
+    
     if (!editingProjectId || !editingName.trim()) {
       setEditingProjectId(null);
       setEditingName('');
       return;
     }
     
-    const success = await renameProject(editingProjectId, editingName.trim());
-    if (success) {
-      setEditingProjectId(null);
-      setEditingName('');
+    setIsSaving(true);
+    try {
+      const success = await renameProject(editingProjectId, editingName.trim());
+      if (success) {
+        setEditingProjectId(null);
+        setEditingName('');
+      }
+    } finally {
+      setIsSaving(false);
     }
   };
 
