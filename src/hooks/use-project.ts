@@ -123,7 +123,7 @@ export const useProjectCreation = () => {
                     _id: projectId,
                     name: result.name,
                     lastModified: result.lastModified,
-                } as Parameters<typeof updateProject>[0]))
+                }))
                 toast.success('Project renamed successfully!')
                 return true
             }
