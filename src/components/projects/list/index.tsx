@@ -43,9 +43,11 @@ const ProjectsList = () => {
       return;
     }
     
-    await renameProject(editingProjectId, editingName.trim());
-    setEditingProjectId(null);
-    setEditingName('');
+    const success = await renameProject(editingProjectId, editingName.trim());
+    if (success) {
+      setEditingProjectId(null);
+      setEditingName('');
+    }
   };
 
   const handleCancelEditing = () => {
