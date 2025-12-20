@@ -12,14 +12,16 @@ const Billing = () => {
                 </div>
                 <div className="mt-8 md:mt-20">
                     <div className="bg-card relative rounded-3xl border shadow-2xl shadow-zinc-950/5">
-                        <div className="grid items-center gap-12 divide-y p-12 md:grid-cols-2 md:divide-x md:divide-y-0">
-                            <div className="pb-12 text-center md:pb-0 md:pr-12">
-                                <h3 className="text-2xl font-semibold">Linea Premium</h3>
-                                <p className="mt-2 text-lg">Perfect for individuals and small teams</p>
-                                <span className="mb-6 mt-12 inline-block text-6xl font-bold">
-                                    <span className="text-4xl">$</span>0.69
-                                </span>
-                                <div className="flex justify-center">
+                        <div className="grid items-stretch gap-12 divide-y p-12 pb-6 md:grid-cols-2 md:divide-x md:divide-y-0">
+                            <div className="flex flex-col pb-12 text-center md:pb-0 md:pr-12">
+                                <div>
+                                    <h3 className="text-2xl font-semibold">Linea Premium</h3>
+                                    <p className="mt-2 text-lg">Perfect for individuals and small teams</p>
+                                </div>
+                                <div className="flex flex-col items-center justify-center flex-1">
+                                    <span className="mb-6 inline-block text-6xl font-bold">
+                                        <span className="text-4xl">$</span>0.69
+                                    </span>
                                     <Subscribe />
                                 </div>
                             </div>
@@ -56,11 +58,11 @@ const Billing = () => {
                                         </li>
                                     ))}
                                 </ul>
-                                <p className="text-muted-foreground mt-6 text-sm">
-                                    One-time payment. No auto-renewals. No lock-in.
-                                </p>
                             </div>
                         </div>
+                        <p className="text-muted-foreground text-center text-sm px-12 pb-8">
+                            One-time payment. No auto-renewals. No lock-in.
+                        </p>
                     </div>
                 </div>
             </div>
