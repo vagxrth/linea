@@ -22,31 +22,42 @@ const Billing = () => {
                                 <div className="flex justify-center">
                                     <Subscribe />
                                 </div>
-                                <p className="text-muted-foreground mt-12 text-sm">
-                                    Includes: Unlimited projects, 10 monthly credits, AI-powered design tools, and all features
-                                </p>
                             </div>
                             <div className="relative">
                                 <ul
                                     role="list"
-                                    className="space-y-4">
+                                    className="space-y-5">
                                     {[
-                                        'AI-powered Design Creation - Transform sketches into designs',
-                                        'Export your designs in high-quality formats',
-                                        'Advanced AI Tools for complex design operations',
-                                        '10 Monthly Credits for AI-powered design creation',
-                                        'Simple Credit System - Each AI operation consumes 1 credit'
+                                        {
+                                            title: 'AI-powered Design Creation',
+                                            description: 'Turn sketches and wireframes into polished, production-ready designs using AI.'
+                                        },
+                                        {
+                                            title: 'High-Quality Exports',
+                                            description: 'Export designs in high-resolution formats ready for sharing, handoff, or production.'
+                                        },
+                                        {
+                                            title: 'Simple Credit System',
+                                            description: 'Each AI design action consumes 1 credit. No hidden limits.'
+                                        },
+                                        {
+                                            title: 'Pay as you go',
+                                            description: 'Credits never expire. Buy only when you need them.'
+                                        }
                                     ].map((item, index) => (
                                         <li
                                             key={index}
                                             className="flex items-start gap-3">
-                                            <Check className="size-5 shrink-0 mt-0.5" />
-                                            <span>{item}</span>
+                                            <Check className="size-5 shrink-0 mt-0.5 text-green-500" />
+                                            <div>
+                                                <span className="font-medium">{item.title}</span>
+                                                <p className="text-muted-foreground text-sm mt-0.5">{item.description}</p>
+                                            </div>
                                         </li>
                                     ))}
                                 </ul>
                                 <p className="text-muted-foreground mt-6 text-sm">
-                                    Get unlimited projects and access to all premium features. Cancel anytime with no hassle.
+                                    One-time payment. No auto-renewals. No lock-in.
                                 </p>
                             </div>
                         </div>
