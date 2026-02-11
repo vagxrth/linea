@@ -20,7 +20,7 @@ const Billing = () => {
                                 </div>
                                 <div className="flex flex-col items-center justify-center flex-1">
                                     <span className="mb-6 inline-block text-6xl font-bold">
-                                        <span className="text-4xl">$</span>0.69
+                                        <span className="text-4xl">$</span>10<span className="text-lg font-normal text-muted-foreground">/month</span>
                                     </span>
                                     <Subscribe />
                                 </div>
@@ -39,12 +39,12 @@ const Billing = () => {
                                             description: 'Export designs in high-resolution formats ready for sharing, handoff, or production.'
                                         },
                                         {
-                                            title: 'Simple Credit System',
-                                            description: 'Each AI design action consumes 1 credit. No hidden limits.'
+                                            title: '50 Credits per Month',
+                                            description: 'Each AI design action consumes 1 credit. Credits refresh every billing cycle.'
                                         },
                                         {
-                                            title: 'Pay as you go',
-                                            description: 'Credits never expire. Buy only when you need them.'
+                                            title: 'Monthly Renewal',
+                                            description: 'Credits auto-refresh each month. No manual top-ups needed.'
                                         }
                                     ].map((item, index) => (
                                         <li
@@ -61,7 +61,7 @@ const Billing = () => {
                             </div>
                         </div>
                         <p className="text-muted-foreground text-center text-sm px-12 pb-8">
-                            One-time payment. No auto-renewals. No lock-in.
+                            Billed monthly. Cancel anytime.
                         </p>
                     </div>
                 </div>
