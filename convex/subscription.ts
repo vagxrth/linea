@@ -17,7 +17,7 @@ export const hasEntitlement = query({
             // For subscriptions with period end: check if not expired
             // For one-time purchases (no period end): check if status is entitled
             const periodOk = sub.currentPeriodEnd == null || sub.currentPeriodEnd > now
-            const entitled = status === 'active' || status === 'trialing' || status === 'trailing' || status === 'paid'
+            const entitled = ENTITLED.has(status)
             if (entitled && periodOk) return true;
         }
         return false;
