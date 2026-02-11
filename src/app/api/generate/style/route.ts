@@ -106,6 +106,15 @@ export async function POST(request: NextRequest) {
         
         Return ONLY the JSON object matching the exact schema structure above.`;
 
+        const { ok, balance } = await ConsumeCreditsQuery({ amount: 1 })
+
+        if (!ok) {
+            return NextResponse.json(
+                { error: 'Failed to consume credits' },
+                { status: 400 }
+            )
+        }
+
         const result = await generateObject({
             model: google('gemini-2.5-flash'),
             schema: StyleGuideSchema,
@@ -126,22 +135,13 @@ export async function POST(request: NextRequest) {
                 }
             ]
         })
-        
+
         // Validate the structure
         if (!result.object.colorSections || result.object.colorSections.length !== 5) {
             throw new Error('Invalid color sections structure')
         }
         if (!result.object.typographySections || result.object.typographySections.length !== 3) {
             throw new Error('Invalid typography sections structure')
-        }
-
-        const { ok, balance } = await ConsumeCreditsQuery({ amount: 1 })
-
-        if (!ok) {
-            return NextResponse.json(
-                { error: 'Failed to generate style guide' },
-                { status: 500 }
-            )
         }
 
         await fetchMutation(

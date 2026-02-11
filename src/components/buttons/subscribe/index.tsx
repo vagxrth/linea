@@ -31,7 +31,7 @@ const Subscribe = () => {
                     Redirecting...
                 </>
             ) : (
-                'Buy now'
+                'Subscribe'
             )}
         </Button>
     )

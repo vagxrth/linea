@@ -1,9 +1,9 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
-const DEFAULT_GRANT = 10
-const DEFAULT_ROLLOVER_LIMIT = 100
-const ENTITLED = new Set(['active', 'trailing', 'paid'])
+const DEFAULT_GRANT = 50
+const DEFAULT_ROLLOVER_LIMIT = 50
+const ENTITLED = new Set(['active', 'trialing', 'trailing', 'paid'])
 
 export const hasEntitlement = query({
     args: { userId: v.id('users') },
@@ -17,7 +17,7 @@ export const hasEntitlement = query({
             // For subscriptions with period end: check if not expired
             // For one-time purchases (no period end): check if status is entitled
             const periodOk = sub.currentPeriodEnd == null || sub.currentPeriodEnd > now
-            const entitled = status === 'active' || status === 'trailing' || status === 'paid'
+            const entitled = status === 'active' || status === 'trialing' || status === 'trailing' || status === 'paid'
             if (entitled && periodOk) return true;
         }
         return false;
@@ -195,7 +195,7 @@ export const grantCredits = mutation({
 
         if (grant <= 0) return { ok: true, skipped: true, reason: 'zero-grant' }
 
-        const next = Math.min(sub.creditsBalance + grant, sub.creditsRolloverLimit ?? DEFAULT_ROLLOVER_LIMIT)
+        const next = grant
 
         await ctx.db.patch(subscriptionId, {
             creditsBalance: next,
@@ -220,7 +220,10 @@ export const getCreditsBalance = query({
     args: { userId: v.id('users') },
     handler: async (ctx, { userId }) => {
         const sub = await ctx.db.query('subscriptions').withIndex('by_userId', (q) => q.eq('userId', userId)).first();
-        return sub?.creditsBalance ?? 0;
+        if (!sub) return 0;
+        const normalizedStatus = String(sub.status || '').toLowerCase().trim();
+        if (!ENTITLED.has(normalizedStatus)) return 0;
+        return sub.creditsBalance ?? 0;
     }
 })
 

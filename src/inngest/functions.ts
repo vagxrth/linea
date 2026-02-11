@@ -95,8 +95,8 @@ export const handlePolarEvent = inngest.createFunction(
             cancelledAt: toMs(subscription?.cancelled_at),
             seats: subscription?.seats ?? undefined,
             metadata: data,
-            creditsGrantPerPeriod: 10,
-            creditsRolloverLimit: 100
+            creditsGrantPerPeriod: 50,
+            creditsRolloverLimit: 50
         }
 
         const subscriptionId = await step.run('upsert-subscription', async () => {
@@ -139,7 +139,7 @@ export const handlePolarEvent = inngest.createFunction(
                     const result = await fetchMutation(api.subscription.grantCredits, {
                         subscriptionId,
                         idempotencyKey,
-                        amount: 10,
+                        amount: 50,
                         reason: createSubscription ? 'initial-grant' : 'period-grant'
                     })
                     return result
