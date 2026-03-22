@@ -93,7 +93,7 @@ linea/
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/vagarth/linea.git
+git clone https://github.com/vagxrth/linea.git
 cd linea
 ```
 
