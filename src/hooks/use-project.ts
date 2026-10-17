@@ -2,7 +2,6 @@
 
 import { addProject, createProjectFailure, createProjectStart, createProjectSuccess, removeProject, updateProject } from "@/redux/slice/projects"
 import { useAppDispatch, useAppSelector } from "@/redux/store"
-import { fetchMutation } from "convex/nextjs";
 import { useMutation } from "convex/react";
 import { toast } from "sonner"
 import { api } from "../../convex/_generated/api";
@@ -40,20 +39,17 @@ const generateGradientThumbnail = () => {
     return `data:image/svg+xml;base64,${btoa(svgContent)}`;
 };
 
-// Initial empty state for new projects (matches Redux initial state)
+// Initial empty document for new projects (the persisted part of the Redux shapes state)
 const EMPTY_SKETCHES_DATA = {
     shapes: { ids: [], entities: {} },
-    tool: "select" as const,
-    selected: {},
     frameCounter: 0,
-    past: [],
-    future: [],
 }
 
 export const useProjectCreation = () => {
     const dispatch = useAppDispatch()
     const user = useAppSelector((state) => state.profile)
     const projectState = useAppSelector((state) => state.projects)
+    const createProjectMutation = useMutation(api.projects.createProject)
     const deleteProjectMutation = useMutation(api.projects.deleteProject)
     const renameProjectMutation = useMutation(api.projects.renameProject)
 
@@ -65,8 +61,7 @@ export const useProjectCreation = () => {
         dispatch(createProjectStart());
         try {
             const thumbnail = generateGradientThumbnail();
-            const result = await fetchMutation(api.projects.createProject, {
-                userId: user.id as Id<'users'>,
+            const result = await createProjectMutation({
                 name: name || undefined,
                 sketchesData: EMPTY_SKETCHES_DATA,
                 thumbnail,

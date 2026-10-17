@@ -461,14 +461,15 @@ const shapesSlice = createSlice({
             state,
             action: PayloadAction<{
                 shapes: EntityState<Shape, string>;
-                tool: Tool;
-                selected: SelectionMap;
+                // Only present in projects saved before autosave stopped persisting them
+                tool?: Tool;
+                selected?: SelectionMap;
                 frameCounter: number;
             }>
         ) {
             state.shapes = action.payload.shapes;
-            state.tool = action.payload.tool;
-            state.selected = action.payload.selected;
+            state.tool = action.payload.tool ?? "select";
+            state.selected = action.payload.selected ?? {};
             state.frameCounter = action.payload.frameCounter;
             // Clear history when loading a new project
             state.past = [];

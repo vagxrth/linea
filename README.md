@@ -27,7 +27,6 @@ Linea is an AI-powered design tool that transforms hand-drawn sketches and wiref
 | **Authentication** | Convex Auth (email/password + Google OAuth) |
 | **AI** | Google Gemini 2.5 Flash via Vercel AI SDK |
 | **Payments** | Polar ($10/mo subscription + credits) |
-| **Background Jobs** | Inngest (autosave, webhook processing) |
 | **Analytics** | Vercel Analytics |
 | **Deployment** | Vercel |
 
@@ -50,8 +49,7 @@ linea/
 │   │       │   ├── route.ts          # Wireframe → design
 │   │       │   ├── style/            # Moodboard → style guide
 │   │       │   └── workflow/         # Complementary page generation
-│   │       ├── billing/              # Checkout & webhook handlers
-│   │       └── inngest/              # Background job serve endpoint
+│   │       └── billing/              # Polar checkout
 │   ├── components/                   # UI components
 │   │   ├── canvas/                   # Canvas rendering
 │   │   ├── shapes/                   # Shape components
@@ -64,12 +62,12 @@ linea/
 │   │   ├── use-styles.ts             # Style guide management
 │   │   └── use-subscription.ts       # Entitlement checks
 │   ├── redux/                        # Redux store, slices, API
-│   ├── inngest/                      # Background job definitions
 │   ├── prompts/                      # AI system prompts
 │   └── middleware.ts                 # Auth & route protection
 ├── convex/                           # Convex backend
 │   ├── schema.ts                     # Database schema
 │   ├── auth.ts                       # Auth configuration
+│   ├── http.ts                       # HTTP routes (auth, Polar webhook)
 │   ├── user.ts                       # User queries
 │   ├── projects.ts                   # Project mutations/queries
 │   ├── subscription.ts               # Credits & subscription logic
@@ -86,7 +84,6 @@ linea/
 - A **Google Cloud** project with OAuth 2.0 credentials
 - A **Google AI** (Gemini) API key — [ai.google.dev](https://ai.google.dev)
 - A **Polar** account for payments — [polar.sh](https://polar.sh)
-- An **Inngest** account for background jobs — [inngest.com](https://www.inngest.com)
 
 ## Getting Started
 
@@ -130,13 +127,8 @@ GOOGLE_GENERATIVE_AI_API_KEY=<your-gemini-api-key>
 
 # Polar (Payments)
 POLAR_ACCESS_TOKEN=<your-polar-access-token>
-POLAR_WEBHOOK_SECRET=<your-polar-webhook-secret>
 POLAR_PLAN=<your-polar-plan-id>
 POLAR_ENV=sandbox
-
-# Inngest (Background Jobs)
-INNGEST_SIGNING_KEY=<your-inngest-signing-key>
-INNGEST_EVENT_KEY=<your-inngest-event-key>
 
 # App
 NEXT_PUBLIC_APP_URL=http://localhost:3000
@@ -150,15 +142,15 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) to see the app.
 
-### 6. Run Inngest (optional, for background jobs)
+### 6. Receive Polar webhooks (optional, for billing)
 
-In a separate terminal:
+Polar webhooks are handled by the Convex deployment, not the Next.js app. Set the webhook secret on Convex:
 
 ```bash
-npx inngest-cli@latest dev
+npx convex env set POLAR_WEBHOOK_SECRET <your-polar-webhook-secret>
 ```
 
-This starts the Inngest dev server which connects to your local app at `/api/inngest`.
+Then point a Polar webhook at `https://<your-deployment>.convex.site/polar/webhook` with the `subscription.*` and `order.*` events.
 
 ## Scripts
 
@@ -189,7 +181,7 @@ Linea supports two auth methods via Convex Auth:
 Routes are protected by Next.js middleware:
 - `/` and `/auth/*` — Public (redirects to dashboard if already signed in)
 - `/dashboard/*` and `/billing/*` — Protected (redirects to sign-in if not authenticated)
-- `/api/auth/*`, `/api/inngest/*`, `/api/polar/webhook` — Bypassed (no auth required)
+- `/api/auth/*` — Bypassed (no auth required)
 
 ## Billing & Credits
 
@@ -201,7 +193,7 @@ Routes are protected by Next.js middleware:
 | Rollover limit | 50 credits |
 | Payment provider | Polar |
 
-Credits are granted on subscription creation and renewal via Inngest webhook processing. Each AI operation (style guide generation, wireframe-to-design, workflow page) consumes 1 credit.
+Credits are granted on subscription creation and renewal by the Polar webhook handler in `convex/http.ts`. Each AI operation (style guide generation, wireframe-to-design, workflow page) consumes 1 credit.
 
 ## Deployment
 
@@ -213,6 +205,6 @@ Linea is designed to deploy on **Vercel**:
 4. Set up a **production Convex deployment** and update `CONVEX_DEPLOYMENT` and `NEXT_PUBLIC_CONVEX_URL`.
 5. Switch `POLAR_ENV` from `sandbox` to `production` and update Polar credentials.
 6. Configure your custom domain and update `CONVEX_SITE_URL` and `NEXT_PUBLIC_APP_URL`.
-7. Set up Polar webhook URL pointing to `https://yourdomain.com/api/billing/webhook`.
+7. Point the Polar webhook at `https://<your-prod-deployment>.convex.site/polar/webhook` and set `POLAR_WEBHOOK_SECRET` on the production Convex deployment (`npx convex env set --prod POLAR_WEBHOOK_SECRET ...`).
 8. Ensure Google OAuth redirect URIs include your production domain.
 
