@@ -4,7 +4,6 @@ import { useQuery } from 'convex/react';
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../../../../../convex/_generated/api';
-import { Id } from '../../../../../convex/_generated/dataModel';
 
 const Success = () => {
     const router = useRouter();
@@ -15,7 +14,7 @@ const Success = () => {
 
     const entitled = useQuery(
         api.subscription.hasEntitlement,
-        me && me._id ? { userId: me._id as Id<'users'> } : 'skip',
+        me ? {} : 'skip',
     );
 
     useEffect(() => {

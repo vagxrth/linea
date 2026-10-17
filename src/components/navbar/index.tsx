@@ -41,7 +41,7 @@ const Navbar = () => {
     const hasCanvas = pathname.includes('canvas');
     const hasStyleGuide = pathname.includes('style-guide');
 
-    const creditsBalance = useQuery(api.subscription.getCreditsBalance, { userId: me.id as Id<'users'> })
+    const creditsBalance = useQuery(api.subscription.getCreditsBalance, {})
 
     const project = useQuery(
         api.projects.getProject,

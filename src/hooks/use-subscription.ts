@@ -12,7 +12,7 @@ export const useSubscription = () => {
             return
         }
         try {
-            const res = await trigger(profile.id).unwrap()
+            const res = await trigger().unwrap()
             window.location.href = res.url
         } catch (error) {
             console.error(error)
