@@ -218,6 +218,18 @@ export const getCreditsBalance = query({
     }
 })
 
+// The caller's own Polar customer id, used to open Polar's customer portal
+export const getPolarCustomerId = query({
+    args: {},
+    handler: async (ctx) => {
+        const userId = await getAuthUserId(ctx);
+        if (!userId) return null;
+
+        const sub = await ctx.db.query('subscriptions').withIndex('by_userId', (q) => q.eq('userId', userId)).first();
+        return sub?.polarCustomerId || null;
+    }
+})
+
 export const consumeCredits = mutation({
     args: {
         amount: v.number(),
