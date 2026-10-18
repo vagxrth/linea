@@ -544,6 +544,17 @@ export const useCanvas = () => {
         onPointerUp(e)
     }
 
+    // Text is drawn without pointer events, so a double-click reaches the canvas; with the
+    // select tool, double-clicking a text shape asks it to start editing
+    const onDoubleClick: React.MouseEventHandler<HTMLDivElement> = (e) => {
+        if (currentTool !== 'select') return
+        const world = screenToWorld(getLocalPoint(e.nativeEvent), viewport.translate, viewport.scale)
+        const hitShape = getShapesAtPoint(world)
+        if (hitShape?.type === 'text') {
+            window.dispatchEvent(new CustomEvent('shape-text-edit', { detail: { shapeId: hitShape.id } }))
+        }
+    }
+
     const onKeyDown = (e: KeyboardEvent): void => {
         // Skip keyboard shortcuts when user is typing in an input or textarea
         const activeElement = document.activeElement
@@ -768,6 +779,7 @@ export const useCanvas = () => {
         onPointerMove,
         onPointerUp,
         onPointerCancel,
+        onDoubleClick,
 
         attachCanvasRef,
         selectTool,
