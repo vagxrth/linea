@@ -10,7 +10,7 @@ export interface Rect {
   width: number;
   height: number;
 }
-export type ViewportMode = "idle" | "panning" | "shiftPanning";
+export type ViewportMode = "idle" | "panning" | "spacePanning";
 
 interface ViewportState {
   scale: number;
@@ -168,7 +168,7 @@ const viewportSlice = createSlice({
     },
 
     panMove(state, action: PayloadAction<Point>) {
-      if (!(state.mode === "panning" || state.mode === "shiftPanning")) return;
+      if (!(state.mode === "panning" || state.mode === "spacePanning")) return;
       if (!state.panStartScreen || !state.panStartTranslate) return;
       const dx = action.payload.x - state.panStartScreen.x;
       const dy = action.payload.y - state.panStartScreen.y;
@@ -183,10 +183,10 @@ const viewportSlice = createSlice({
     },
 
     handToolEnable(state) {
-      if (state.mode === "idle") state.mode = "shiftPanning";
+      if (state.mode === "idle") state.mode = "spacePanning";
     },
     handToolDisable(state) {
-      if (state.mode === "shiftPanning") state.mode = "idle";
+      if (state.mode === "spacePanning") state.mode = "idle";
     },
     centerOnWorld(
       state,

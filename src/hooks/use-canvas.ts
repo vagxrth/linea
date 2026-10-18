@@ -257,10 +257,10 @@ export const useCanvas = () => {
         if (touchMapRef.current.size <= 1) {
             canvasRef.current?.setPointerCapture?.(e.pointerId)
             const isPanButton = e.button === 1 || e.button === 2
-            const panByShift = spacePress.current && e.button === 0
+            const panBySpace = spacePress.current && e.button === 0
 
-            if (isPanButton || panByShift) {
-                const mode = spacePress.current ? 'shiftPanning' : 'panning'
+            if (isPanButton || panBySpace) {
+                const mode = spacePress.current ? 'spacePanning' : 'panning'
                 dispatch(panStart({ screen: local, mode }))
                 return
             }
@@ -370,7 +370,7 @@ export const useCanvas = () => {
         const local = getLocalPoint(e.nativeEvent)
         const world = screenToWorld(local, viewport.translate, viewport.scale)
 
-        if (viewport.mode === 'panning' || viewport.mode === 'shiftPanning') {
+        if (viewport.mode === 'panning' || viewport.mode === 'spacePanning') {
             schedulePanMove(local)
             return
         }
@@ -522,7 +522,7 @@ export const useCanvas = () => {
     const onPointerUp: React.PointerEventHandler<HTMLDivElement> = (e) => {
         canvasRef.current?.releasePointerCapture?.(e.pointerId)
 
-        if (viewport.mode === 'panning' || viewport.mode === 'shiftPanning') {
+        if (viewport.mode === 'panning' || viewport.mode === 'spacePanning') {
             dispatch(panEnd())
         }
 
@@ -553,10 +553,13 @@ export const useCanvas = () => {
             (activeElement as HTMLElement).isContentEditable
         )
 
-        if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !e.repeat) {
+        // Holding Space pans with the left button. Shift is left free for adding shapes to the selection.
+        if (e.code === 'Space' && !isTyping) {
             e.preventDefault()
-            spacePress.current = true
-            dispatch(handToolEnable());
+            if (!e.repeat) {
+                spacePress.current = true
+                dispatch(handToolEnable());
+            }
         }
 
         // Undo: Cmd+Z
@@ -573,7 +576,7 @@ export const useCanvas = () => {
     }
 
     const onKeyUp = (e: KeyboardEvent): void => {
-        if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight')) {
+        if (e.code === 'Space' && spacePress.current) {
             e.preventDefault()
             spacePress.current = false
             dispatch(handToolDisable());
