@@ -280,8 +280,16 @@ export const useCanvas = () => {
                         // Record history once at drag start (not during movement)
                         dispatch(recordHistory())
 
+                        // `selectedShapes` is still the selection from before this click, so move
+                        // exactly what the dispatches above select
+                        const movingIds = isSelected
+                            ? Object.keys(selectedShapes)
+                            : e.shiftKey
+                                ? [...Object.keys(selectedShapes), hitShape.id]
+                                : [hitShape.id]
+
                         initialShapePositionRef.current = {}
-                        Object.keys(selectedShapes).forEach((id) => {
+                        movingIds.forEach((id) => {
                             const shape = entityState.entities[id]
                             if (shape) {
                                 if (
@@ -313,33 +321,6 @@ export const useCanvas = () => {
                                 }
                             }
                         })
-                        if (
-                            hitShape.type === 'frame' ||
-                            hitShape.type === 'rect' ||
-                            hitShape.type === 'ellipse' ||
-                            hitShape.type === 'generatedui'
-                        ) {
-                            initialShapePositionRef.current[hitShape.id] = {
-                                x: hitShape.x,
-                                y: hitShape.y,
-                            }
-                        } else if (hitShape.type === 'freedraw') {
-                            initialShapePositionRef.current[hitShape.id] = {
-                                points: [...hitShape.points],
-                            }
-                        } else if (hitShape.type === 'arrow' || hitShape.type === 'line') {
-                            initialShapePositionRef.current[hitShape.id] = {
-                                startX: hitShape.startX,
-                                startY: hitShape.startY,
-                                endX: hitShape.endX,
-                                endY: hitShape.endY,
-                            }
-                        } else if (hitShape.type === 'text') {
-                            initialShapePositionRef.current[hitShape.id] = {
-                                x: hitShape.x,
-                                y: hitShape.y,
-                            }
-                        }
                     } else {
                         if (!e.shiftKey) {
                             dispatch(clearSelection())
@@ -599,6 +580,8 @@ export const useCanvas = () => {
         }
     }
 
+    // Only the canvas may call useCanvas(): each instance registers these listeners (and the
+    // resize ones below), so a second caller makes one Cmd+Z undo twice
     useEffect(() => {
         document.addEventListener('keydown', onKeyDown)
         document.addEventListener('keyup', onKeyUp)
