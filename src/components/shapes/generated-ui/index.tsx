@@ -3,6 +3,7 @@ import { useUpdateContainer } from '@/hooks/use-styles'
 import { GeneratedUIShape } from '@/redux/slice/shapes'
 import { Download, MessageCircle, Workflow } from 'lucide-react'
 import React from 'react'
+import DesignFrame from './frame'
 
 type Props = {
     shape: GeneratedUIShape,
@@ -13,7 +14,7 @@ type Props = {
 
 const GeneratedUI = ({ shape, toggleChat, generateWorkflow, exportDesign }: Props) => {
 
-    const { containerRef, sanitize } = useUpdateContainer(shape)
+    const { containerRef, sanitize, setFrameHeight } = useUpdateContainer(shape)
 
     const handleExportDesign = () => {
         if (!shape.uiSpecData) {
@@ -76,7 +77,7 @@ const GeneratedUI = ({ shape, toggleChat, generateWorkflow, exportDesign }: Prop
                         </LiquidGlassButton>
                     </div>
                     {shape.uiSpecData ? (
-                        <div className='h-auto' dangerouslySetInnerHTML={{ __html: sanitize(shape.uiSpecData) }} />
+                        <DesignFrame html={sanitize(shape.uiSpecData)} onResize={setFrameHeight} />
                     ) : (
                         <div className='flex items-center justify-center p-8 text-white/60'>
                             <div className='animate-pulse'>

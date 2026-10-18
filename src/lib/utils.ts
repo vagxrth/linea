@@ -79,10 +79,15 @@ const captureVisualContent = async (ctx: CanvasRenderingContext2D, contentDiv: H
 
 export const exportGeneratedUI = async (element: HTMLElement, filename: string) => {
   try {
-    const rect = element.getBoundingClientRect()
+    // The design is shown in its own frame, so capture that page at its own size
+    const page = element.querySelector('iframe')?.contentDocument
+    if (!page) throw new Error('No design frame found')
+    const width = page.documentElement.clientWidth
+    const height = page.documentElement.scrollHeight
+
     const canvas = document.createElement('canvas')
-    canvas.width = rect.width
-    canvas.height = rect.height
+    canvas.width = width
+    canvas.height = height
     const ctx = canvas.getContext('2d')
 
     if (!ctx) throw new Error('Failed to get canvas context')
@@ -90,15 +95,7 @@ export const exportGeneratedUI = async (element: HTMLElement, filename: string) 
     ctx.fillStyle = '#ffffff'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-    const contentDiv = element.querySelector(
-      'div[style*="pointer-events: auto"]'
-    ) as HTMLElement
-
-    if (contentDiv) {
-      await captureVisualContent(ctx, contentDiv, rect.width, rect.height)
-    } else {
-      throw new Error('No content div found')
-    }
+    await captureVisualContent(ctx, page.body, width, height)
 
     canvas.toBlob((blob) => {
       if (blob) {
