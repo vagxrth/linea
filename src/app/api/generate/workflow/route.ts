@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
 
         let userPrompt = `You are tasked with creating a workflow page that complements the provided main page design. 
 
-            MAIN PAGE REFERENCE (for design consistency): ${currentHTML.substring(0, 2000)}...
+            MAIN PAGE REFERENCE (for design consistency): ${currentHTML}
             WORKFLOW PAGE TO GENERATE: Create a "${selectedPageType}" that would logically complement the main page shown above.
             DYNAMIC PAGE REQUIREMENTS:
                 1. Analyze the main page design and determine what type of application this appears to be
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
                 5. Ensure the page feels like it belongs to the same application - perfect visual consistency
             TECHNICAL REQUIREMENTS:
                 1. Generate clean, semantic HTML with Tailwind CSS classes matching the main page
-                2. Use similar shadcn/ui component patterns as shown in the main page
+                2. Copy the main page's <style> block and use the same .c-* color classes as the main page
                 3. Include responsive design considerations
                 4. Add proper accessibility attributes (aria-labels, semantic HTML)
                 5. Create a functional, production-ready page layout
