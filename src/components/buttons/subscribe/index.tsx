@@ -8,13 +8,13 @@ import React from 'react'
 
 const Subscribe = () => {
 
-    const { onSubscribe, isFetching } = useSubscription()
+    const { onSubscribe, onManage, isSubscribed, isFetching } = useSubscription()
 
     return (
         <Button
             type='button'
-            onClick={onSubscribe}
-            disabled={isFetching}
+            onClick={isSubscribed ? onManage : onSubscribe}
+            disabled={isFetching || isSubscribed === undefined}
             className={cn(
                 'bg-white text-black border border-white/90',
                 'rounded-full shadow-lg shadow-white/10',
@@ -30,6 +30,8 @@ const Subscribe = () => {
                     <Loader2 className='mr-2 h-4 w-4 animate-spin' />
                     Redirecting...
                 </>
+            ) : isSubscribed ? (
+                'Manage plan'
             ) : (
                 'Subscribe'
             )}

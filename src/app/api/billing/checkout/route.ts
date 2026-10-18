@@ -6,10 +6,16 @@ import { api } from "../../../../../convex/_generated/api"
 
 export async function GET() {
     // Take the buyer from the session, never the request: the webhook credits the userId in the checkout metadata
-    const user = await fetchQuery(api.user.getCurrentUser, {}, { token: await convexAuthNextjsToken() })
+    const token = await convexAuthNextjsToken()
+    const user = await fetchQuery(api.user.getCurrentUser, {}, { token })
 
     if (!user) {
         return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    // A second checkout would start a second Polar subscription that keeps billing
+    if (await fetchQuery(api.subscription.hasEntitlement, {}, { token })) {
+        return NextResponse.json({ error: 'Already subscribed' }, { status: 409 })
     }
 
     const polar = new Polar({
