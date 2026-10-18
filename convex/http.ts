@@ -126,7 +126,6 @@ const polarWebhook = httpAction(async (ctx, request) => {
         cancelAt: toMs(subscription?.cancel_at),
         cancelledAt: toMs(subscription?.cancelled_at),
         seats: subscription?.seats ?? undefined,
-        metadata: data,
         creditsGrantPerPeriod: 50,
         creditsRolloverLimit: 50,
     });
