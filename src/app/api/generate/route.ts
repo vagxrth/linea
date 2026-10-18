@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unused-vars */
 
-import { ConsumeCreditsQuery, CreditsBalanceQuery, InspirationImagesQuery, StyleGuideQuery } from "@/convex/query.config";
+import { InspirationImagesQuery, StyleGuideQuery } from "@/convex/query.config";
+import { chargedGeneration, checkCredits } from "@/lib/credits";
 import { prompts } from "@/prompts";
 import { google } from "@ai-sdk/google";
 import { streamText } from "ai";
@@ -27,30 +27,15 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        const { ok: balanceOk, balance: balanceAmount } = await CreditsBalanceQuery()
-
-        if (!balanceOk) {
+        if (!projectId) {
             return NextResponse.json(
-                { error: 'Failed to get credits balance' },
-                { status: 500 }
-            )
-        }
-
-        if (balanceAmount === 0) {
-            return NextResponse.json(
-                { error: 'No credits available' },
+                { error: 'Project ID is required' },
                 { status: 400 }
             )
         }
 
-        const { ok } = await ConsumeCreditsQuery({ amount: 1 })
-
-        if (!ok) {
-            return NextResponse.json(
-                { error: 'Failed to consume credits' },
-                { status: 400 }
-            )
-        }
+        const creditError = await checkCredits(1)
+        if (creditError) return creditError
 
         const imageBuffer = await imageFile.arrayBuffer()
         const base64Image = Buffer.from(imageBuffer).toString('base64')
@@ -112,6 +97,7 @@ export async function POST(request: NextRequest) {
                 .join(", ")}
         `;
 
+        const generation = chargedGeneration(request, 1)
         const result = streamText({
             model: google('gemini-2.5-flash'),
             messages: [
@@ -135,37 +121,11 @@ export async function POST(request: NextRequest) {
             ],
             system: systemPrompt,
             temperature: 0.7,
+            abortSignal: generation.abortSignal,
+            onError: generation.onError,
         })
 
-        const stream = new ReadableStream({
-            async start(controller) {
-                let totalChunks = 0
-                let totalLength = 0
-                let accumulatedContent = ''
-
-                try {
-                    for await (const chunk of result.textStream) {
-                        totalChunks++
-                        totalLength += chunk.length
-                        accumulatedContent += chunk
-
-                        const encoder = new TextEncoder()
-                        controller.enqueue(encoder.encode(chunk))
-                    }
-                    controller.close()
-                } catch (error) {
-                    controller.error(error)
-                }
-            }
-        })
-
-        return new Response(stream, {
-            headers: {
-                'Content-Type': 'text/html; charset=utf-8',
-                'Cache-Control': 'no-cache',
-                Connection: 'keep-alive',
-            }
-        })
+        return generation.respond(result.textStream)
 
     } catch (error) {
         return NextResponse.json(

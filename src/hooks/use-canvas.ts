@@ -988,6 +988,16 @@ const generateFrameSnapshot = async (frame: FrameShape, allShapes: Shape[]): Pro
     })
 }
 
+// FileReader avoids spreading every byte into String.fromCharCode, which exceeds the
+// argument limit on larger frames (Safari caps it at 65,536)
+const blobToBase64 = (blob: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '')
+        reader.onerror = () => reject(reader.error)
+        reader.readAsDataURL(blob)
+    })
+
 export const downloadBlob = (blob: Blob, fileName: string): void => {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -1402,9 +1412,7 @@ export const useChatWindow = (generatedUIId: string, isOpen: boolean) => {
                         const allShapesArray = Object.values(allShapes).filter(Boolean) as Shape[]
                         const snapshot = await generateFrameSnapshot(sourceFrame, allShapesArray)
 
-                        const arrayBuffer = await snapshot.arrayBuffer()
-                        const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
-                        wireframeSnapshot = base64
+                        wireframeSnapshot = await blobToBase64(snapshot)
                     } catch (error) {
                         console.error('Error generating wireframe snapshot:', error)
                     }

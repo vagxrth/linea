@@ -1,4 +1,5 @@
-import { ConsumeCreditsQuery, CreditsBalanceQuery, InspirationImagesQuery, StyleGuideQuery } from "@/convex/query.config";
+import { InspirationImagesQuery, StyleGuideQuery } from "@/convex/query.config";
+import { chargedGeneration, checkCredits } from "@/lib/credits";
 import { prompts } from "@/prompts";
 import { google } from "@ai-sdk/google";
 import { streamText } from "ai";
@@ -8,6 +9,8 @@ export async function POST(request: NextRequest) {
     try {
         const body = await request.json()
         const { userMessage, generatedUIId, currentHTML, wireframeSnapshot, projectId } = body
+        // The client sends null when the source frame is gone or the snapshot failed
+        const hasWireframe = typeof wireframeSnapshot === 'string' && wireframeSnapshot.length > 0
 
         if (!userMessage || !generatedUIId || !projectId) {
             return NextResponse.json(
@@ -16,21 +19,8 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        const { ok: balanceOk, balance: balanceAmount } = await CreditsBalanceQuery()
-        if (!balanceOk || balanceAmount === 0) {
-            return NextResponse.json(
-                { error: 'No credits available' },
-                { status: 400 }
-            )
-        }
-
-        const { ok } = await ConsumeCreditsQuery({ amount: 1 })
-        if (!ok) {
-            return NextResponse.json(
-                { error: 'Failed to consume credits' },
-                { status: 400 }
-            )
-        }
+        const creditError = await checkCredits(1)
+        if (creditError) return creditError
 
         const styleGuide = await StyleGuideQuery(projectId)
         const styleGuideData = styleGuide.styleGuide._valueJSON as unknown as {
@@ -65,7 +55,7 @@ export async function POST(request: NextRequest) {
             userPrompt += `\n\nCurrent HTML for reference:\n${currentHTML.substring(0, 1000)}...`
         }
 
-        if (wireframeSnapshot) {
+        if (hasWireframe) {
             userPrompt += `\n\nWireframe Context: I'm providing a wireframe image that shows the EXACT original design layout and structure that this UI was generated from. This wireframe represents the specific frame that was used to create the current design. Please use this as visual context to understand the intended layout, structure, and design elements when making improvements. The wireframe shows the original wireframe/mockup that the user drew or created.`
         } else {
             console.log('No wireframe context provided for redesign')
@@ -122,6 +112,7 @@ export async function POST(request: NextRequest) {
 
         userPrompt += `\n\nPlease generate a professional redesigned UI based on my request while following the style guide, maintaining professional quality, and considering the wireframe context for layout understanding.`
 
+        const generation = chargedGeneration(request, 1)
         const result = streamText({
             model: google('gemini-2.5-flash'),
             messages: [
@@ -132,10 +123,7 @@ export async function POST(request: NextRequest) {
                             type: 'text',
                             text: userPrompt,
                         },
-                        {
-                            type: 'image',
-                            image: wireframeSnapshot,
-                        },
+                        ...(hasWireframe ? [{ type: 'image' as const, image: wireframeSnapshot as string }] : []),
                         ...imageUrls.map((url) => ({
                             type: 'image' as const,
                             image: url,
@@ -145,29 +133,11 @@ export async function POST(request: NextRequest) {
             ],
             system: prompts.generatedUi.system,
             temperature: 0.7,
+            abortSignal: generation.abortSignal,
+            onError: generation.onError,
         })
 
-        const stream = new ReadableStream({
-            async start(controller) {
-                try {
-                    for await (const chunk of result.textStream) {
-                        const encoder = new TextEncoder()
-                        controller.enqueue(encoder.encode(chunk))
-                    }
-                    controller.close()
-                } catch (error) {
-                    controller.error(error)
-                }
-            }
-        })
-
-        return new Response(stream, {
-            headers: {
-                'Content-Type': 'text/html; charset=utf-8',
-                'Cache-Control': 'no-cache',
-                Connection: 'keep-alive',
-            }
-        })
+        return generation.respond(result.textStream)
 
     } catch (error) {
         console.error('Redesign failed: ', error)
