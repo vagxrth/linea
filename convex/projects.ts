@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { Id } from "./_generated/dataModel";
+import { deleteFileIfOwned } from "./storage";
 
 export const getProject = query({
     args: { projectId: v.id('projects') },
@@ -194,24 +194,11 @@ export const deleteProject = mutation({
             throw new Error("Access denied")
         }
 
-        if (project.moodboardImages && project.moodboardImages.length > 0) {
-            for (const storageId of project.moodboardImages) {
-                try {
-                    await ctx.storage.delete(storageId as Id<"_storage">);
-                } catch (error) {
-                    console.error(`Failed to delete moodboard image ${storageId}:`, error);
-                }
-            }
-        }
-
-        if (project.inspirationImages && project.inspirationImages.length > 0) {
-            for (const storageId of project.inspirationImages) {
-                try {
-                    await ctx.storage.delete(storageId as Id<"_storage">);
-                } catch (error) {
-                    console.error(`Failed to delete inspiration image ${storageId}:`, error);
-                }
-            }
+        // Before ownership was tracked a project could list another user's file, so only delete
+        // the files this user owns.
+        const storageIds = new Set([...(project.moodboardImages ?? []), ...(project.inspirationImages ?? [])])
+        for (const storageId of storageIds) {
+            await deleteFileIfOwned(ctx, storageId, userId)
         }
 
         await ctx.db.delete(projectId);

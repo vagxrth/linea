@@ -25,6 +25,15 @@ const schema = defineSchema({
     tags: v.optional(v.array(v.string())),
   }).index('by_userId', ['userId']),
 
+  // Who owns each uploaded project image. Image functions only touch the caller's files.
+  storage_owners: defineTable({
+    storageId: v.id('_storage'),
+    userId: v.id('users'),
+    // Set by the backfill when projects of different users list the same file. Nobody owns
+    // a disputed file until someone fixes the row.
+    disputed: v.optional(v.boolean()),
+  }).index('by_storageId', ['storageId']),
+
   // Project counters
   project_counters: defineTable({
     userId: v.id('users'),
