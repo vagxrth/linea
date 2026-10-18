@@ -68,6 +68,8 @@ const schema = defineSchema({
     cancelAt: v.optional(v.number()),
     cancelledAt: v.optional(v.number()),
     seats: v.optional(v.number()),
+    // No longer written. Kept so existing rows still match the schema until
+    // subscription:clearPolarMetadata has run; the field can be dropped after that.
     metadata: v.optional(v.any()),
     creditsBalance: v.number(),
     creditsGrantPerPeriod: v.number(),

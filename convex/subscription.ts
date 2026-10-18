@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 
 const DEFAULT_GRANT = 50
 const DEFAULT_ROLLOVER_LIMIT = 50
@@ -28,36 +28,6 @@ export const hasEntitlement = query({
     }
 })
 
-export const getPolarSubscriptionId = internalQuery({
-    args: { polarSubscriptionId: v.string() },
-    handler: async (ctx, { polarSubscriptionId }) => {
-        return await ctx.db
-            .query('subscriptions')
-            .withIndex('by_polarSubscriptionId', (q) => q.eq('polarSubscriptionId', polarSubscriptionId))
-            .first();
-    }
-})
-
-export const getSubscriptionByUser = internalQuery({
-    args: { userId: v.id('users') },
-    handler: async (ctx, { userId }) => {
-        return await ctx.db
-            .query('subscriptions')
-            .withIndex('by_userId', (q) => q.eq('userId', userId))
-            .first();
-    }
-})
-
-export const getAllForUser = internalQuery({
-    args: { userId: v.id('users') },
-    handler: async (ctx, { userId }) => {
-        return await ctx.db
-            .query('subscriptions')
-            .withIndex('by_userId', (q) => q.eq('userId', userId))
-            .collect();
-    }
-})
-
 export const upsertFromPolar = internalMutation({
     args: {
         userId: v.id('users'),
@@ -72,7 +42,6 @@ export const upsertFromPolar = internalMutation({
         cancelAt: v.optional(v.number()),
         cancelledAt: v.optional(v.number()),
         seats: v.optional(v.number()),
-        metadata: v.optional(v.any()),
         creditsGrantPerPeriod: v.optional(v.number()),
         creditsRolloverLimit: v.optional(v.number()),
     },
@@ -100,7 +69,6 @@ export const upsertFromPolar = internalMutation({
             cancelAt: args.cancelAt,
             cancelledAt: args.cancelledAt,
             seats: args.seats,
-            metadata: args.metadata,
             creditsGrantPerPeriod:
                 args.creditsGrantPerPeriod ??
                 existingByPolar?.creditsGrantPerPeriod ??
@@ -163,6 +131,22 @@ export const upsertFromPolar = internalMutation({
             lastGrantCursor: undefined
         })
         return newId
+    }
+})
+
+// One-off cleanup: the webhook used to save each raw Polar payload, customer details included,
+// in `metadata`. Run once after deploying: `npx convex run subscription:clearPolarMetadata`.
+export const clearPolarMetadata = internalMutation({
+    args: {},
+    handler: async (ctx) => {
+        let cleared = 0
+        for await (const sub of ctx.db.query('subscriptions')) {
+            if (sub.metadata !== undefined) {
+                await ctx.db.patch(sub._id, { metadata: undefined })
+                cleared++
+            }
+        }
+        return { cleared }
     }
 })
 
