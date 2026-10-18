@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { claimFile, deleteFileIfOwned, ownsFile } from "./storage";
 
 export const getMoodboardImages = query({
     args: { projectId: v.id('projects') },
@@ -17,6 +18,7 @@ export const getMoodboardImages = query({
         const images = await Promise.all(
             storageIds.map(async (storageId, index) => {
                 try {
+                    if (!(await ownsFile(ctx, storageId, userId))) return null
                     const url = await ctx.storage.getUrl(storageId);
                     return {
                         id: `convex-${storageId}`,
@@ -65,6 +67,10 @@ export const removeMoodboardImage = mutation({
         }
 
         const currentImages = project.moodboardImages || [];
+        if (!currentImages.includes(storageId)) {
+            throw new Error("Image not found")
+        }
+
         const updatedImages = currentImages.filter((id) => id !== storageId);
 
         await ctx.db.patch(projectId, {
@@ -72,11 +78,7 @@ export const removeMoodboardImage = mutation({
             lastModified: Date.now(),
         })
 
-        try {
-            await ctx.storage.delete(storageId);
-        } catch (error) {
-            console.error(`Failed to delete image from storage ${storageId} `, error);
-        }
+        await deleteFileIfOwned(ctx, storageId, userId)
 
         return { success: true, imageCount: updatedImages.length }
     }
@@ -100,6 +102,8 @@ export const addMoodboardImage = mutation({
         if (currentImages.length >= 5) {
             throw new Error('You can only add up to 5 images')
         }
+
+        await claimFile(ctx, storageId, userId)
 
         const updatedImages = [...currentImages, storageId]
         await ctx.db.patch(projectId, {

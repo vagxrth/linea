@@ -1,6 +1,7 @@
 import { v } from "convex/values"
 import { mutation, query } from "./_generated/server"
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { claimFile, deleteFileIfOwned, ownsFile } from "./storage";
 
 export const getInspirationImages = query({
     args: {
@@ -18,6 +19,7 @@ export const getInspirationImages = query({
         const images = await Promise.all(
             storageIds.map(async (storageId, index) => {
                 try {
+                    if (!(await ownsFile(ctx, storageId, userId))) return null
                     const url = await ctx.storage.getUrl(storageId)
                     return {
                         id: `inspiration-${storageId}`,
@@ -78,6 +80,8 @@ export const addInspirationImage = mutation({
             throw new Error("You can only add up to 6 images")
         }
 
+        await claimFile(ctx, storageId, userId)
+
         const updatedImages = [...currentImages, storageId];
 
         await ctx.db.patch(projectId, {
@@ -108,6 +112,7 @@ export const removeInspirationImage = mutation({
         if (project.userId !== userId) throw new Error("Access denied")
         
         const currentImages = project.inspirationImages || []
+        if (!currentImages.includes(storageId)) throw new Error("Image not found")
 
         const updatedImages = currentImages.filter((id) => id !== storageId)
 
@@ -116,11 +121,7 @@ export const removeInspirationImage = mutation({
             lastModified: Date.now()
         })
 
-        try {
-            await ctx.storage.delete(storageId)
-        } catch (error) {
-            console.warn(`Failed to delete image from storage ${storageId}`, error)
-        }
+        await deleteFileIfOwned(ctx, storageId, userId)
 
         return {
             success: true,
