@@ -1,34 +1,37 @@
-import { useAutosaveProjectMutation } from '@/redux/api/project'
 import { useAppSelector } from '@/redux/store'
+import { useMutation } from 'convex/react'
 import { AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
 import React, { useEffect, useRef, useState } from 'react'
+import { api } from '../../../convex/_generated/api'
+import { Id } from '../../../convex/_generated/dataModel'
 
 const Autosave = () => {
 
     const searchParams = useSearchParams()
     const projectId = searchParams.get('project')
     const user = useAppSelector((state) => state.profile)
-    const shapesState = useAppSelector((state) => state.shapes)
-    const viewportState = useAppSelector((state) => state.viewport)
+    // Only the document is saved: undo history, the active tool and the selection stay in the browser
+    const shapes = useAppSelector((state) => state.shapes.shapes)
+    const frameCounter = useAppSelector((state) => state.shapes.frameCounter)
+    const scale = useAppSelector((state) => state.viewport.scale)
+    const translate = useAppSelector((state) => state.viewport.translate)
 
-    const abortRef = useRef<AbortController | null>(null)
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const lastSavedRef = useRef<string>('')
 
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
-    const [autosaveProject, { isLoading: isSaving }] = useAutosaveProjectMutation()
+    const updateProjectSketches = useMutation(api.projects.updateProjectSketches)
 
     const isReady = Boolean(projectId && user?.id)
 
     useEffect(() => {
         if (!isReady) return
 
-        const stateString = JSON.stringify({
-            shapes: shapesState,
-            viewport: viewportState,
-        })
+        const sketchesData = { shapes, frameCounter }
+        const viewportData = { scale, translate }
+        const stateString = JSON.stringify({ sketchesData, viewportData })
 
         if (stateString === lastSavedRef.current) return
 
@@ -36,24 +39,18 @@ const Autosave = () => {
 
         debounceRef.current = setTimeout(async () => {
             lastSavedRef.current = stateString
-            if (abortRef.current) abortRef.current.abort()
-            abortRef.current = new AbortController()
             setSaveStatus('saving')
 
             try {
-                await autosaveProject({
-                    projectId: projectId as string,
-                    userId: user?.id as string,
-                    shapesData: shapesState,
-                    viewportData: {
-                        scale: viewportState.scale,
-                        translate: viewportState.translate,
-                    }
-                }).unwrap()
+                await updateProjectSketches({
+                    projectId: projectId as Id<'projects'>,
+                    sketchesData,
+                    viewportData,
+                })
                 setSaveStatus('saved')
                 setTimeout(() => setSaveStatus('idle'), 2000)
-            } catch(error) {
-                if ((error as Error)?.name === 'AbortError') return
+            } catch (error) {
+                console.error('Autosave failed:', error)
                 setSaveStatus('error')
                 setTimeout(() => setSaveStatus('idle'), 3000)
             }
@@ -62,26 +59,23 @@ const Autosave = () => {
         return () => {
             if (debounceRef.current) clearTimeout(debounceRef.current)
         }
-    }, [isReady, shapesState, viewportState, projectId, user?.id, autosaveProject])
+    }, [isReady, shapes, frameCounter, scale, translate, projectId, updateProjectSketches])
 
     useEffect(() => {
         return () => {
-            if (abortRef.current) abortRef.current.abort()
             if (debounceRef.current) clearTimeout(debounceRef.current)
         }
     }, [])
 
     if (!isReady) return null
 
-    if (isSaving) {
-        return (
-            <div className='flex items-center'>
-                <Loader2 className='w-4 h-4 animate-spin' />
-            </div>
-        )
-    }
-
     switch (saveStatus) {
+        case 'saving':
+            return (
+                <div className='flex items-center'>
+                    <Loader2 className='w-4 h-4 animate-spin' />
+                </div>
+            )
         case 'saved':
             return (
                 <div className='flex items-center'>

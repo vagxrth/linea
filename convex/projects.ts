@@ -22,12 +22,14 @@ export const getProject = query({
 
 export const createProject = mutation({
     args: {
-        userId: v.id('users'),
         name: v.optional(v.string()),
         sketchesData: v.any(),
         thumbnail: v.optional(v.string())
     },
-    handler: async (ctx, { userId, name, sketchesData, thumbnail }) => {
+    handler: async (ctx, { name, sketchesData, thumbnail }) => {
+        const userId = await getAuthUserId(ctx);
+        if (!userId) throw new Error("User not authenticated!")
+
         const projectNumber = await getNextProjectNumber(ctx, userId)
         const projectName = name || `Project ${projectNumber}`
 
@@ -77,10 +79,12 @@ const getNextProjectNumber = async (ctx: any, userId: string): Promise<number> =
 
 export const getProjects = query({
     args: {
-        userId: v.id('users'),
         limit: v.optional(v.number()),
     },
-    handler: async (ctx, { userId, limit = 20 }) => {
+    handler: async (ctx, { limit = 20 }) => {
+        const userId = await getAuthUserId(ctx);
+        if (!userId) return []
+
         const allProjects = await ctx.db
             .query('projects')
             .withIndex('by_userId', (q) => q.eq('userId', userId))
@@ -125,8 +129,15 @@ export const updateProjectSketches = mutation({
         viewportData: v.optional(v.any())
     },
     handler: async (ctx, { projectId, sketchesData, viewportData }) => {
+        const userId = await getAuthUserId(ctx);
+        if (!userId) throw new Error("User not authenticated!")
+
         const project = await ctx.db.get(projectId);
         if (!project) throw new Error("Project not found")
+
+        if (project.userId !== userId) {
+            throw new Error("Access denied")
+        }
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const updateData: any = {

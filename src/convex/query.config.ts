@@ -26,7 +26,7 @@ export const SubscriptionQuery = async () => {
 
     const entitlement = await preloadQuery(
         api.subscription.hasEntitlement,
-        { userId: profile.id as Id<'users'>},
+        {},
         { token: await convexAuthNextjsToken()}
     )
 
@@ -46,7 +46,7 @@ export const ProjectsQuery = async () => {
 
     const projects = await preloadQuery(
         api.projects.getProjects,
-        { userId: profile.id as Id<'users'>},
+        {},
         { token: await convexAuthNextjsToken() }
     )
 
@@ -100,7 +100,7 @@ export const CreditsBalanceQuery = async () => {
 
     const balance = await preloadQuery(
         api.subscription.getCreditsBalance,
-        { userId: profile.id as Id<'users'>},
+        {},
         { token: await convexAuthNextjsToken() }
     )
 
@@ -119,7 +119,6 @@ export const ConsumeCreditsQuery = async ({ amount }: { amount?: number }) => {
         api.subscription.consumeCredits,
         {
             reason: 'ai-generation',
-            userId: profile.id as Id<'users'>,
             amount: amount ?? 1,
         },
         { token: await convexAuthNextjsToken() }

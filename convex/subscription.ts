@@ -1,13 +1,17 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { getAuthUserId } from "@convex-dev/auth/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 
 const DEFAULT_GRANT = 50
 const DEFAULT_ROLLOVER_LIMIT = 50
 const ENTITLED = new Set(['active', 'trialing', 'trailing', 'paid'])
 
 export const hasEntitlement = query({
-    args: { userId: v.id('users') },
-    handler: async (ctx, { userId }) => {
+    args: {},
+    handler: async (ctx) => {
+        const userId = await getAuthUserId(ctx);
+        if (!userId) return false;
+
         const now = Date.now();
         for await (const sub of ctx.db
             .query('subscriptions')
@@ -24,7 +28,7 @@ export const hasEntitlement = query({
     }
 })
 
-export const getPolarSubscriptionId = query({
+export const getPolarSubscriptionId = internalQuery({
     args: { polarSubscriptionId: v.string() },
     handler: async (ctx, { polarSubscriptionId }) => {
         return await ctx.db
@@ -34,7 +38,7 @@ export const getPolarSubscriptionId = query({
     }
 })
 
-export const getSubscriptionByUser = query({
+export const getSubscriptionByUser = internalQuery({
     args: { userId: v.id('users') },
     handler: async (ctx, { userId }) => {
         return await ctx.db
@@ -44,7 +48,7 @@ export const getSubscriptionByUser = query({
     }
 })
 
-export const getAllForUser = query({
+export const getAllForUser = internalQuery({
     args: { userId: v.id('users') },
     handler: async (ctx, { userId }) => {
         return await ctx.db
@@ -54,7 +58,7 @@ export const getAllForUser = query({
     }
 })
 
-export const upsertFromPolar = mutation({
+export const upsertFromPolar = internalMutation({
     args: {
         userId: v.id('users'),
         polarCustomerId: v.string(),
@@ -162,7 +166,7 @@ export const upsertFromPolar = mutation({
     }
 })
 
-export const grantCredits = mutation({
+export const grantCredits = internalMutation({
     args: {
         subscriptionId: v.id('subscriptions'),
         idempotencyKey: v.string(),
@@ -217,8 +221,11 @@ export const grantCredits = mutation({
 })
 
 export const getCreditsBalance = query({
-    args: { userId: v.id('users') },
-    handler: async (ctx, { userId }) => {
+    args: {},
+    handler: async (ctx) => {
+        const userId = await getAuthUserId(ctx);
+        if (!userId) return 0;
+
         const sub = await ctx.db.query('subscriptions').withIndex('by_userId', (q) => q.eq('userId', userId)).first();
         if (!sub) return 0;
         const normalizedStatus = String(sub.status || '').toLowerCase().trim();
@@ -229,13 +236,20 @@ export const getCreditsBalance = query({
 
 export const consumeCredits = mutation({
     args: {
-        userId: v.id('users'),
         amount: v.number(),
         reason: v.optional(v.string()),
         idempotencyKey: v.optional(v.string()),
     },
-    handler: async (ctx, { userId, amount, reason, idempotencyKey }) => {
-        if (amount <= 0) return { ok: false, reason: 'invalid-amount' }
+    handler: async (ctx, { amount, reason, idempotencyKey: clientKey }) => {
+        const userId = await getAuthUserId(ctx);
+        if (!userId) return { ok: false, reason: 'not-authenticated' }
+
+        // Also rejects NaN and Infinity, which would otherwise corrupt the stored balance
+        if (!Number.isInteger(amount) || amount <= 0) return { ok: false, reason: 'invalid-amount' }
+
+        // Ledger keys are shared with the webhook's grants, so a caller-chosen key is namespaced
+        // to the caller; otherwise it could match (and block) another subscription's grant.
+        const idempotencyKey = clientKey ? `consume:${userId}:${clientKey}` : undefined
 
         if (idempotencyKey) {
             const duplicate = await ctx.db
