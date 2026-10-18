@@ -59,7 +59,7 @@ const InfiniteCanvas = () => {
             'relative w-full h-full overflow-hidden select-none z-0',
             {
                 'cursor-grabbing': viewport.mode === 'panning',
-                'cursor-grab': viewport.mode === 'shiftPanning',
+                'cursor-grab': viewport.mode === 'spacePanning',
                 'cursor-crosshair': currentTool !== 'select' && viewport.mode === 'idle',
                 'cursor-default': currentTool === 'select' && viewport.mode === 'idle',
             }
