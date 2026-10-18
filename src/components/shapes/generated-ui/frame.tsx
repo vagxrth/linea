@@ -1,3 +1,4 @@
+import { createDesignCompiler, designClasses } from '@/lib/design-css'
 import React, { useEffect, useRef, useState } from 'react'
 
 type Props = {
@@ -13,6 +14,7 @@ const BLANK_PAGE = '<!doctype html><html class="dark" style="color-scheme: dark;
 const DesignFrame = ({ html, onResize }: Props) => {
 
     const frameRef = useRef<HTMLIFrameElement>(null)
+    const compilerRef = useRef<ReturnType<typeof createDesignCompiler> | null>(null)
     const [page, setPage] = useState<Document | null>(null)
 
     // Designs are styled with the app's Tailwind classes, so the page gets a copy of the app's stylesheets
@@ -22,12 +24,32 @@ const DesignFrame = ({ html, onResize }: Props) => {
         document.head.querySelectorAll('link[rel="stylesheet"], style').forEach((node) => {
             doc.head.appendChild(doc.importNode(node, true))
         })
+        // Comes last, so the CSS compiled for the design's own classes wins over the copies
+        const designStyles = doc.createElement('style')
+        designStyles.id = 'design-classes'
+        doc.head.appendChild(designStyles)
         doc.body.className = document.body.className
         setPage(doc)
     }
 
     useEffect(() => {
-        if (page) page.body.innerHTML = html
+        if (!page) return
+        page.body.innerHTML = html
+        // The app's stylesheet only covers the classes Linea itself uses, so the design's classes are compiled here
+        let current = true
+        compilerRef.current ??= createDesignCompiler()
+        compilerRef.current
+            .then((compiler) => {
+                const designStyles = page.getElementById('design-classes')
+                if (current && designStyles) designStyles.textContent = compiler.build(designClasses(page))
+            })
+            .catch((error) => {
+                compilerRef.current = null
+                console.error('Failed to compile design styles:', error)
+            })
+        return () => {
+            current = false
+        }
     }, [page, html])
 
     // Keeps the frame as tall as the design. It is measured with the frame collapsed,
