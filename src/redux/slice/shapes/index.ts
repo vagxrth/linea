@@ -394,9 +394,11 @@ const shapesSlice = createSlice({
         },
         addGeneratedUI(
             state,
-            action: PayloadAction<Parameters<typeof makeGeneratedUI>[0]>
+            action: PayloadAction<Parameters<typeof makeGeneratedUI>[0] & { skipHistory?: boolean }>
         ) {
-            pushHistory(state);
+            if (!action.payload.skipHistory) {
+                pushHistory(state);
+            }
             shapesAdapter.addOne(state.shapes, makeGeneratedUI(action.payload));
         },
 
