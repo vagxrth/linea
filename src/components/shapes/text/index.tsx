@@ -27,10 +27,17 @@ export const Text = ({ shape }: { shape: TextShape }) => {
     }
   }, [isEditing, shape.text]);
 
-  const handleDoubleClick = () => {
-    setIsEditing(true);
-    setTempText(shape.text);
-  };
+  // The canvas handles clicks on text like any other shape (select, move, erase),
+  // and asks the text to start editing when it's double-clicked
+  useEffect(() => {
+    const handleEditRequest = (e: Event) => {
+      if ((e as CustomEvent<{ shapeId: string }>).detail?.shapeId !== shape.id) return;
+      setTempText(shape.text);
+      setIsEditing(true);
+    };
+    window.addEventListener("shape-text-edit", handleEditRequest);
+    return () => window.removeEventListener("shape-text-edit", handleEditRequest);
+  }, [shape.id, shape.text]);
 
   const handleBlur = () => {
     setIsEditing(false);
@@ -111,11 +118,8 @@ export const Text = ({ shape }: { shape: TextShape }) => {
         color: shape.fill || "#ffffff",
         userSelect: "none",
         whiteSpace: "nowrap", // Prevent line breaks
-      }}
-      onDoubleClick={handleDoubleClick}
-      title="Double-click to edit">
+      }}>
       <span
-        className="pointer-events-auto"
         style={{ display: "block", minWidth: "20px", minHeight: "1em" }}>
         {shape.text}
       </span>

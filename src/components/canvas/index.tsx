@@ -26,6 +26,7 @@ const InfiniteCanvas = () => {
         onPointerUp,
         onPointerMove,
         onPointerCancel,
+        onDoubleClick,
         attachCanvasRef,
         getDraftShapes,
         getFreeDrawPoints,
@@ -69,6 +70,7 @@ const InfiniteCanvas = () => {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
+        onDoubleClick={onDoubleClick}
         onContextMenu={(e) => e.preventDefault()}
         onWheel={(e) => {
             // Prevent browser navigation when scrolling horizontally
