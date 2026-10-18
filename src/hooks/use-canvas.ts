@@ -1060,22 +1060,26 @@ export const useFrame = (shape: FrameShape) => {
 
             const UPDATE_THROTTLE_MS = 200
 
+            // Adding the design was its undo step, so the streamed chunks stay out of the history.
+            // stream: true holds back a character split across two chunks until the rest arrives.
             if (reader) {
                 try {
                     while (true) {
                         const { done, value } = await reader.read()
                         if (done) {
+                            accumulatedMarkup += decoder.decode()
                             dispatch(
                                 updateShape({
                                     id: generatedUIId,
                                     patch: {
                                         uiSpecData: accumulatedMarkup,
-                                    }
+                                    },
+                                    skipHistory: true
                                 })
                             )
                             break
                         }
-                        const chunk = decoder.decode(value)
+                        const chunk = decoder.decode(value, { stream: true })
                         accumulatedMarkup += chunk
 
                         const now = Date.now()
@@ -1085,7 +1089,8 @@ export const useFrame = (shape: FrameShape) => {
                                     id: generatedUIId,
                                     patch: {
                                         uiSpecData: accumulatedMarkup,
-                                    }
+                                    },
+                                    skipHistory: true
                                 })
                             )
                             lastUpdateTime = now
@@ -1168,6 +1173,8 @@ export const useWorkflowGeneration = () => {
 
             const baseX = currentShape.x + currentShape.w + 100
             const spacing = Math.max(currentShape.w + 50, 450)
+            // The whole workflow is one undo step: only the first page to arrive records history
+            let historyRecorded = false
 
             const workflowPromises = Array.from({ length: pageCount }).map(async (_, index) => {
                 try {
@@ -1201,8 +1208,10 @@ export const useWorkflowGeneration = () => {
                             uiSpecData: null,
                             sourceFrameId: currentShape.sourceFrameId,
                             isWorkflowPage: true,
+                            skipHistory: historyRecorded,
                         })
                     )
+                    historyRecorded = true
 
                     const reader = response.body?.getReader()
                     const decoder = new TextDecoder()
@@ -1212,19 +1221,22 @@ export const useWorkflowGeneration = () => {
                     if (reader) {
                         while(true) {
                             const { done, value } = await reader.read()
+                            // The last read flushes a character that never completed
+                            const chunk = done ? decoder.decode() : decoder.decode(value, { stream: true })
+                            if (chunk) {
+                                accumulatedHTML += chunk
+
+                                dispatch(
+                                    updateShape({
+                                        id: workflowId,
+                                        patch: {
+                                            uiSpecData: accumulatedHTML,
+                                        },
+                                        skipHistory: true
+                                    })
+                                )
+                            }
                             if (done) break
-
-                            const chunk = decoder.decode(value)
-                            accumulatedHTML += chunk
-
-                            dispatch(
-                                updateShape({
-                                    id: workflowId,
-                                    patch: {
-                                        uiSpecData: accumulatedHTML,
-                                    }
-                                })
-                            )
                         }
                     }
                     return { pageIndex: index, success: true}
@@ -1421,23 +1433,29 @@ export const useChatWindow = (generatedUIId: string, isOpen: boolean) => {
             const decoder = new TextDecoder()
 
             let accumulatedHTML = ''
+            // The first chunk records the current design as one undo step; the rest of the stream doesn't add more
+            let historyRecorded = false
 
             if (reader) {
                 while(true) {
                     const { done, value } = await reader.read()
+                    // The last read flushes a character that never completed
+                    const chunk = done ? decoder.decode() : decoder.decode(value, { stream: true })
+                    if (chunk) {
+                        accumulatedHTML += chunk
+
+                        dispatch(updateStreamingContent({ generatedUIId, messageId: responseId, content: 'Regenerating design...' }))
+
+                        dispatch(updateShape({
+                            id: generatedUIId,
+                            patch: {
+                                uiSpecData: accumulatedHTML,
+                            },
+                            skipHistory: historyRecorded
+                        }))
+                        historyRecorded = true
+                    }
                     if (done) break
-
-                    const chunk = decoder.decode(value)
-                    accumulatedHTML += chunk
-
-                    dispatch(updateStreamingContent({ generatedUIId, messageId: responseId, content: 'Regenerating design...' }))
-
-                    dispatch(updateShape({
-                        id: generatedUIId,
-                        patch: {
-                            uiSpecData: accumulatedHTML,
-                        }
-                    }))
                 }
             }
             dispatch(finishedStreamingResponse({ generatedUIId, messageId: responseId, finalContent: 'Design regenerated successfully' }))
