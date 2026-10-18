@@ -1,4 +1,5 @@
-import { ConsumeCreditsQuery, CreditsBalanceQuery, InspirationImagesQuery, StyleGuideQuery } from "@/convex/query.config";
+import { InspirationImagesQuery, StyleGuideQuery } from "@/convex/query.config";
+import { chargedGeneration, checkCredits } from "@/lib/credits";
 import { prompts } from "@/prompts";
 import { google } from "@ai-sdk/google";
 import { streamText } from "ai";
@@ -21,21 +22,8 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        const { ok: balanceOk, balance: balanceAmount } = await CreditsBalanceQuery()
-        if (!balanceOk || balanceAmount === 0) {
-            return NextResponse.json(
-                { error: 'No credits available' },
-                { status: 400 }
-            )
-        }
-
-        const { ok } = await ConsumeCreditsQuery({ amount: 1 })
-        if (!ok) {
-            return NextResponse.json(
-                { error: 'Failed to consume credits' },
-                { status: 400 }
-            )
-        }
+        const creditError = await checkCredits(1)
+        if (creditError) return creditError
 
         const styleGuide = await StyleGuideQuery(projectId)
         const styleGuideData = styleGuide.styleGuide._valueJSON as unknown as {
@@ -154,6 +142,7 @@ export async function POST(request: NextRequest) {
 
         userPrompt += `\n\nPlease generate a professional ${selectedPageType} that maintains complete design consistency with the main page while serving its specific functional purpose. Be creative and contextually appropriate.`;
 
+        const generation = chargedGeneration(request, 1)
         const result = streamText({
             model: google('gemini-2.5-flash'),
             messages: [
@@ -173,28 +162,11 @@ export async function POST(request: NextRequest) {
             ],
             system: prompts.generatedUi.system,
             temperature: 0.7,
+            abortSignal: generation.abortSignal,
+            onError: generation.onError,
         })
 
-        const stream = new ReadableStream({
-            async start(controller) {
-                try {
-                    for await (const chunk of result.textStream) {
-                        const encoder = new TextEncoder()
-                        controller.enqueue(encoder.encode(chunk))
-                    }
-                    controller.close()
-                } catch (error) {
-                    controller.error(error)
-                }
-            }
-        })
-        return new Response(stream, {
-            headers: {
-                'Content-Type': 'text/html; charset=utf-8',
-                'Cache-Control': 'no-cache',
-                Connection: 'keep-alive',
-            }
-        })
+        return generation.respond(result.textStream)
     } catch (error) {
         console.error('Workflow generation failed: ', error)
         return NextResponse.json(

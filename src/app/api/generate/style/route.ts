@@ -1,4 +1,5 @@
-import { ConsumeCreditsQuery, CreditsBalanceQuery, MoodboardImagesQuery } from "@/convex/query.config";
+import { ConsumeCreditsQuery, MoodboardImagesQuery } from "@/convex/query.config";
+import { checkCredits, notEnoughCredits } from "@/lib/credits";
 import { MoodboardImage } from "@/hooks/use-styles";
 import { prompts } from "@/prompts";
 import { NextRequest, NextResponse } from "next/server";
@@ -55,21 +56,8 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        const { ok: balanceOk, balance: balanceAmount } = await CreditsBalanceQuery()
-
-        if (!balanceOk) {
-            return NextResponse.json(
-                { error: 'Failed to get credits balance' },
-                { status: 500 }
-            )
-        }
-
-        if (balanceAmount === 0) {
-            return NextResponse.json(
-                { error: 'No credits balance' },
-                { status: 400 }
-            )
-        }
+        const creditError = await checkCredits(1)
+        if (creditError) return creditError
 
         const moodboardImages = await MoodboardImagesQuery(projectId)
 
@@ -106,15 +94,6 @@ export async function POST(request: NextRequest) {
         
         Return ONLY the JSON object matching the exact schema structure above.`;
 
-        const { ok, balance } = await ConsumeCreditsQuery({ amount: 1 })
-
-        if (!ok) {
-            return NextResponse.json(
-                { error: 'Failed to consume credits' },
-                { status: 400 }
-            )
-        }
-
         const result = await generateObject({
             model: google('gemini-2.5-flash'),
             schema: StyleGuideSchema,
@@ -143,6 +122,10 @@ export async function POST(request: NextRequest) {
         if (!result.object.typographySections || result.object.typographySections.length !== 3) {
             throw new Error('Invalid typography sections structure')
         }
+
+        // Charge only now that the model has produced a usable style guide
+        const { ok, balance } = await ConsumeCreditsQuery({ amount: 1 })
+        if (!ok) return notEnoughCredits()
 
         await fetchMutation(
             api.projects.updateProjectStyleGuide,
