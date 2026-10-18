@@ -52,11 +52,11 @@ export async function POST(request: NextRequest) {
         let userPrompt = `Please redesign this UI based on my request: "${userMessage}"`
 
         if (currentHTML) {
-            userPrompt += `\n\nCurrent HTML for reference:\n${currentHTML.substring(0, 1000)}...`
+            userPrompt += `\n\nCurrent design (full HTML). Start from it: apply my request, keep everything my request doesn't mention (layout, content, ids and .c-* color classes) as it is, and return the complete updated HTML:\n${currentHTML}`
         }
 
         if (hasWireframe) {
-            userPrompt += `\n\nWireframe Context: I'm providing a wireframe image that shows the EXACT original design layout and structure that this UI was generated from. This wireframe represents the specific frame that was used to create the current design. Please use this as visual context to understand the intended layout, structure, and design elements when making improvements. The wireframe shows the original wireframe/mockup that the user drew or created.`
+            userPrompt += `\n\nWireframe Context: I'm providing a wireframe image that shows the EXACT original design layout and structure that this UI was generated from. This wireframe represents the specific frame that was used to create the current design. Please use this as visual context to understand the intended layout, structure, and design elements when making improvements. The wireframe shows the original wireframe/mockup that the user drew or created. The current design and my request take priority over the wireframe.`
         } else {
             console.log('No wireframe context provided for redesign')
         }
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
             userPrompt += `\n\nInspiration Images Available: ${imageUrls.length} reference images for visual style and inspiration.`
         }
 
-        userPrompt += `\n\nPlease generate a professional redesigned UI based on my request while following the style guide, maintaining professional quality, and considering the wireframe context for layout understanding.`
+        userPrompt += `\n\nPlease generate the complete redesigned UI based on my request while following the style guide and maintaining professional quality.`
 
         const generation = chargedGeneration(request, 1)
         const result = streamText({

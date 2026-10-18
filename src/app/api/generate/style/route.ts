@@ -83,16 +83,14 @@ export async function POST(request: NextRequest) {
         const userPrompt = `Analyze these ${imageUrls.length} mood board images and generate a design system:
         Extract colors that work harmoniously together and create typography that matches the aesthetic.
         
-        IMPORTANT: Generate exactly 5 color sections with these titles in order:
-        1. "Primary Colors" (4 swatches)
-        2. "Secondary & Accent Colors" (4 swatches)
-        3. "UI Component Colors" (6 swatches)
-        4. "Utility & Form Colors" (3 swatches)
-        5. "Status & Feedback Colors" (2 swatches)
-        
-        And exactly 3 typography sections with appropriate titles (e.g., "Headings", "Body", "UI Elements").
-        
-        Return ONLY the JSON object matching the exact schema structure above.`;
+        IMPORTANT: Generate exactly 5 color sections with these titles in order, with one swatch per color role, named after the role:
+        1. "Primary Colors": Background, Foreground, Primary, Primary Foreground
+        2. "Secondary & Accent Colors": Secondary, Secondary Foreground, Accent, Accent Foreground
+        3. "UI Component Colors": Card, Card Foreground, Popover, Popover Foreground, Muted, Muted Foreground
+        4. "Utility & Form Colors": Border, Input, Ring
+        5. "Status & Feedback Colors": Destructive, Destructive Foreground
+
+        And exactly 3 typography sections with appropriate titles (e.g., "Headings", "Body", "UI Elements").`;
 
         const result = await generateObject({
             model: google('gemini-2.5-flash'),

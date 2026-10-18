@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
                 1. Start with the provided HTML structure as your base
                 2. Apply the requested changes (colors, layout, content, styling, etc.)
                 3. Keep all existing IDs and semantic structure intact
-                4. Maintain shadcn/ui component patterns and classes
+                4. Keep the page's <style> block and .c-* color classes
                 5. Preserve responsive design and accessibility features
                 6. Update content, styling, or layout as requested but keep core structure
 
