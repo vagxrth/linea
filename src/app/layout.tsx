@@ -58,15 +58,18 @@ export default async function RootLayout({
 
   return (
     <ConvexAuthNextjsServerProvider>
-      <html lang="en" className='bg-background'>
+      <html lang="en" className='bg-background' suppressHydrationWarning>
         <body
           className={`${geistSans.variable} ${instrumentSerif.variable} antialiased`}
         >
           <ConvexClientProvider>
+            {/* The canvas and panels are drawn for a dark background (white strokes and labels),
+                so the theme stays dark instead of following the OS */}
             <ThemeProvider
               attribute="class"
-              defaultTheme="system"
-              enableSystem
+              defaultTheme="dark"
+              forcedTheme="dark"
+              enableSystem={false}
               disableTransitionOnChange
             >
               <ReduxProvider preloadedState={{ profile }}>
