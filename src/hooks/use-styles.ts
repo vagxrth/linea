@@ -322,18 +322,22 @@ export const useUpdateContainer = (shape: GeneratedUIShape) => {
     const dispatch = useAppDispatch()
 
     const containerRef = useRef<HTMLDivElement>(null)
+    // Set by the design's frame whenever the design changes height, so the shape is measured again then too
+    const [frameHeight, setFrameHeight] = useState(0)
 
     useEffect(() => {
         if (containerRef.current && shape.uiSpecData) {
             const timeoutId = setTimeout(() => {
                 const actualHeight = containerRef.current?.offsetHeight || 0
                 if (actualHeight > 0 && Math.abs(actualHeight - shape.h) > 10) {
+                    // Following the design's height isn't an edit, so it stays out of the undo history
                     dispatch(
                         updateShape({
                             id: shape.id,
                             patch: {
                                 h: actualHeight
-                            }
+                            },
+                            skipHistory: true
                         })
                     )
                 }
@@ -341,21 +345,22 @@ export const useUpdateContainer = (shape: GeneratedUIShape) => {
 
             return () => clearTimeout(timeoutId)
         }
-    }, [shape.uiSpecData, shape.id, shape.h, dispatch])
+    }, [shape.uiSpecData, shape.id, shape.h, frameHeight, dispatch])
 
+    // DOMPurify's HTML profile keeps <style> blocks and forms, which designs use. The sandboxed
+    // frame the design is shown in is what keeps its CSS and forms away from the app.
     const sanitize = (html: string) => {
         return DOMPurify.sanitize(html, {
-            ALLOWED_TAGS: ['div', 'span', 'img', 'a', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote', 'code', 'pre', 'hr', 'br', 'table', 'tbody', 'thead', 'tr', 'td', 'th'],
-            ALLOWED_ATTR: ['src', 'alt', 'href', 'target', 'rel', 'class', 'id'],
+            USE_PROFILES: { html: true },
             FORBID_TAGS: ['script', 'iframe'],
             FORBID_ATTR: ['onerror', 'onload', 'onclick'],
             ALLOWED_URI_REGEXP: /^(?:(?!\s*(?:javascript|data):).)*$/i,
-            USE_PROFILES: { html: true }
         })
     }
 
     return {
         containerRef,
-        sanitize
+        sanitize,
+        setFrameHeight
     }
 }
