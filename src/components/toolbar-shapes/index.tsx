@@ -1,6 +1,6 @@
 'use client'
-import { useCanvas } from '@/hooks/use-canvas'
-import { Tool } from '@/redux/slice/shapes'
+import { setTool, Tool } from '@/redux/slice/shapes'
+import { useAppDispatch, useAppSelector } from '@/redux/store'
 import { ArrowRight, Circle, Eraser, Hash, Minus, MousePointer2, Pencil, Square, Type } from 'lucide-react'
 import React from 'react'
 import { Button } from '../ui/button'
@@ -71,7 +71,10 @@ const tools: Array<{
 
 const ToolbarShapes = () => {
 
-    const { currentTool, selectTool } = useCanvas();
+    // Not useCanvas(): every instance of it registers the canvas keyboard shortcuts again
+    const dispatch = useAppDispatch()
+    const currentTool = useAppSelector((state) => state.shapes.tool)
+    const selectTool = (tool: Tool) => dispatch(setTool(tool))
 
   return (
     <div className='col-span-1 flex justify-center items-center'>
