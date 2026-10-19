@@ -13,7 +13,9 @@ const schema = defineSchema({
     name: v.string(),
     description: v.optional(v.string()),
     styleGuide: v.optional(v.string()),
-    sketchesData: v.any(),
+    // Drawings now live in project_sketches, so listing projects doesn't read them. These stay
+    // optional for projects that moveSketchesToOwnTable hasn't reached yet.
+    sketchesData: v.optional(v.any()),
     viewportData: v.optional(v.any()),
     generatedDesignData: v.optional(v.any()),
     thumbnail: v.optional(v.string()),
@@ -35,6 +37,13 @@ const schema = defineSchema({
   }).index('by_storageId', ['storageId']),
 
   // Project counters
+  // Each project's drawing and viewport, kept apart from the project so listing projects stays cheap
+  project_sketches: defineTable({
+    projectId: v.id('projects'),
+    sketchesData: v.any(),
+    viewportData: v.optional(v.any()),
+  }).index('by_projectId', ['projectId']),
+
   project_counters: defineTable({
     userId: v.id('users'),
     nextProjectNumber: v.number(),
