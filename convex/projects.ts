@@ -1,7 +1,16 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query, QueryCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { Id } from "./_generated/dataModel";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { deleteFileIfOwned } from "./storage";
+
+// A project's drawing and viewport live in project_sketches, apart from the project itself
+const getSketches = (ctx: QueryCtx, projectId: Id<'projects'>) =>
+    ctx.db
+        .query('project_sketches')
+        .withIndex('by_projectId', (q) => q.eq('projectId', projectId))
+        .unique()
 
 // Takes the id straight from the URL. A malformed id, a missing project or one the caller can't
 // see all return null, so pages can say "Project not found" instead of crashing.
@@ -19,7 +28,13 @@ export const getProject = query({
             return null
         }
 
-        return project
+        // Projects the migration hasn't reached yet still carry their drawing themselves
+        const sketches = await getSketches(ctx, project._id)
+        return {
+            ...project,
+            sketchesData: sketches?.sketchesData ?? project.sketchesData,
+            viewportData: sketches?.viewportData ?? project.viewportData,
+        }
     }
 })
 
@@ -39,13 +54,13 @@ export const createProject = mutation({
         const projectId = await ctx.db.insert('projects', {
             userId,
             name: projectName,
-            sketchesData,
             thumbnail,
             projectNumber,
             lastModified: Date.now(),
             createdAt: Date.now(),
             isPublic: false
         })
+        await ctx.db.insert('project_sketches', { projectId, sketchesData })
 
         return {
             projectId,
@@ -80,21 +95,19 @@ const getNextProjectNumber = async (ctx: any, userId: string): Promise<number> =
     return projectNumber
 }
 
+// All of the caller's projects, newest first. Drawings live in project_sketches, so this only
+// reads the small project documents.
 export const getProjects = query({
-    args: {
-        limit: v.optional(v.number()),
-    },
-    handler: async (ctx, { limit = 20 }) => {
+    args: {},
+    handler: async (ctx) => {
         const userId = await getAuthUserId(ctx);
         if (!userId) return []
 
-        const allProjects = await ctx.db
+        const projects = await ctx.db
             .query('projects')
             .withIndex('by_userId', (q) => q.eq('userId', userId))
             .order('desc')
             .collect()
-
-        const projects = allProjects.slice(0, limit)
 
         return projects.map((project) => ({
             _id: project._id,
@@ -142,17 +155,23 @@ export const updateProjectSketches = mutation({
             throw new Error("Access denied")
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const updateData: any = {
-            sketchesData,
+        const sketches = await getSketches(ctx, projectId)
+        if (sketches) {
+            await ctx.db.patch(sketches._id, viewportData ? { sketchesData, viewportData } : { sketchesData })
+        } else {
+            await ctx.db.insert('project_sketches', {
+                projectId,
+                sketchesData,
+                viewportData: viewportData ?? project.viewportData,
+            })
+        }
+
+        // Also drops the old copy from a project the migration hasn't reached yet
+        await ctx.db.patch(projectId, {
             lastModified: Date.now(),
-        }
-
-        if (viewportData) {
-            updateData.viewportData = viewportData;
-        }
-
-        await ctx.db.patch(projectId, updateData);
+            sketchesData: undefined,
+            viewportData: undefined,
+        });
         return { success: true }
     }
 })
@@ -204,6 +223,8 @@ export const deleteProject = mutation({
             await deleteFileIfOwned(ctx, storageId, userId)
         }
 
+        const sketches = await getSketches(ctx, projectId)
+        if (sketches) await ctx.db.delete(sketches._id)
         await ctx.db.delete(projectId);
 
         return { success: true }
@@ -240,3 +261,36 @@ export const renameProject = mutation({
         return { success: true, name: trimmedName, lastModified }
     }
 })
+
+// Moves each project's drawing and viewport into project_sketches. Run it once after deploying with
+// `npx convex run projects:moveSketchesToOwnTable` (add `--prod` for production). It pages through
+// projects and schedules itself until it reaches the end. Re-running it is harmless.
+export const moveSketchesToOwnTable = internalMutation({
+    args: { cursor: v.optional(v.string()) },
+    handler: async (ctx, { cursor }) => {
+        // Drawings can be a few hundred KB each, so batches stay small
+        const { page, isDone, continueCursor } = await ctx.db
+            .query('projects')
+            .paginate({ cursor: cursor ?? null, numItems: 10 });
+
+        for (const project of page) {
+            if (project.sketchesData === undefined && project.viewportData === undefined) continue;
+
+            // An autosave since the deploy already wrote a newer drawing there
+            if (!(await getSketches(ctx, project._id))) {
+                await ctx.db.insert('project_sketches', {
+                    projectId: project._id,
+                    sketchesData: project.sketchesData ?? null,
+                    viewportData: project.viewportData,
+                });
+            }
+            await ctx.db.patch(project._id, { sketchesData: undefined, viewportData: undefined });
+        }
+
+        if (isDone) {
+            console.log("Moving project drawings finished");
+        } else {
+            await ctx.scheduler.runAfter(0, internal.projects.moveSketchesToOwnTable, { cursor: continueCursor });
+        }
+    },
+});
