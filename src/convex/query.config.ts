@@ -63,11 +63,12 @@ export const ProjectQuery = async (projectId: string) => {
 
     const project = await preloadQuery(
         api.projects.getProject,
-        { projectId: projectId as Id<'projects'>},
+        { projectId },
         { token: await convexAuthNextjsToken() }
     )
 
-    return { project, profile }
+    // getProject returns null for a malformed id or a project that's missing or not yours
+    return { project: project._valueJSON === null ? null : project, profile }
 }
 
 export const StyleGuideQuery = async (projectId: string) => {

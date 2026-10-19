@@ -3,17 +3,20 @@ import { mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { deleteFileIfOwned } from "./storage";
 
+// Takes the id straight from the URL. A malformed id, a missing project or one the caller can't
+// see all return null, so pages can say "Project not found" instead of crashing.
 export const getProject = query({
-    args: { projectId: v.id('projects') },
+    args: { projectId: v.string() },
     handler: async (ctx, { projectId }) => {
         const userId = await getAuthUserId(ctx);
-        if (!userId) throw new Error("User not authenticated!")
+        if (!userId) return null
 
-        const project = await ctx.db.get(projectId);
-        if (!project) throw new Error("Project not found")
+        const id = ctx.db.normalizeId('projects', projectId);
+        const project = id ? await ctx.db.get(id) : null;
+        if (!project) return null
 
         if (project.userId !== userId && !project.isPublic) {
-            throw new Error('Access Denied')
+            return null
         }
 
         return project
