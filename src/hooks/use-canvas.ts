@@ -482,8 +482,12 @@ export const useCanvas = () => {
             const y = Math.min(draft.start.y, draft.current.y)
             const w = Math.abs(draft.current.x - draft.start.x)
             const h = Math.abs(draft.current.y - draft.start.y)
+            // Boxes need area, but lines and arrows only need length, so perfectly
+            // horizontal or vertical ones are kept
+            const isSegment = draft.type === 'arrow' || draft.type === 'line'
+            const bigEnough = isSegment ? Math.hypot(w, h) > 2 : w > 1 && h > 1
 
-            if (w > 1 && h > 1) {
+            if (bigEnough) {
                 if (draft.type === 'frame') {
                     dispatch(addFrame({ x, y, w, h }))
                 } else if (draft.type === 'rect') {
