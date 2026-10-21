@@ -463,6 +463,10 @@ const shapesSlice = createSlice({
             const ids = state.shapes.ids as string[];
             state.selected = Object.fromEntries(ids.map((id) => [id, true]));
         },
+        // Replaces the selection, such as with the shapes inside a drag-to-select box
+        setSelection(state, action: PayloadAction<string[]>) {
+            state.selected = Object.fromEntries(action.payload.map((id) => [id, true]));
+        },
         deleteSelected(state) {
             const ids = Object.keys(state.selected);
             if (ids.length === 0) return;
@@ -547,6 +551,7 @@ export const {
     deselectShape,
     clearSelection,
     selectAll,
+    setSelection,
     deleteSelected,
     recordHistory,
     loadProject,
