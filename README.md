@@ -152,6 +152,17 @@ npx convex env set POLAR_WEBHOOK_SECRET <your-polar-webhook-secret>
 
 Then point a Polar webhook at `https://<your-deployment>.convex.site/polar/webhook` with the `subscription.*` and `order.*` events.
 
+### 7. Send email codes (required for email and password accounts)
+
+New email and password accounts confirm their email with an emailed code, and forgotten passwords are reset with one. The codes are sent through [Resend](https://resend.com). Verify your sending domain in Resend, create an API key, and set both on Convex:
+
+```bash
+npx convex env set AUTH_RESEND_KEY <your-resend-api-key>
+npx convex env set AUTH_EMAIL_FROM "Linea <noreply@your-domain.com>"
+```
+
+Without them, email and password sign-ups can't finish. Google sign-in doesn't use them.
+
 ## Scripts
 
 | Command | Description |

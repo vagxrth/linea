@@ -8,11 +8,25 @@ import { useAuth } from '@/hooks/use-auth'
 import { Loader2 } from 'lucide-react'
 import Google from '@/components/google'
 import Image from 'next/image'
+import VerifyEmail from '@/components/verify-email'
 
 export default function LoginPage() {
 
-  const { signInForm, handleSignIn, isLoading } = useAuth();
+  const { signInForm, handleSignIn, isLoading, verifyingEmail, verifyForm, handleVerifyEmail, resendVerificationCode, cancelVerification } = useAuth();
   const { register, handleSubmit, formState: { errors } } = signInForm;
+
+  if (verifyingEmail) {
+    return (
+      <VerifyEmail
+        email={verifyingEmail}
+        form={verifyForm}
+        onVerify={handleVerifyEmail}
+        onResend={resendVerificationCode}
+        onCancel={cancelVerification}
+        isLoading={isLoading}
+      />
+    )
+  }
 
   return (
     <section className="flex min-h-screen bg-zinc-50 px-4 py-16 md:py-32 dark:bg-transparent">
@@ -68,7 +82,7 @@ export default function LoginPage() {
                   variant="link"
                   size="sm">
                   <Link
-                    href="#"
+                    href="/auth/reset"
                     className="link intent-info variant-ghost text-sm">
                     Forgot your Password ?
                   </Link>
