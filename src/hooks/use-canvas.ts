@@ -1,11 +1,11 @@
 'use client'
 
 import { useGenerateWorkflowMutation } from "@/redux/api/generation"
-import { addArrow, addEllipse, addFrame, addFreeDrawShape, addGeneratedUI, addLine, addRect, addText, clearSelection, FrameShape, removeShape, selectShape, setTool, Shape, Tool, updateShape, undo, redo, recordHistory } from "@/redux/slice/shapes"
+import { addArrow, addEllipse, addFrame, addFreeDrawShape, addGeneratedUI, addLine, addRect, addText, clearSelection, FrameShape, removeShape, selectShape, setTool, Shape, ShapeUpdate, Tool, updateShape, updateShapes, undo, redo, recordHistory } from "@/redux/slice/shapes"
 import { handToolDisable, handToolEnable, panEnd, panMove, panStart, Point, screenToWorld, wheelPan, wheelZoom } from "@/redux/slice/viewport"
-import { AppDispatch, useAppDispatch, useAppSelector } from "@/redux/store"
+import { AppDispatch, AppStore, useAppDispatch, useAppSelector, useAppStore } from "@/redux/store"
 import { nanoid } from "@reduxjs/toolkit"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useDispatch } from "react-redux"
 import { toast } from "sonner"
 import { exportGeneratedUI } from '@/lib/utils';
@@ -94,6 +94,8 @@ export const useCanvas = () => {
     const freehandRef = useRef<number | null>(null)
     const panRef = useRef<number | null>(null)
     const pendingPanPointRef = useRef<Point | null>(null)
+    const moveFrameRef = useRef<number | null>(null)
+    const pendingMoveRef = useRef<ShapeUpdate[] | null>(null)
 
     const [, force] = useState(0);
     const requestRender = (): void => {
@@ -214,6 +216,26 @@ export const useCanvas = () => {
             const next = pendingPanPointRef.current
             if (next) dispatch(panMove(next))
         })
+    }
+
+    // Applies the latest positions of the shapes being dragged, all in one action
+    const flushMove = () => {
+        if (moveFrameRef.current != null) {
+            window.cancelAnimationFrame(moveFrameRef.current)
+            moveFrameRef.current = null
+        }
+        const updates = pendingMoveRef.current
+        if (!updates) return
+        pendingMoveRef.current = null
+        dispatch(updateShapes({ updates, skipHistory: true }))
+    }
+
+    // Pointer moves can come several times a frame, so a drag applies only the latest positions,
+    // once a frame
+    const scheduleMove = (updates: ShapeUpdate[]) => {
+        pendingMoveRef.current = updates
+        if (moveFrameRef.current != null) return
+        moveFrameRef.current = window.requestAnimationFrame(flushMove)
     }
 
     const freehandTick = (): void => {
@@ -390,6 +412,7 @@ export const useCanvas = () => {
         ) {
             const deltaX = world.x - moveStartRef.current.x
             const deltaY = world.y - moveStartRef.current.y
+            const updates: ShapeUpdate[] = []
 
             Object.keys(initialShapePositionRef.current).forEach((id) => {
                 const initialPostion = initialShapePositionRef.current[id]
@@ -407,16 +430,13 @@ export const useCanvas = () => {
                             typeof initialPostion.x === 'number' &&
                             typeof initialPostion.y === 'number'
                         ) {
-                            dispatch(
-                                updateShape({
-                                    id,
-                                    patch: {
-                                        x: initialPostion.x + deltaX,
-                                        y: initialPostion.y + deltaY,
-                                    },
-                                    skipHistory: true,
-                                })
-                            )
+                            updates.push({
+                                id,
+                                changes: {
+                                    x: initialPostion.x + deltaX,
+                                    y: initialPostion.y + deltaY,
+                                },
+                            })
                         }
                     } else if (shape.type === 'freedraw') {
                         const initialPoints = initialPostion.points
@@ -425,15 +445,12 @@ export const useCanvas = () => {
                                 x: point.x + deltaX,
                                 y: point.y + deltaY,
                             }))
-                            dispatch(
-                                updateShape({
-                                    id,
-                                    patch: {
-                                        points: newPoints,
-                                    },
-                                    skipHistory: true,
-                                })
-                            )
+                            updates.push({
+                                id,
+                                changes: {
+                                    points: newPoints,
+                                },
+                            })
                         }
                     } else if (shape.type === 'arrow' || shape.type === 'line') {
                         if (
@@ -442,22 +459,20 @@ export const useCanvas = () => {
                             typeof initialPostion.endX === 'number' &&
                             typeof initialPostion.endY === 'number'
                         ) {
-                            dispatch(
-                                updateShape({
-                                    id,
-                                    patch: {
-                                        startX: initialPostion.startX + deltaX,
-                                        startY: initialPostion.startY + deltaY,
-                                        endX: initialPostion.endX + deltaX,
-                                        endY: initialPostion.endY + deltaY,
-                                    },
-                                    skipHistory: true,
-                                })
-                            )
+                            updates.push({
+                                id,
+                                changes: {
+                                    startX: initialPostion.startX + deltaX,
+                                    startY: initialPostion.startY + deltaY,
+                                    endX: initialPostion.endX + deltaX,
+                                    endY: initialPostion.endY + deltaY,
+                                },
+                            })
                         }
                     }
                 }
             })
+            scheduleMove(updates)
         }
         if (draftShapeRef.current) {
             draftShapeRef.current.current = world
@@ -531,6 +546,8 @@ export const useCanvas = () => {
         }
 
         if (movingRef.current) {
+            // The drop position is applied now, before anything else (such as an undo) can run
+            flushMove()
             movingRef.current = false
             moveStartRef.current = null
             initialShapePositionRef.current = {}
@@ -609,6 +626,7 @@ export const useCanvas = () => {
             document.removeEventListener('keyup', onKeyUp)
             if (freehandRef.current) window.cancelAnimationFrame(freehandRef.current)
             if (panRef.current) window.cancelAnimationFrame(panRef.current)
+            if (moveFrameRef.current) window.cancelAnimationFrame(moveFrameRef.current)
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
@@ -957,6 +975,11 @@ const renderShapeOnCanvas = (ctx: CanvasRenderingContext2D, shape: Shape, frameX
     ctx.restore()
 }
 
+// Read when a button needs them rather than subscribed to, so frames don't re-render whenever
+// any shape changes (every step of a drag)
+const getAllShapes = (store: AppStore): Shape[] =>
+    Object.values(store.getState().shapes.shapes.entities).filter((shape): shape is Shape => shape !== undefined)
+
 const generateFrameSnapshot = async (frame: FrameShape, allShapes: Shape[]): Promise<Blob> => {
     const shapesInFrame = getShapesInsideFrame(allShapes, frame)
     const canvas = document.createElement('canvas')
@@ -1013,16 +1036,13 @@ export const downloadBlob = (blob: Blob, fileName: string): void => {
 
 export const useFrame = (shape: FrameShape) => {
     const dispatch = useAppDispatch();
+    const store = useAppStore()
 
     const [isGenerating, setIsGenerating] = useState(false)
 
-    const allShapes = useAppSelector((state) =>
-        Object.values(state.shapes.shapes?.entities || {}).filter((shape): shape is Shape => shape !== undefined)
-    )
-
     const handleDownload = async () => {
         try {
-            const snapshot = await generateFrameSnapshot(shape, allShapes)
+            const snapshot = await generateFrameSnapshot(shape, getAllShapes(store))
             downloadBlob(snapshot, `frame-${shape.frameNumber}-snapshot.png`)
         } catch (error) {
             toast.error(`Failed to download frame: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -1032,7 +1052,7 @@ export const useFrame = (shape: FrameShape) => {
     const handleGenerateDesign = async () => {
         try {
             setIsGenerating(true)
-            const snapshot = await generateFrameSnapshot(shape, allShapes)
+            const snapshot = await generateFrameSnapshot(shape, getAllShapes(store))
 
             const formData = new FormData()
             formData.append('image', snapshot, `frame-${shape.frameNumber}.png`)
@@ -1136,9 +1156,10 @@ export const useFrame = (shape: FrameShape) => {
 export const useInspiration = () => {
     const [isInspirationOpen, setIsInspirationOpen] = useState(false)
 
-    const toggleInspiration = () => {
-        setIsInspirationOpen(!isInspirationOpen)
-    }
+    // Keeps the same identity, so the frames it's passed to don't re-render
+    const toggleInspiration = useCallback(() => {
+        setIsInspirationOpen((open) => !open)
+    }, [])
 
     const openInspiration = () => {
         setIsInspirationOpen(true)
@@ -1159,13 +1180,14 @@ export const useInspiration = () => {
 
 export const useWorkflowGeneration = () => {
     const dispatch = useAppDispatch()
+    const store = useAppStore()
     const [, { isLoading: isGeneratingWorkflow }] = useGenerateWorkflowMutation()
 
-    const allShapes = useAppSelector((state) => Object.values(state.shapes.shapes?.entities || {}).filter((shape): shape is Shape => shape !== undefined))
-
-    const generateWorkflow = async (generatedUIId: string) => {
+    // Keeps the same identity, so the designs it's passed to don't re-render. The design is read
+    // when the button is pressed rather than subscribed to, for the same reason.
+    const generateWorkflow = useCallback(async (generatedUIId: string) => {
         try {
-            const currentShape = allShapes.find((shape) => shape.id === generatedUIId)
+            const currentShape = store.getState().shapes.shapes.entities[generatedUIId]
 
             if (!currentShape || currentShape.type !== 'generatedui') {
                 toast.error('Invalid generated UI shape')
@@ -1290,7 +1312,7 @@ export const useWorkflowGeneration = () => {
                 id: 'workflow-generation',
             })
         }
-    }
+    }, [dispatch, store])
     return {
         generateWorkflow,
         isGeneratingWorkflow,
@@ -1298,11 +1320,13 @@ export const useWorkflowGeneration = () => {
 }
 
 export const useGlobalChat = () => {
-    const [isChatOpen, setIsChatOpen] = useState(false)
     const { generateWorkflow } = useWorkflowGeneration()
+    // The chat is open while it has a design
     const [activeGeneratedUIId, setActiveGeneratedUIId] = useState<string | null>(null)
+    const isChatOpen = activeGeneratedUIId !== null
 
-    const exportDesign = async (generatedUIId: string, element: HTMLElement | null) => {
+    // exportDesign and toggleChat keep the same identity, so the designs they're passed to don't re-render
+    const exportDesign = useCallback(async (generatedUIId: string, element: HTMLElement | null) => {
         if (!element) {
             toast.error('No element to export')
             return
@@ -1316,25 +1340,20 @@ export const useGlobalChat = () => {
             console.error('Error exporting design:', error)
             toast.error('Failed to export design')
         }
-    }
+    }, [])
 
     const openChat = (generatedUIId: string) => {
         setActiveGeneratedUIId(generatedUIId)
-        setIsChatOpen(true)
     }
 
     const closeChat = () => {
         setActiveGeneratedUIId(null)
-        setIsChatOpen(false)
     }
 
-    const toggleChat = (generatedUIId: string) => {
-        if (isChatOpen && activeGeneratedUIId === generatedUIId) {
-            closeChat()
-        } else {
-            openChat(generatedUIId)
-        }
-    }
+    // Chat on the design whose chat is open closes it; on any other design it opens that design's chat
+    const toggleChat = useCallback((generatedUIId: string) => {
+        setActiveGeneratedUIId((active) => (active === generatedUIId ? null : generatedUIId))
+    }, [])
 
     return {
         isChatOpen,

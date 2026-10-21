@@ -2,7 +2,7 @@
 
 import { useMutation } from "convex/react"
 import { useSearchParams } from "next/navigation"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useForm } from "react-hook-form"
 import { api } from "../../convex/_generated/api"
 import { toast } from "sonner"
@@ -318,6 +318,17 @@ export const useStyleGuide = (projectId: string, images: MoodboardImage[], fileI
     }
 }
 
+// DOMPurify's HTML profile keeps <style> blocks and forms, which designs use. The sandboxed
+// frame the design is shown in is what keeps its CSS and forms away from the app.
+const sanitize = (html: string) => {
+    return DOMPurify.sanitize(html, {
+        USE_PROFILES: { html: true },
+        FORBID_TAGS: ['script', 'iframe'],
+        FORBID_ATTR: ['onerror', 'onload', 'onclick'],
+        ALLOWED_URI_REGEXP: /^(?:(?!\s*(?:javascript|data):).)*$/i,
+    })
+}
+
 export const useUpdateContainer = (shape: GeneratedUIShape) => {
     const dispatch = useAppDispatch()
 
@@ -347,20 +358,13 @@ export const useUpdateContainer = (shape: GeneratedUIShape) => {
         }
     }, [shape.uiSpecData, shape.id, shape.h, frameHeight, dispatch])
 
-    // DOMPurify's HTML profile keeps <style> blocks and forms, which designs use. The sandboxed
-    // frame the design is shown in is what keeps its CSS and forms away from the app.
-    const sanitize = (html: string) => {
-        return DOMPurify.sanitize(html, {
-            USE_PROFILES: { html: true },
-            FORBID_TAGS: ['script', 'iframe'],
-            FORBID_ATTR: ['onerror', 'onload', 'onclick'],
-            ALLOWED_URI_REGEXP: /^(?:(?!\s*(?:javascript|data):).)*$/i,
-        })
-    }
+    // Sanitizing a large design is slow, so it only runs again when the design changes, not when
+    // the shape moves
+    const html = useMemo(() => sanitize(shape.uiSpecData ?? ''), [shape.uiSpecData])
 
     return {
         containerRef,
-        sanitize,
+        html,
         setFrameHeight
     }
 }

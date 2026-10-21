@@ -29,15 +29,17 @@ const Autosave = () => {
     useEffect(() => {
         if (!isReady) return
 
-        const sketchesData = { shapes, frameCounter }
-        const viewportData = { scale, translate }
-        const stateString = JSON.stringify({ sketchesData, viewportData })
-
-        if (stateString === lastSavedRef.current) return
-
         if (debounceRef.current) clearTimeout(debounceRef.current)
 
+        // Turning the whole drawing into text is slow, so it happens once the changes pause rather
+        // than on every change (every step of a drag)
         debounceRef.current = setTimeout(async () => {
+            const sketchesData = { shapes, frameCounter }
+            const viewportData = { scale, translate }
+            const stateString = JSON.stringify({ sketchesData, viewportData })
+
+            if (stateString === lastSavedRef.current) return
+
             lastSavedRef.current = stateString
             setSaveStatus('saving')
 

@@ -1,7 +1,7 @@
 import { combineReducers, configureStore, Middleware, ReducersMapObject } from '@reduxjs/toolkit'
 import { slices } from './slice';
 import { apis } from './api';
-import { TypedUseSelectorHook, useSelector, useDispatch } from 'react-redux';
+import { TypedUseSelectorHook, useSelector, useDispatch, useStore } from 'react-redux';
 
 export type RootState = ReturnType<typeof rootReducer>;
 
@@ -27,3 +27,5 @@ export type AppDispatch = AppStore['dispatch']
 
 export const useAppSelector: TypedUseSelectorHook<RootState> = useSelector
 export const useAppDispatch = () => useDispatch<AppDispatch>()
+// For reading the state when an action runs, without re-rendering every time it changes
+export const useAppStore = useStore.withTypes<AppStore>()

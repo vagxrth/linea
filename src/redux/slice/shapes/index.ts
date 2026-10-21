@@ -105,6 +105,11 @@ export type Shape =
     | TextShape
     | GeneratedUIShape;
 
+export interface ShapeUpdate {
+    id: string;
+    changes: Partial<Shape>;
+}
+
 const shapesAdapter = createEntityAdapter<Shape, string>({
     selectId: (s) => s.id,
 });
@@ -413,6 +418,18 @@ const shapesSlice = createSlice({
             shapesAdapter.updateOne(state.shapes, { id, changes: patch });
         },
 
+        // Changes several shapes in one action, such as every shape a drag moves
+        updateShapes(
+            state,
+            action: PayloadAction<{ updates: ShapeUpdate[]; skipHistory?: boolean }>
+        ) {
+            const { updates, skipHistory } = action.payload;
+            if (!skipHistory) {
+                pushHistory(state);
+            }
+            shapesAdapter.updateMany(state.shapes, updates);
+        },
+
         removeShape(state, action: PayloadAction<string>) {
             pushHistory(state);
             const id = action.payload;
@@ -523,6 +540,7 @@ export const {
     addText,
     addGeneratedUI,
     updateShape,
+    updateShapes,
     removeShape,
     clearAll,
     selectShape,

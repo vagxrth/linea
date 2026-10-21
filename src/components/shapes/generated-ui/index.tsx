@@ -14,7 +14,7 @@ type Props = {
 
 const GeneratedUI = ({ shape, toggleChat, generateWorkflow, exportDesign }: Props) => {
 
-    const { containerRef, sanitize, setFrameHeight } = useUpdateContainer(shape)
+    const { containerRef, html, setFrameHeight } = useUpdateContainer(shape)
 
     const handleExportDesign = () => {
         if (!shape.uiSpecData) {
@@ -77,7 +77,7 @@ const GeneratedUI = ({ shape, toggleChat, generateWorkflow, exportDesign }: Prop
                         </LiquidGlassButton>
                     </div>
                     {shape.uiSpecData ? (
-                        <DesignFrame html={sanitize(shape.uiSpecData)} onResize={setFrameHeight} />
+                        <DesignFrame html={html} onResize={setFrameHeight} />
                     ) : (
                         <div className='flex items-center justify-center p-8 text-white/60'>
                             <div className='animate-pulse'>

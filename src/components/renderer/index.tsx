@@ -42,4 +42,5 @@ const ShapeRenderer = ({
   }
 }
 
-export default ShapeRenderer
+// Shapes the store didn't change keep the same object, so only the shapes that changed re-render
+export default React.memo(ShapeRenderer)
