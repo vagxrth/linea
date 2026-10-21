@@ -1,7 +1,7 @@
 'use client'
 
 import { cn } from '@/lib/utils'
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 import { Label } from '../ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { TextShape, updateShape } from '@/redux/slice/shapes'
@@ -23,6 +23,8 @@ const TextSidebar = ({ isOpen }: Props) => {
     const shapesEntities = useAppSelector((state) => state.shapes.shapes.entities)
 
     const [colorInput, setColorInput] = useState('#ffffff')
+    // Whether the current slider drag has recorded its undo step yet
+    const sliderRecordedRef = useRef(false)
 
     const fontFamilies = [
         'Inter, sans-serif',
@@ -43,10 +45,21 @@ const TextSidebar = ({ isOpen }: Props) => {
         .find((shape) => shape?.type === 'text') as TextShape | undefined
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const updateTextProperty = (property: keyof TextShape, value: any) => {
+    const updateTextProperty = (property: keyof TextShape, value: any, skipHistory = false) => {
         if (!selectedTextShape) return
 
-        dispatch(updateShape({ id: selectedTextShape.id, patch: { [property]: value } }))
+        dispatch(updateShape({ id: selectedTextShape.id, patch: { [property]: value }, skipHistory }))
+    }
+
+    // A slider drag is one undo step. Each press or key press on a slider starts a new step, which
+    // its first change records; the ticks after that don't add more.
+    const startSliderStep = () => {
+        sliderRecordedRef.current = false
+    }
+
+    const updateFromSlider = (property: 'fontSize' | 'fontWeight', value: number) => {
+        updateTextProperty(property, value, sliderRecordedRef.current)
+        sliderRecordedRef.current = true
     }
 
     const handleColorChange =  (color: string) => {
@@ -80,7 +93,9 @@ const TextSidebar = ({ isOpen }: Props) => {
                     <Label className='text-white/80'>Font Size: {selectedTextShape?.fontSize}</Label>
                     <Slider 
                         value={[selectedTextShape?.fontSize ?? 16]}
-                        onValueChange={([value]) => updateTextProperty('fontSize', value)}
+                        onPointerDown={startSliderStep}
+                        onKeyDown={startSliderStep}
+                        onValueChange={([value]) => updateFromSlider('fontSize', value)}
                         min={8}
                         max={128}
                         step={1}
@@ -91,7 +106,9 @@ const TextSidebar = ({ isOpen }: Props) => {
                     <Label className='text-white/80'>Font Weight: {selectedTextShape?.fontWeight}</Label>
                     <Slider 
                         value={[selectedTextShape?.fontWeight ?? 400]}
-                        onValueChange={([value]) => updateTextProperty('fontWeight', value)}
+                        onPointerDown={startSliderStep}
+                        onKeyDown={startSliderStep}
+                        onValueChange={([value]) => updateFromSlider('fontWeight', value)}
                         min={100}
                         max={900}
                         step={100}
