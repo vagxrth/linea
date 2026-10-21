@@ -64,6 +64,8 @@ export const useCanvas = () => {
     const drawingRef = useRef(false)
     const movingRef = useRef(false)
     const moveStartRef = useRef<Point | null>(null)
+    // Whether the current drag has recorded its undo step yet
+    const moveRecordedRef = useRef(false)
 
     const initialShapePositionRef = useRef<
         Record<
@@ -88,6 +90,8 @@ export const useCanvas = () => {
         initialBounds: { x: number; y: number; w: number; h: number }
         startPoint: { x: number; y: number }
     } | null>(null)
+    // Whether the current resize has recorded its undo step yet
+    const resizeRecordedRef = useRef(false)
 
 
     const lastFreehandFrameRef = useRef(0)
@@ -298,9 +302,7 @@ export const useCanvas = () => {
                         }
                         movingRef.current = true
                         moveStartRef.current = world
-
-                        // Record history once at drag start (not during movement)
-                        dispatch(recordHistory())
+                        moveRecordedRef.current = false
 
                         // `selectedShapes` is still the selection from before this click, so move
                         // exactly what the dispatches above select
@@ -412,6 +414,15 @@ export const useCanvas = () => {
         ) {
             const deltaX = world.x - moveStartRef.current.x
             const deltaY = world.y - moveStartRef.current.y
+
+            // Pressing a shape without moving it is a click, which adds no undo step. The drag's one
+            // step is recorded when the pointer first moves.
+            if (!moveRecordedRef.current) {
+                if (deltaX === 0 && deltaY === 0) return
+                moveRecordedRef.current = true
+                dispatch(recordHistory())
+            }
+
             const updates: ShapeUpdate[] = []
 
             Object.keys(initialShapePositionRef.current).forEach((id) => {
@@ -636,8 +647,7 @@ export const useCanvas = () => {
             const { shapeId, corner, bounds } = e.detail
             resizingRef.current = true
             resizingDataRef.current = { shapeId, corner, initialBounds: bounds, startPoint: { x: e.detail.clientX || 0, y: e.detail.clientY || 0 } }
-            // Record history once at resize start (not during movement)
-            dispatch(recordHistory())
+            resizeRecordedRef.current = false
         }
 
         const handleResizeMove = (e: CustomEvent) => {
@@ -656,6 +666,13 @@ export const useCanvas = () => {
 
             const shape = entityState.entities[shapeId]
             if (!shape) return
+
+            // The first change records the resize's one undo step, so pressing a handle without
+            // dragging adds none. Text has handles but no branch below, so it records nothing.
+            const resize = (patch: Partial<Shape>) => {
+                dispatch(updateShape({ id: shapeId, patch, skipHistory: resizeRecordedRef.current }))
+                resizeRecordedRef.current = true
+            }
 
             const newBounds = { ...initialBounds }
 
@@ -690,7 +707,7 @@ export const useCanvas = () => {
                 shape.type === 'rect' ||
                 shape.type === 'ellipse'
             ) {
-                dispatch(updateShape({ id: shapeId, patch: { x: newBounds.x, y: newBounds.y, w: newBounds.w, h: newBounds.h }, skipHistory: true }))
+                resize({ x: newBounds.x, y: newBounds.y, w: newBounds.w, h: newBounds.h })
             } else if (shape.type === 'freedraw') {
                 const xs = shape.points.map((p: { x: number; y: number }) => p.x)
                 const ys = shape.points.map((p: { x: number; y: number }) => p.y)
@@ -716,7 +733,7 @@ export const useCanvas = () => {
                     y: newActualY + (point.y - actualMinY) * scaleY,
                 }))
 
-                dispatch(updateShape({ id: shapeId, patch: { points: scaledPoints }, skipHistory: true }))
+                resize({ points: scaledPoints })
             } else if (shape.type === 'arrow' || shape.type === 'line') {
                 const actualMinX = Math.min(shape.startX, shape.endX)
                 const actualMaxX = Math.max(shape.startX, shape.endX)
@@ -753,7 +770,7 @@ export const useCanvas = () => {
                     newEndY = newActualY + (shape.endY - actualMinY) * scaleY
                 }
 
-                dispatch(updateShape({ id: shapeId, patch: { startX: newStartX, startY: newStartY, endX: newEndX, endY: newEndY }, skipHistory: true }))
+                resize({ startX: newStartX, startY: newStartY, endX: newEndX, endY: newEndY })
             }
         }
 
