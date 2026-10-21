@@ -11,7 +11,7 @@ import { EllipsePreview } from '../shapes/ellipse/preview'
 import { ArrowPreview } from '../shapes/arrow/preview'
 import { LinePreview } from '../shapes/line/preview'
 import { FreeDrawStrokePreview } from '../shapes/stroke/preview'
-import { SelectionOverlay } from '../overlay'
+import { SelectionBox, SelectionOverlay } from '../overlay'
 import InspirationSidebar from '../inspiration-sidebar'
 import ChatWindow from '../shapes/generated-ui/chat'
 
@@ -29,6 +29,7 @@ const InfiniteCanvas = () => {
         onDoubleClick,
         attachCanvasRef,
         getDraftShapes,
+        getSelectionBox,
         getFreeDrawPoints,
         sidebarOpen,
         selectedText
@@ -39,6 +40,7 @@ const InfiniteCanvas = () => {
     const { isChatOpen, activeGeneratedUIId, generateWorkflow, exportDesign, toggleChat, closeChat } = useGlobalChat()
 
     const draftShape = getDraftShapes()
+    const selectionBox = getSelectionBox()
     const freeDrawPoints = getFreeDrawPoints()
 
   return (
@@ -99,6 +101,10 @@ const InfiniteCanvas = () => {
                 {shapes.map((shape) => (
                     <SelectionOverlay key={`select-${shape.id}`} shape={shape} isSelected={!!selectedShapes[shape.id]} />
                 ))}
+
+                {selectionBox && (
+                    <SelectionBox start={selectionBox.start} current={selectionBox.current} />
+                )}
 
                 {draftShape && draftShape.type === 'frame' && (
                     <FramePreview startWorld={draftShape.start} currentWorld={draftShape.current} />

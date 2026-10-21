@@ -1,5 +1,19 @@
 import { Shape } from '@/redux/slice/shapes'
+import { Point } from '@/redux/slice/viewport'
 import { memo } from 'react'
+
+// The box drawn while dragging from empty canvas to select shapes
+export const SelectionBox = ({ start, current }: { start: Point; current: Point }) => (
+    <div
+        className="absolute pointer-events-none border border-blue-500 bg-blue-500/10"
+        style={{
+            left: Math.min(start.x, current.x),
+            top: Math.min(start.y, current.y),
+            width: Math.abs(current.x - start.x),
+            height: Math.abs(current.y - start.y),
+        }}
+    />
+)
 
 interface SelectionOverlayProps {
     shape: Shape

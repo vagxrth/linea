@@ -1,7 +1,7 @@
 'use client'
 
 import { useGenerateWorkflowMutation } from "@/redux/api/generation"
-import { addArrow, addEllipse, addFrame, addFreeDrawShape, addGeneratedUI, addLine, addRect, addText, clearSelection, FrameShape, removeShape, selectShape, setTool, Shape, ShapeUpdate, Tool, updateShape, updateShapes, undo, redo, recordHistory } from "@/redux/slice/shapes"
+import { addArrow, addEllipse, addFrame, addFreeDrawShape, addGeneratedUI, addLine, addRect, addText, clearSelection, FrameShape, removeShape, selectAll, selectShape, setSelection, setTool, Shape, ShapeUpdate, Tool, updateShape, updateShapes, undo, redo, recordHistory } from "@/redux/slice/shapes"
 import { handToolDisable, handToolEnable, panEnd, panMove, panStart, Point, screenToWorld, wheelPan, wheelZoom } from "@/redux/slice/viewport"
 import { AppDispatch, AppStore, useAppDispatch, useAppSelector, useAppStore } from "@/redux/store"
 import { nanoid } from "@reduxjs/toolkit"
@@ -20,6 +20,16 @@ interface DraftShape {
     type: 'frame' | 'rect' | 'ellipse' | 'arrow' | 'line'
     start: Point
     current: Point
+}
+
+// The box drawn by dragging on empty canvas, which selects the shapes fully inside it
+interface SelectionBox {
+    start: Point
+    current: Point
+    // Shapes that stay selected: the earlier selection when Shift is held
+    base: string[]
+    // The selection the box last applied, so moves that don't change it dispatch nothing
+    applied: string
 }
 
 const INTERVAL_MS = 8
@@ -59,6 +69,7 @@ export const useCanvas = () => {
 
     const draftShapeRef = useRef<DraftShape | null>(null)
     const freeDrawPointRef = useRef<Point[]>([])
+    const selectionBoxRef = useRef<SelectionBox | null>(null)
 
     const spacePress = useRef(false)
     const drawingRef = useRef(false)
@@ -212,6 +223,54 @@ export const useCanvas = () => {
         return null
     }
 
+    // The area each shape covers, matching the areas clicks hit
+    const getShapeBounds = (shape: Shape): { x: number; y: number; w: number; h: number } => {
+        switch (shape.type) {
+            case 'frame':
+            case 'rect':
+            case 'ellipse':
+            case 'generatedui':
+                return { x: shape.x, y: shape.y, w: shape.w, h: shape.h }
+            case 'freedraw': {
+                const xs = shape.points.map((p) => p.x)
+                const ys = shape.points.map((p) => p.y)
+                const x = Math.min(...xs)
+                const y = Math.min(...ys)
+                return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y }
+            }
+            case 'arrow':
+            case 'line':
+                return {
+                    x: Math.min(shape.startX, shape.endX),
+                    y: Math.min(shape.startY, shape.endY),
+                    w: Math.abs(shape.endX - shape.startX),
+                    h: Math.abs(shape.endY - shape.startY),
+                }
+            case 'text':
+                return {
+                    x: shape.x,
+                    y: shape.y,
+                    w: Math.max(shape.text.length * (shape.fontSize * 0.6), 100) + 8,
+                    h: shape.fontSize * 1.2 + 8,
+                }
+        }
+    }
+
+    // Only shapes fully inside count, so a box that starts outside a frame can pick shapes within
+    // it without picking the frame
+    const getShapesInBox = (a: Point, b: Point): string[] => {
+        const left = Math.min(a.x, b.x)
+        const right = Math.max(a.x, b.x)
+        const top = Math.min(a.y, b.y)
+        const bottom = Math.max(a.y, b.y)
+        return shapeList
+            .filter((shape) => {
+                const r = getShapeBounds(shape)
+                return r.x >= left && r.y >= top && r.x + r.w <= right && r.y + r.h <= bottom
+            })
+            .map((shape) => shape.id)
+    }
+
     const schedulePanMove = (p: Point) => {
         pendingPanPointRef.current = p
         if (panRef.current != null) return
@@ -350,6 +409,10 @@ export const useCanvas = () => {
                             dispatch(clearSelection())
                             blurActiveTextInput()
                         }
+                        // Dragging from empty canvas draws a selection box. With Shift held, what it
+                        // selects is added to the current selection.
+                        const base = e.shiftKey ? Object.keys(selectedShapes) : []
+                        selectionBoxRef.current = { start: world, current: world, base, applied: base.join(',') }
                     }
                 } else if (currentTool === 'eraser') {
                     erasingRef.current = true
@@ -405,6 +468,18 @@ export const useCanvas = () => {
                 dispatch(removeShape(hitShape.id))
                 erasedShapeRef.current.add(hitShape.id)
             }
+        }
+
+        const box = selectionBoxRef.current
+        if (box) {
+            box.current = world
+            const ids = [...new Set([...box.base, ...getShapesInBox(box.start, world)])]
+            const applied = ids.join(',')
+            if (applied !== box.applied) {
+                box.applied = applied
+                dispatch(setSelection(ids))
+            }
+            requestRender()
         }
 
         if (
@@ -564,6 +639,11 @@ export const useCanvas = () => {
             initialShapePositionRef.current = {}
         }
 
+        if (selectionBoxRef.current) {
+            selectionBoxRef.current = null
+            requestRender()
+        }
+
         if (erasingRef.current) {
             erasingRef.current = false
             erasedShapeRef.current.clear()
@@ -603,6 +683,13 @@ export const useCanvas = () => {
                 spacePress.current = true
                 dispatch(handToolEnable());
             }
+        }
+
+        // Select all: Cmd/Ctrl+A. It also switches to the select tool, so the shapes can be moved.
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a' && !isTyping) {
+            e.preventDefault()
+            dispatch(setTool('select'))
+            dispatch(selectAll())
         }
 
         // Undo: Cmd+Z
@@ -806,6 +893,7 @@ export const useCanvas = () => {
     }
 
     const getDraftShapes = (): DraftShape | null => draftShapeRef.current
+    const getSelectionBox = (): SelectionBox | null => selectionBoxRef.current
     const getFreeDrawPoints = (): ReadonlyArray<Point> => freeDrawPointRef.current
 
     return {
@@ -823,6 +911,7 @@ export const useCanvas = () => {
         attachCanvasRef,
         selectTool,
         getDraftShapes,
+        getSelectionBox,
         getFreeDrawPoints,
 
         sidebarOpen,
