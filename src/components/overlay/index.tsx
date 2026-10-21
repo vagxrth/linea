@@ -1,14 +1,16 @@
 import { Shape } from '@/redux/slice/shapes'
+import { memo } from 'react'
 
 interface SelectionOverlayProps {
     shape: Shape
     isSelected: boolean
 }
 
-export const SelectionOverlay = ({
+// Only re-renders when its shape or selection changes, not whenever any shape moves
+export const SelectionOverlay = memo(function SelectionOverlay({
     shape,
     isSelected,
-}: SelectionOverlayProps) => {
+}: SelectionOverlayProps) {
     if (!isSelected) return null
 
     // Get bounding box based on shape type
@@ -170,4 +172,4 @@ export const SelectionOverlay = ({
             )}
         </div>
     )
-}
+})
