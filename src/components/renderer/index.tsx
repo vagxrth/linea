@@ -19,7 +19,7 @@ const ShapeRenderer = ({
     shape: Shape,
     toggleInspiration: () => void,
     toggleChat: (generatedUIID: string) => void,
-    generateWorkflow: (generatedUIID: string) => void,
+    generateWorkflow: (generatedUIID: string) => Promise<void>,
     exportDesign: (generatedUIID: string, element: HTMLElement | null) => void
 }) => {
   switch (shape.type) {

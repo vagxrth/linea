@@ -1,6 +1,5 @@
 'use client'
 
-import { useGenerateWorkflowMutation } from "@/redux/api/generation"
 import { addArrow, addEllipse, addFrame, addFreeDrawShape, addGeneratedUI, addLine, addRect, addText, clearSelection, FrameShape, removeShape, selectAll, selectShape, setSelection, setTool, Shape, ShapeUpdate, Tool, updateShape, updateShapes, undo, redo, recordHistory } from "@/redux/slice/shapes"
 import { handToolDisable, handToolEnable, panEnd, panMove, panStart, Point, screenToWorld, wheelPan, wheelZoom } from "@/redux/slice/viewport"
 import { AppDispatch, AppStore, useAppDispatch, useAppSelector, useAppStore } from "@/redux/store"
@@ -1287,11 +1286,16 @@ export const useInspiration = () => {
 export const useWorkflowGeneration = () => {
     const dispatch = useAppDispatch()
     const store = useAppStore()
-    const [, { isLoading: isGeneratingWorkflow }] = useGenerateWorkflowMutation()
+    // Designs whose workflow is being generated
+    const generatingRef = useRef<Set<string>>(new Set())
 
     // Keeps the same identity, so the designs it's passed to don't re-render. The design is read
     // when the button is pressed rather than subscribed to, for the same reason.
     const generateWorkflow = useCallback(async (generatedUIId: string) => {
+        // One workflow at a time per design, so a double-click doesn't start, and pay for, a second
+        if (generatingRef.current.has(generatedUIId)) return
+        generatingRef.current.add(generatedUIId)
+
         try {
             const currentShape = store.getState().shapes.shapes.entities[generatedUIId]
 
@@ -1417,11 +1421,12 @@ export const useWorkflowGeneration = () => {
             toast.error('Failed to generate workflow pages', {
                 id: 'workflow-generation',
             })
+        } finally {
+            generatingRef.current.delete(generatedUIId)
         }
     }, [dispatch, store])
     return {
         generateWorkflow,
-        isGeneratingWorkflow,
     }
 }
 
