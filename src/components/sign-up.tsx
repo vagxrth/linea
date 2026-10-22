@@ -8,11 +8,25 @@ import { useAuth } from '@/hooks/use-auth'
 import { Loader2 } from 'lucide-react'
 import Google from '@/components/google'
 import Image from 'next/image'
+import VerifyEmail from '@/components/verify-email'
 
 export default function SignUpPage() {
 
-  const { signUpForm, handleSignUp, isLoading } = useAuth();
+  const { signUpForm, handleSignUp, isLoading, verifyingEmail, verifyForm, handleVerifyEmail, resendVerificationCode, cancelVerification } = useAuth();
   const { register, handleSubmit, formState: { errors } } = signUpForm;
+
+  if (verifyingEmail) {
+    return (
+      <VerifyEmail
+        email={verifyingEmail}
+        form={verifyForm}
+        onVerify={handleVerifyEmail}
+        onResend={resendVerificationCode}
+        onCancel={cancelVerification}
+        isLoading={isLoading}
+      />
+    )
+  }
 
   return (
     <section className="flex min-h-screen bg-zinc-50 px-4 py-16 md:py-32 dark:bg-transparent">
