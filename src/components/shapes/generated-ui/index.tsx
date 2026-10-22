@@ -2,19 +2,20 @@ import { LiquidGlassButton } from '@/components/liquid-glass'
 import { useUpdateContainer } from '@/hooks/use-styles'
 import { GeneratedUIShape } from '@/redux/slice/shapes'
 import { Download, MessageCircle, Workflow } from 'lucide-react'
-import React from 'react'
+import React, { useState } from 'react'
 import DesignFrame from './frame'
 
 type Props = {
     shape: GeneratedUIShape,
     toggleChat: (generatedUIID: string) => void,
-    generateWorkflow: (generatedUIID: string) => void,
+    generateWorkflow: (generatedUIID: string) => Promise<void>,
     exportDesign: (generatedUIID: string, element: HTMLElement | null) => void
 }
 
 const GeneratedUI = ({ shape, toggleChat, generateWorkflow, exportDesign }: Props) => {
 
     const { containerRef, html, setFrameHeight } = useUpdateContainer(shape)
+    const [isGeneratingWorkflow, setIsGeneratingWorkflow] = useState(false)
 
     const handleExportDesign = () => {
         if (!shape.uiSpecData) {
@@ -23,8 +24,14 @@ const GeneratedUI = ({ shape, toggleChat, generateWorkflow, exportDesign }: Prop
         exportDesign(shape.id, containerRef.current);
     }
 
-    const handleGenerateWorkflow = () => {
-        generateWorkflow(shape.id);
+    // The button stays disabled until the workflow finishes, like Generate Design on frames
+    const handleGenerateWorkflow = async () => {
+        setIsGeneratingWorkflow(true);
+        try {
+            await generateWorkflow(shape.id);
+        } finally {
+            setIsGeneratingWorkflow(false);
+        }
     }
 
     const handleToggleChat = () => {
@@ -61,10 +68,12 @@ const GeneratedUI = ({ shape, toggleChat, generateWorkflow, exportDesign }: Prop
                             size='sm'
                             variant='subtle'
                             onClick={handleGenerateWorkflow}
+                            disabled={isGeneratingWorkflow}
+                            className={isGeneratingWorkflow ? 'animate-pulse' : ''}
                             style={{ pointerEvents: 'auto' }}
                         >
-                            <Workflow size={12} />
-                            Generate Workflow
+                            <Workflow size={12} className={isGeneratingWorkflow ? 'animate-spin' : ''} />
+                            {isGeneratingWorkflow ? 'Generating...' : 'Generate Workflow'}
                         </LiquidGlassButton>
                         <LiquidGlassButton
                             size='sm'
