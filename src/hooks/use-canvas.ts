@@ -676,6 +676,9 @@ export const useCanvas = () => {
             target.tagName === 'TEXTAREA' ||
             target.isContentEditable
         )
+        // Letter keys compare in lower case. With Shift held, browsers report "Z", except Chrome and
+        // Safari on a Mac, which report "z" while Cmd is down. Caps Lock also turns "z" into "Z".
+        const key = e.key.toLowerCase()
 
         // Holding Space pans with the left button. Shift is left free for adding shapes to the selection.
         if (e.code === 'Space' && !isTyping) {
@@ -687,7 +690,7 @@ export const useCanvas = () => {
         }
 
         // Select all: Cmd/Ctrl+A. It also switches to the select tool, so the shapes can be moved.
-        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a' && !isTyping) {
+        if ((e.metaKey || e.ctrlKey) && key === 'a' && !isTyping) {
             e.preventDefault()
             dispatch(setTool('select'))
             dispatch(selectAll())
@@ -704,14 +707,14 @@ export const useCanvas = () => {
             dispatch(clearSelection())
         }
 
-        // Undo: Cmd+Z
-        if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey && !isTyping) {
+        // Undo: Cmd/Ctrl+Z
+        if ((e.metaKey || e.ctrlKey) && key === 'z' && !e.shiftKey && !isTyping) {
             e.preventDefault()
             dispatch(undo())
         }
 
-        // Redo: Cmd+Shift+Z
-        if ((e.metaKey || e.ctrlKey) && ((e.key === 'z' && e.shiftKey) || e.key === 'y') && !isTyping) {
+        // Redo: Cmd/Ctrl+Shift+Z, or Cmd/Ctrl+Y
+        if ((e.metaKey || e.ctrlKey) && ((key === 'z' && e.shiftKey) || key === 'y') && !isTyping) {
             e.preventDefault()
             dispatch(redo())
         }
