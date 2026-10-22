@@ -1,6 +1,6 @@
 'use client'
 
-import { addArrow, addEllipse, addFrame, addFreeDrawShape, addGeneratedUI, addLine, addRect, addText, clearSelection, FrameShape, removeShape, selectAll, selectShape, setSelection, setTool, Shape, ShapeUpdate, Tool, updateShape, updateShapes, undo, redo, recordHistory } from "@/redux/slice/shapes"
+import { addArrow, addEllipse, addFrame, addFreeDrawShape, addGeneratedUI, addLine, addRect, addText, clearSelection, deleteSelected, FrameShape, removeShape, selectAll, selectShape, setSelection, setTool, Shape, ShapeUpdate, Tool, updateShape, updateShapes, undo, redo, recordHistory } from "@/redux/slice/shapes"
 import { handToolDisable, handToolEnable, panEnd, panMove, panStart, Point, screenToWorld, wheelPan, wheelZoom } from "@/redux/slice/viewport"
 import { AppDispatch, AppStore, useAppDispatch, useAppSelector, useAppStore } from "@/redux/store"
 import { nanoid } from "@reduxjs/toolkit"
@@ -667,12 +667,14 @@ export const useCanvas = () => {
     }
 
     const onKeyDown = (e: KeyboardEvent): void => {
-        // Skip keyboard shortcuts when user is typing in an input or textarea
-        const activeElement = document.activeElement
-        const isTyping = activeElement && (
-            activeElement.tagName === 'INPUT' ||
-            activeElement.tagName === 'TEXTAREA' ||
-            (activeElement as HTMLElement).isContentEditable
+        // Skip keyboard shortcuts when user is typing in an input or textarea. This checks the key's
+        // target rather than the focused element, because a text box can close itself on the same
+        // key (Escape ends editing) before this runs, and that Escape shouldn't also deselect.
+        const target = e.target as HTMLElement | null
+        const isTyping = target && (
+            target.tagName === 'INPUT' ||
+            target.tagName === 'TEXTAREA' ||
+            target.isContentEditable
         )
 
         // Holding Space pans with the left button. Shift is left free for adding shapes to the selection.
@@ -689,6 +691,17 @@ export const useCanvas = () => {
             e.preventDefault()
             dispatch(setTool('select'))
             dispatch(selectAll())
+        }
+
+        // Delete or Backspace removes the selected shapes, as one undo step
+        if ((e.key === 'Delete' || e.key === 'Backspace') && !isTyping) {
+            e.preventDefault()
+            dispatch(deleteSelected())
+        }
+
+        // Escape clears the selection
+        if (e.key === 'Escape' && !isTyping) {
+            dispatch(clearSelection())
         }
 
         // Undo: Cmd+Z
