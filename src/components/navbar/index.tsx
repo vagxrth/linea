@@ -2,7 +2,7 @@
 
 import { useQuery } from 'convex/react';
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation'
+import { useParams, usePathname, useSearchParams } from 'next/navigation'
 import React from 'react'
 import { Id } from '../../../convex/_generated/dataModel';
 import { api } from '../../../convex/_generated/api';
@@ -38,6 +38,10 @@ const Navbar = () => {
     const { onManage, isSubscribed, isFetching } = useSubscription();
 
     const me = useAppSelector((state) => state.profile)
+    // The profile is null when the root layout couldn't load it. The URL's name segment only labels
+    // the page, so the links reuse the current one then.
+    const { session } = useParams<{ session: string }>()
+    const slug = me?.name ?? session
 
     const pathname = usePathname();
     const hasCanvas = pathname.includes('canvas');
@@ -53,12 +57,12 @@ const Navbar = () => {
     const tabs: TabProps[] = [
         {
             label: "Canvas",
-            href: `/dashboard/${me.name}/canvas?project=${projectId}`,
+            href: `/dashboard/${slug}/canvas?project=${projectId}`,
             icon: <Hash className='h-4 w-4' />
         },
         {
             label: "Style Guide",
-            href: `/dashboard/${me.name}/style-guide?project=${projectId}`,
+            href: `/dashboard/${slug}/style-guide?project=${projectId}`,
             icon: <LayoutTemplate className='h-4 w-4' />
         }
     ]
@@ -66,7 +70,7 @@ const Navbar = () => {
     return (
         <div className='flex items-center justify-between p-6 fixed top-0 left-0 right-0 z-50'>
             <div className='flex items-center gap-4'>
-                <Link href={`/dashboard/${me.name}`} className='w-16 h-16 rounded-full border-none bg-transparent flex items-center justify-center'>
+                <Link href={`/dashboard/${slug}`} className='w-16 h-16 rounded-full border-none bg-transparent flex items-center justify-center'>
                     <Image src='/images/logo.webp' alt="Linea" width={64} height={64} className='rounded-lg' />
                 </Link>
                 {(hasCanvas || hasStyleGuide) && (
@@ -106,7 +110,7 @@ const Navbar = () => {
                 {/* Subscribers manage their plan in Polar's portal; nothing shows until the check loads */}
                 {!hasCanvas && !hasStyleGuide && isSubscribed !== undefined && (
                     <Button
-                        onClick={isSubscribed ? onManage : () => router.push(`/billing/${me.name}`)}
+                        onClick={isSubscribed ? onManage : () => router.push(`/billing/${slug}`)}
                         disabled={isFetching}
                         className='backdrop-blur-xl bg-white/[0.08] border border-white/[0.12] saturate-150 rounded-full hover:bg-white/[0.12] hover:border-white/[0.16] transition-all duration-200 active:bg-white/[0.06] active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-white/20 text-white font-medium text-sm px-4 py-2 h-auto'
                     >
@@ -120,7 +124,7 @@ const Navbar = () => {
                     <DropdownMenuTrigger asChild>
                         <button className='cursor-pointer focus:outline-none rounded-full'>
                             <Avatar className='size-12 ml-2'>
-                                <AvatarImage src={me.image || ''}/>
+                                <AvatarImage src={me?.image || ''}/>
                                 <AvatarFallback>
                                     <User className='size-5 text-black' />
                                 </AvatarFallback>
