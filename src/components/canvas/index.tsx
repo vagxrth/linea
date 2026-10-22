@@ -58,7 +58,7 @@ const InfiniteCanvas = () => {
 
 
 
-        <div ref={attachCanvasRef} role='application' aria-label='Infinite Canvas' className={cn(
+        <div ref={attachCanvasRef} id='infinite-canvas' role='application' aria-label='Infinite Canvas' className={cn(
             'relative w-full h-full overflow-hidden select-none z-0',
             {
                 'cursor-grabbing': viewport.mode === 'panning',

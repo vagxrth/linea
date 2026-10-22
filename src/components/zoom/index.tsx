@@ -6,6 +6,15 @@ import { useDispatch } from 'react-redux';
 import { setScale } from '@/redux/slice/viewport';
 import { useAppSelector } from '@/redux/store';
 
+// The middle of the canvas, in the canvas's own coordinates, which start at its top-left corner.
+// Zooming around it keeps what's in the center of the view in place.
+const getViewCenter = () => {
+    const canvas = document.getElementById('infinite-canvas')
+    if (!canvas) return undefined
+    const { width, height } = canvas.getBoundingClientRect()
+    return { x: width / 2, y: height / 2 }
+}
+
 const Zoom = () => {
     const dispatch = useDispatch()
     // Not useCanvas(): every instance of it registers the canvas keyboard shortcuts again
@@ -15,12 +24,12 @@ const Zoom = () => {
 
     const handleZoomOut = () => {
         const newScale = Math.max(scale / 1.2, minScale)
-        dispatch(setScale({ scale: newScale }))
+        dispatch(setScale({ scale: newScale, originScreen: getViewCenter() }))
     }
 
     const handleZoomIn = () => {
         const newScale = Math.min(scale * 1.2, maxScale)
-        dispatch(setScale({ scale: newScale }))
+        dispatch(setScale({ scale: newScale, originScreen: getViewCenter() }))
     }
 
     return (
