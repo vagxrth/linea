@@ -1,9 +1,8 @@
-import { InspirationImagesQuery, StyleGuideQuery } from "@/convex/query.config";
-import { chargedGeneration, checkCredits } from "@/lib/credits";
-import { prompts } from "@/prompts";
-import { google } from "@ai-sdk/google";
-import { streamText } from "ai";
+import { checkCredits } from "@/lib/credits";
+import { generationFailed, getInspirationImageUrls, getStyleGuide, imageParts, streamDesign, styleGuideMissing, styleGuideSections } from "@/lib/generation";
 import { NextRequest, NextResponse } from "next/server";
+
+const COST = 1
 
 export async function POST(request: NextRequest) {
     try {
@@ -19,35 +18,13 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        const creditError = await checkCredits(1)
+        const creditError = await checkCredits(COST)
         if (creditError) return creditError
 
-        const styleGuide = await StyleGuideQuery(projectId)
-        const styleGuideData = styleGuide.styleGuide._valueJSON as unknown as {
-            colorSections: unknown[]
-            typographySections: unknown[]
-        } | null
+        const guide = await getStyleGuide(projectId)
+        if (!guide) return styleGuideMissing('redesigning')
 
-        // Check if style guide exists
-        if (!styleGuideData || !styleGuideData.colorSections || !styleGuideData.typographySections) {
-            return NextResponse.json(
-                { 
-                    error: 'Style guide not found', 
-                    details: 'Please generate a style guide first before redesigning. Go to the Style Guide tab and create one from your moodboard images.' 
-                },
-                { status: 400 }
-            )
-        }
-
-        const inspirationResult = await InspirationImagesQuery(projectId)
-        const images = inspirationResult.images._valueJSON as unknown as {
-            url: string
-        }[]
-
-        const imageUrls = images.map((img) => img.url).filter(Boolean)
-
-        const colors = styleGuideData.colorSections || []
-        const typography = styleGuideData.typographySections || []
+        const imageUrls = await getInspirationImageUrls(projectId)
 
         let userPrompt = `Please redesign this UI based on my request: "${userMessage}"`
 
@@ -61,50 +38,7 @@ export async function POST(request: NextRequest) {
             console.log('No wireframe context provided for redesign')
         }
 
-        if (colors.length > 0) {
-            userPrompt += `\n\nStyle Guide Colors:\n${(
-                colors as Array<{
-                    swatches: Array<{
-                        name: string;
-                        hexColor: string;
-                        description: string;
-                    }>;
-                }>
-            )
-                .map((color) =>
-                    color.swatches
-                        .map(
-                            (swatch) =>
-                                `${swatch.name}: ${swatch.hexColor}, ${swatch.description}`
-                        )
-                        .join(", ")
-                )
-                .join(", ")}`
-        }
-
-        if (typography.length > 0) {
-            userPrompt += `\n\nTypography:\n${(
-                typography as Array<{
-                    styles: Array<{
-                        name: string;
-                        description: string;
-                        fontFamily: string;
-                        fontWeight: string;
-                        fontSize: string;
-                        lineHeight: string;
-                    }>;
-                }>
-            )
-                .map((typo) =>
-                    typo.styles
-                        .map(
-                            (style) =>
-                                `${style.name}: ${style.description}, ${style.fontFamily}, ${style.fontWeight}, ${style.fontSize}, ${style.lineHeight}`
-                        )
-                        .join(", ")
-                )
-                .join(", ")}`
-        }
+        userPrompt += styleGuideSections(guide)
 
         if (imageUrls.length > 0) {
             userPrompt += `\n\nInspiration Images Available: ${imageUrls.length} reference images for visual style and inspiration.`
@@ -112,38 +46,13 @@ export async function POST(request: NextRequest) {
 
         userPrompt += `\n\nPlease generate the complete redesigned UI based on my request while following the style guide and maintaining professional quality.`
 
-        const generation = chargedGeneration(request, 1)
-        const result = streamText({
-            model: google('gemini-2.5-flash'),
-            messages: [
-                {
-                    role: 'user',
-                    content: [
-                        {
-                            type: 'text',
-                            text: userPrompt,
-                        },
-                        ...(hasWireframe ? [{ type: 'image' as const, image: wireframeSnapshot as string }] : []),
-                        ...imageUrls.map((url) => ({
-                            type: 'image' as const,
-                            image: url,
-                        })),
-                    ],
-                }
-            ],
-            system: prompts.generatedUi.system,
-            temperature: 0.7,
-            abortSignal: generation.abortSignal,
-            onError: generation.onError,
-        })
-
-        return generation.respond(result.textStream)
+        return streamDesign(request, COST, [
+            { type: 'text', text: userPrompt },
+            ...(hasWireframe ? [{ type: 'image' as const, image: wireframeSnapshot as string }] : []),
+            ...imageParts(imageUrls),
+        ])
 
     } catch (error) {
-        console.error('Redesign failed: ', error)
-        return NextResponse.json(
-            { error: 'Failed to process redesign request', details: error instanceof Error ? error.message : 'Unknown error' },
-            { status: 500 }
-        )   
+        return generationFailed('Failed to process redesign request', error)
     }
 }

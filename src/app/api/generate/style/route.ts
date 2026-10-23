@@ -1,15 +1,17 @@
 import { ConsumeCreditsQuery, MoodboardImagesQuery } from "@/convex/query.config";
 import { checkCredits, notEnoughCredits } from "@/lib/credits";
+import { generationFailed, model } from "@/lib/generation";
 import { MoodboardImage } from "@/hooks/use-styles";
 import { prompts } from "@/prompts";
 import { NextRequest, NextResponse } from "next/server";
 import { generateObject } from "ai";
-import { google } from "@ai-sdk/google"
 import z from "zod";
 import { fetchMutation } from "convex/nextjs";
 import { api } from "../../../../../convex/_generated/api";
 import { Id } from "../../../../../convex/_generated/dataModel";
 import { convexAuthNextjsToken } from "@convex-dev/auth/nextjs/server";
+
+const COST = 1
 
 const ColorSwatchSchema = z.object({
     name: z.string(),
@@ -56,7 +58,7 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        const creditError = await checkCredits(1)
+        const creditError = await checkCredits(COST)
         if (creditError) return creditError
 
         const moodboardImages = await MoodboardImagesQuery(projectId)
@@ -93,7 +95,7 @@ export async function POST(request: NextRequest) {
         And exactly 3 typography sections with appropriate titles (e.g., "Headings", "Body", "UI Elements").`;
 
         const result = await generateObject({
-            model: google('gemini-2.5-flash'),
+            model,
             schema: StyleGuideSchema,
             system: systemPrompt,
             messages: [
@@ -122,7 +124,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Charge only now that the model has produced a usable style guide
-        const { ok, balance } = await ConsumeCreditsQuery({ amount: 1 })
+        const { ok, balance } = await ConsumeCreditsQuery({ amount: COST })
         if (!ok) return notEnoughCredits()
 
         await fetchMutation(
@@ -142,11 +144,6 @@ export async function POST(request: NextRequest) {
         })
 
     } catch (error) {
-        return NextResponse.json({
-            error: 'Failed to generate style guide',
-            details: error instanceof Error ? error.message : 'Unknown error',
-        }, {
-            status: 500,
-        })
+        return generationFailed('Failed to generate style guide', error)
     }
 }
