@@ -456,7 +456,9 @@ export const useCanvas = () => {
         const local = getLocalPoint(e.nativeEvent)
         const world = screenToWorld(local, viewport.translate, viewport.scale)
 
-        if (viewport.mode === 'panning' || viewport.mode === 'spacePanning') {
+        // Only once a pan has started. Space pressed during another drag turns on the hand tool for the
+        // next press, and the drag carries on instead of freezing.
+        if (viewport.panStartScreen) {
             schedulePanMove(local)
             return
         }
@@ -728,15 +730,30 @@ export const useCanvas = () => {
         }
     }
 
+    // A key released while the page is in the background never reaches it. Space would stay held,
+    // and every click would pan until Space was pressed again, so leaving the page lets go of it.
+    const onPageLeave = (): void => {
+        spacePress.current = false
+        dispatch(panEnd())
+    }
+
+    const onVisibilityChange = (): void => {
+        if (document.hidden) onPageLeave()
+    }
+
     // Only the canvas may call useCanvas(): each instance registers these listeners (and the
     // resize ones below), so a second caller makes one Cmd+Z undo twice
     useEffect(() => {
         document.addEventListener('keydown', onKeyDown)
         document.addEventListener('keyup', onKeyUp)
+        window.addEventListener('blur', onPageLeave)
+        document.addEventListener('visibilitychange', onVisibilityChange)
 
         return () => {
             document.removeEventListener('keydown', onKeyDown)
             document.removeEventListener('keyup', onKeyUp)
+            window.removeEventListener('blur', onPageLeave)
+            document.removeEventListener('visibilitychange', onVisibilityChange)
             if (freehandRef.current) window.cancelAnimationFrame(freehandRef.current)
             if (panRef.current) window.cancelAnimationFrame(panRef.current)
             if (moveFrameRef.current) window.cancelAnimationFrame(moveFrameRef.current)

@@ -1,6 +1,8 @@
 import type { UnknownAction } from "@reduxjs/toolkit"
 import { describe, expect, it } from "vitest"
 import reducer, {
+    handToolDisable,
+    handToolEnable,
     panEnd,
     panMove,
     panStart,
@@ -97,5 +99,15 @@ describe("panning", () => {
         const ended = run([panEnd(), panMove({ x: 500, y: 500 })], moved)
         expect(ended.mode).toBe("idle")
         expect(ended.translate).toEqual({ x: 70, y: -30 })
+    })
+
+    it("ends a Space pan when Space is let go before the mouse button", () => {
+        const moved = run(
+            [handToolEnable(), panStart({ screen: { x: 100, y: 100 }, mode: "spacePanning" }), panMove({ x: 130, y: 90 })],
+            panned
+        )
+        // Holding Space again and moving the pointer without a click leaves the view where it is
+        const state = run([handToolDisable(), handToolEnable(), panMove({ x: 300, y: 300 })], moved)
+        expect(state.translate).toEqual({ x: 70, y: -30 })
     })
 })
