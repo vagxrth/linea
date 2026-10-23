@@ -185,8 +185,13 @@ const viewportSlice = createSlice({
     handToolEnable(state) {
       if (state.mode === "idle") state.mode = "spacePanning";
     },
+    // Letting go of Space also ends a pan still in progress. Its start point would otherwise stay
+    // behind, and the next Space press would pan the view as the pointer moved, without a click.
     handToolDisable(state) {
-      if (state.mode === "spacePanning") state.mode = "idle";
+      if (state.mode !== "spacePanning") return;
+      state.mode = "idle";
+      state.panStartScreen = null;
+      state.panStartTranslate = null;
     },
     centerOnWorld(
       state,
