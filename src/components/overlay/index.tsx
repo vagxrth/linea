@@ -1,3 +1,4 @@
+import { textSelectionBox } from '@/lib/text-box'
 import { Shape } from '@/redux/slice/shapes'
 import { Point } from '@/redux/slice/viewport'
 import { memo } from 'react'
@@ -67,20 +68,7 @@ export const SelectionOverlay = memo(function SelectionOverlay({
                     h: lineMaxY - lineMinY + 10,
                 }
             case 'text':
-                // Account for text padding (px-2 py-1 = 8px horizontal, 4px vertical)
-                const textWidth = Math.max(
-                    shape.text.length * (shape.fontSize * 0.6),
-                    100
-                ) // Min width for empty/short text
-                const textHeight = shape.fontSize * 1.2
-                const paddingX = 8 // px-2 = 8px padding
-                const paddingY = 4 // py-1 = 4px padding
-                return {
-                    x: shape.x - 2, // Small margin around the text box
-                    y: shape.y - 2,
-                    w: textWidth + paddingX + 4, // Include padding + margin
-                    h: textHeight + paddingY + 4,
-                }
+                return textSelectionBox(shape)
             default:
                 return { x: 0, y: 0, w: 0, h: 0 }
         }
@@ -105,7 +93,7 @@ export const SelectionOverlay = memo(function SelectionOverlay({
 
         // Add data attributes to identify the resize operation
         const event = new CustomEvent('shape-resize-start', {
-            detail: { shapeId: shape.id, corner, bounds },
+            detail: { shapeId: shape.id, corner, bounds, clientX: e.clientX, clientY: e.clientY },
         })
         window.dispatchEvent(event)
     }
