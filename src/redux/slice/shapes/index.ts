@@ -433,10 +433,7 @@ const shapesSlice = createSlice({
         removeShape(state, action: PayloadAction<string>) {
             pushHistory(state);
             const id = action.payload;
-            const shape = state.shapes.entities[id];
-            if (shape?.type === "frame") {
-                state.frameCounter = Math.max(0, state.frameCounter - 1);
-            }
+            // frameCounter stays as it is when a frame is removed, so a new frame never repeats a number
             shapesAdapter.removeOne(state.shapes, id);
             delete state.selected[id];
         },
@@ -493,7 +490,12 @@ const shapesSlice = createSlice({
             state.shapes = action.payload.shapes;
             state.tool = action.payload.tool ?? "select";
             state.selected = action.payload.selected ?? {};
-            state.frameCounter = action.payload.frameCounter;
+            // Projects saved while erasing a frame lowered the counter can hold a count below their
+            // highest frame number, so take the higher of the two and new frames don't repeat a number
+            state.frameCounter = Object.values(action.payload.shapes.entities).reduce(
+                (highest, shape) => (shape.type === "frame" ? Math.max(highest, shape.frameNumber) : highest),
+                action.payload.frameCounter
+            );
             // Clear history when loading a new project
             state.past = [];
             state.future = [];
