@@ -485,9 +485,6 @@ const shapesSlice = createSlice({
             state,
             action: PayloadAction<{
                 shapes: EntityState<Shape, string>;
-                // Only present in projects saved before autosave stopped persisting them
-                tool?: Tool;
-                selected?: SelectionMap;
                 frameCounter: number;
             }>
         ) {
@@ -496,8 +493,11 @@ const shapesSlice = createSlice({
                 .filter((shape) => shape.type === "freedraw" && shape.points.length < MIN_STROKE_POINTS)
                 .map((shape) => shape.id);
             state.shapes = shapesAdapter.removeMany(action.payload.shapes, clicks);
-            state.tool = action.payload.tool ?? "select";
-            state.selected = action.payload.selected ?? {};
+            // A project always opens with the select tool and nothing selected. Projects saved before
+            // autosave stopped storing the tool and selection still hold them, and a saved eraser
+            // would make the first click erase a shape.
+            state.tool = "select";
+            state.selected = {};
             // Projects saved while erasing a frame lowered the counter can hold a count below their
             // highest frame number, so take the higher of the two and new frames don't repeat a number
             state.frameCounter = Object.values(action.payload.shapes.entities).reduce(

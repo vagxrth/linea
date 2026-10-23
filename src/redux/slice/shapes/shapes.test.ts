@@ -148,6 +148,20 @@ describe("pencil strokes", () => {
     })
 })
 
+describe("opening a project", () => {
+    it("starts with the select tool and nothing selected, even when an older save stored them", () => {
+        const saved = run([addRect(rect)])
+        // Projects saved before autosave stopped storing the tool and selection still hold them
+        const olderSave = { shapes: saved.shapes, frameCounter: 0, tool: "eraser" as const, selected: { [ids(saved)[0]]: true as const } }
+
+        const state = run([setTool("rect"), loadProject(olderSave)])
+
+        expect(state.tool).toBe("select")
+        expect(state.selected).toEqual({})
+        expect(ids(state)).toEqual(ids(saved))
+    })
+})
+
 describe("selection", () => {
     it("selects every shape, replaces the selection, and clears it", () => {
         const added = run([addRect(rect), addRect(rect)])
