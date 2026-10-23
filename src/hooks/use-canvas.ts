@@ -1086,8 +1086,8 @@ const renderShapeOnCanvas = (ctx: CanvasRenderingContext2D, shape: Shape, frameX
                 shape.endY - frameY - headLength * Math.sin(angle - Math.PI / 6)
             )
             ctx.lineTo(
-                shape.endX - frameX - headLength * Math.cos(angle - Math.PI / 6),
-                shape.endY - frameY - headLength * Math.sin(angle - Math.PI / 6)
+                shape.endX - frameX - headLength * Math.cos(angle + Math.PI / 6),
+                shape.endY - frameY - headLength * Math.sin(angle + Math.PI / 6)
             )
             ctx.closePath()
             ctx.fill()
