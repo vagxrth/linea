@@ -7,6 +7,7 @@ import { nanoid } from "@reduxjs/toolkit"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useDispatch } from "react-redux"
 import { toast } from "sonner"
+import { resizeText } from '@/lib/text-box'
 import { exportGeneratedUI } from '@/lib/utils';
 import { addErrorMessage, addUserMessage, clearChat, finishedStreamingResponse, initializeChat, startStreamingResponse, updateStreamingContent } from '@/redux/slice/chat';
 
@@ -771,7 +772,7 @@ export const useCanvas = () => {
 
         const handleResizeMove = (e: CustomEvent) => {
             if (!resizingRef.current || !resizingDataRef.current) return
-            const { shapeId, corner, initialBounds } = resizingDataRef.current
+            const { shapeId, corner, initialBounds, startPoint } = resizingDataRef.current
             const { clientX, clientY } = e.detail
 
             const canvasElement = canvasRef.current
@@ -787,7 +788,7 @@ export const useCanvas = () => {
             if (!shape) return
 
             // The first change records the resize's one undo step, so pressing a handle without
-            // dragging adds none. Text has handles but no branch below, so it records nothing.
+            // dragging adds none
             const resize = (patch: Partial<Shape>) => {
                 dispatch(updateShape({ id: shapeId, patch, skipHistory: resizeRecordedRef.current }))
                 resizeRecordedRef.current = true
@@ -890,6 +891,13 @@ export const useCanvas = () => {
                 }
 
                 resize({ startX: newStartX, startY: newStartY, endX: newEndX, endY: newEndY })
+            } else if (shape.type === 'text') {
+                // Text follows how far the pointer has moved since the press, so grabbing a handle
+                // off its center doesn't make the text jump
+                const next = resizeText(shape.text, initialBounds, corner, (clientY - startPoint.y) / viewport.scale)
+                // The position only changes with the font size, so moves too small to change the
+                // size change nothing and record no undo step
+                if (next.fontSize !== shape.fontSize) resize(next)
             }
         }
 
