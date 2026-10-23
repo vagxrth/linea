@@ -1,11 +1,8 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
-import { StyleGuideQuery } from "@/convex/query.config";
-import { chargedGeneration, checkCredits } from "@/lib/credits";
-import { prompts } from "@/prompts";
-import { google } from "@ai-sdk/google";
-import { streamText } from "ai";
+import { checkCredits } from "@/lib/credits";
+import { colorsText, generationFailed, getStyleGuide, streamDesign, styleGuideMissing, typographyText } from "@/lib/generation";
 import { NextRequest, NextResponse } from "next/server";
+
+const COST = 4
 
 export async function POST(request: NextRequest) {
     try {
@@ -19,25 +16,11 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        const creditError = await checkCredits(4)
+        const creditError = await checkCredits(COST)
         if (creditError) return creditError
 
-        const styleGuide = await StyleGuideQuery(projectId)
-        const styleGuideData = styleGuide.styleGuide._valueJSON as unknown as {
-            colorSections: unknown[]
-            typographySections: unknown[]
-        } | null
-
-        // Check if style guide exists
-        if (!styleGuideData || !styleGuideData.colorSections || !styleGuideData.typographySections) {
-            return NextResponse.json(
-                { 
-                    error: 'Style guide not found', 
-                    details: 'Please generate a style guide first before redesigning workflow. Go to the Style Guide tab and create one from your moodboard images.' 
-                },
-                { status: 400 }
-            )
-        }
+        const guide = await getStyleGuide(projectId)
+        if (!guide) return styleGuideMissing('redesigning workflow')
 
         let userPrompt = `CRITICAL: You are redesigning a SPECIFIC WORKFLOW PAGE, not creating a new page from scratch.
             USER REQUEST: "${userMessage}"
@@ -63,57 +46,17 @@ export async function POST(request: NextRequest) {
                 3. DO redesign the specific workflow page shown in the HTML above
                 4. DO apply the user's changes to that specific page
 
-            colors: ${styleGuideData.colorSections
-                .map((color: any) =>
-                    color.swatches
-                        .map((swatch: any) => {
-                            return `${swatch.name}: ${swatch.hexColor}, ${swatch.description}`;
-                        })
-                        .join(", ")
-                )
-                .join(", ")}
+            colors: ${colorsText(guide)}
 
-            typography: ${styleGuideData.typographySections
-                .map((typography: any) =>
-                    typography.styles
-                        .map((style: any) => {
-                            return `${style.name}: ${style.description}, ${style.fontFamily}, ${style.fontWeight}, ${style.fontSize}, ${style.lineHeight}`;
-                        })
-                        .join(", ")
-                )
-                .join(", ")}
+            typography: ${typographyText(guide)}
 
             Please generate the modified version of the provided workflow page HTML with the requested changes applied.`
 
         userPrompt += `\n\nPlease generate a professional redesigned workflow page that incorporates the requested changes while maintaining the core functionality and design consistency.`
 
-        const generation = chargedGeneration(request, 4)
-        const result = streamText({
-            model: google('gemini-2.5-flash'),
-            messages: [
-                {
-                    role: 'user',
-                    content: [
-                        {
-                            type: 'text',
-                            text: userPrompt,
-                        }
-                    ]
-                }
-            ],
-            system: prompts.generatedUi.system,
-            temperature: 0.7,
-            abortSignal: generation.abortSignal,
-            onError: generation.onError,
-        })
-
-        return generation.respond(result.textStream)
+        return streamDesign(request, COST, [{ type: 'text', text: userPrompt }])
 
     } catch (error) {
-        console.error('Workflow redesign failed: ', error)
-        return NextResponse.json(
-            { error: 'Failed to process workflow redesign request', details: error instanceof Error ? error.message : 'Unknown error' },
-            { status: 500 }
-        )
+        return generationFailed('Failed to process workflow redesign request', error)
     }
 }
