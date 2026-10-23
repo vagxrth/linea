@@ -193,7 +193,10 @@ Then point a Polar webhook at `https://<your-deployment>.convex.site/polar/webho
 | `npm run build` | Build for production |
 | `npm start` | Start production server |
 | `npm run lint` | Run ESLint |
+| `npm run typecheck` | Generate Next.js route types, then type-check with TypeScript |
 | `npx convex dev` | Start Convex dev sync |
+
+GitHub runs `npm run typecheck` and `npm run lint` on every pull request and every push to `main` (`.github/workflows/checks.yml`).
 
 ## Database Schema
 
