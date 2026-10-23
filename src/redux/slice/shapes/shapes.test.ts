@@ -1,7 +1,8 @@
-import type { UnknownAction } from "@reduxjs/toolkit"
+import type { EntityState, UnknownAction } from "@reduxjs/toolkit"
 import { describe, expect, it } from "vitest"
 import reducer, {
     addFrame,
+    addFreeDrawShape,
     addRect,
     clearSelection,
     deleteSelected,
@@ -16,6 +17,7 @@ import reducer, {
     undo,
     updateShape,
     updateShapes,
+    type Shape,
     type ShapesState,
 } from "./index"
 
@@ -116,6 +118,33 @@ describe("undo and redo", () => {
         expect(state.past).toHaveLength(100)
         const undoneAll = run(Array.from({ length: 105 }, () => undo()), state)
         expect(ids(undoneAll)).toHaveLength(5)
+    })
+})
+
+describe("pencil strokes", () => {
+    it("doesn't keep a click that didn't move, or add an undo step for it", () => {
+        const state = run([addFreeDrawShape({ points: [{ x: 5, y: 5 }] })])
+        expect(ids(state)).toEqual([])
+        expect(state.past).toEqual([])
+    })
+
+    it("keeps a stroke that moved", () => {
+        const state = run([addFreeDrawShape({ points: [{ x: 0, y: 0 }, { x: 10, y: 5 }] })])
+        expect(ids(state)).toHaveLength(1)
+    })
+
+    it("drops clicks a project saved before, and leaves the saved data as it was", () => {
+        const stroke = (id: string, points: { x: number; y: number }[]): Shape =>
+            ({ id, type: "freedraw", points, stroke: "#fff", strokeWidth: 2, fill: null }) as Shape
+        const shapes: EntityState<Shape, string> = {
+            ids: ["click", "line"],
+            entities: { click: stroke("click", [{ x: 1, y: 1 }]), line: stroke("line", [{ x: 0, y: 0 }, { x: 9, y: 9 }]) },
+        }
+
+        const state = run([loadProject({ shapes, frameCounter: 0 })])
+
+        expect(ids(state)).toEqual(["line"])
+        expect(shapes.ids).toEqual(["click", "line"])
     })
 })
 

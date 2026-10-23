@@ -163,6 +163,10 @@ const pushHistory = (state: ShapesState): void => {
 
 const DEFAULTS = { stroke: "#ffff", strokeWidth: 2 as const };
 
+// The Stroke component draws nothing with fewer points, and clicks can't reach such a shape, so a
+// pencil click that didn't move isn't kept
+const MIN_STROKE_POINTS = 2;
+
 const makeFrame = (p: {
     x: number;
     y: number;
@@ -381,7 +385,7 @@ const shapesSlice = createSlice({
             action: PayloadAction<Parameters<typeof makeFree>[0]>
         ) {
             const { points } = action.payload;
-            if (!points || points.length === 0) return;
+            if (!points || points.length < MIN_STROKE_POINTS) return;
             pushHistory(state);
             shapesAdapter.addOne(state.shapes, makeFree(action.payload));
         },
@@ -487,7 +491,11 @@ const shapesSlice = createSlice({
                 frameCounter: number;
             }>
         ) {
-            state.shapes = action.payload.shapes;
+            // Drops pencil clicks saved before addFreeDrawShape stopped keeping them
+            const clicks = Object.values(action.payload.shapes.entities)
+                .filter((shape) => shape.type === "freedraw" && shape.points.length < MIN_STROKE_POINTS)
+                .map((shape) => shape.id);
+            state.shapes = shapesAdapter.removeMany(action.payload.shapes, clicks);
             state.tool = action.payload.tool ?? "select";
             state.selected = action.payload.selected ?? {};
             // Projects saved while erasing a frame lowered the counter can hold a count below their
