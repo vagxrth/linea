@@ -6,7 +6,7 @@ Linea is an AI-powered design tool that transforms hand-drawn sketches and wiref
 
 ## Features
 
-- **Infinite Canvas** — Draw shapes (rectangles, ellipses, arrows, lines, freehand), add text, pan/zoom, select several shapes at once, undo/redo, and auto-save as you work.
+- **Infinite Canvas** — Draw shapes (rectangles, ellipses, arrows, lines, freehand), add text, pan/zoom (pinch on touch screens), zoom to fit, select several shapes at once, copy, cut, paste and duplicate them, undo/redo, and auto-save as you work.
 - **Wireframe-to-Design** — Sketch a wireframe inside a frame, and Linea generates a complete HTML/CSS design using your style guide, with WCAG AA accessibility baked in.
 - **Style Guide Generation** — Upload moodboard images and Linea extracts a full design system: color palette (primary, secondary, UI, utility, status), typography hierarchy, and spacing guidelines.
 - **Workflow Pages** — Automatically generate complementary pages (dashboards, settings, profiles, data tables) that match your primary design's visual language.

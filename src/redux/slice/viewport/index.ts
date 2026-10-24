@@ -182,6 +182,25 @@ const viewportSlice = createSlice({
       state.panStartTranslate = null;
     },
 
+    // A two-finger pinch on a touch screen. It zooms by how much the fingers' distance changed since
+    // the pinch began, and keeps the drawing that was under their midpoint then under their midpoint
+    // now, so moving both fingers also pans.
+    pinchMove(
+      state,
+      action: PayloadAction<{
+        start: { scale: number; translate: Point; mid: Point; distance: number };
+        mid: Point;
+        distance: number;
+      }>
+    ) {
+      const { start, mid, distance } = action.payload;
+      const scale = clamp(start.scale * (distance / Math.max(1, start.distance)), state.minScale, state.maxScale);
+      const world = screenToWorld(start.mid, start.translate, start.scale);
+      state.scale = scale;
+      state.translate.x = mid.x - world.x * scale;
+      state.translate.y = mid.y - world.y * scale;
+    },
+
     handToolEnable(state) {
       if (state.mode === "idle") state.mode = "spacePanning";
     },
@@ -208,9 +227,11 @@ const viewportSlice = createSlice({
         bounds: Rect;
         viewportPx: { width: number; height: number };
         padding?: number;
+        // The most it zooms in, below the usual limit
+        maxScale?: number;
       }>
     ) {
-      const { bounds, viewportPx, padding = 50 } = action.payload;
+      const { bounds, viewportPx, padding = 50, maxScale = state.maxScale } = action.payload;
       const aw = Math.max(1, viewportPx.width - padding * 2);
       const ah = Math.max(1, viewportPx.height - padding * 2);
       const bw = Math.max(1e-6, bounds.width);
@@ -221,7 +242,7 @@ const viewportSlice = createSlice({
       const next = clamp(
         Math.min(scaleX, scaleY),
         state.minScale,
-        state.maxScale
+        Math.min(maxScale, state.maxScale)
       );
 
       const centerX = viewportPx.width / 2;
@@ -269,6 +290,7 @@ export const {
   panStart,
   panMove,
   panEnd,
+  pinchMove,
   handToolEnable,
   handToolDisable,
   centerOnWorld,

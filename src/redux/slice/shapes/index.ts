@@ -167,6 +167,43 @@ const DEFAULTS = { stroke: "#ffff", strokeWidth: 2 as const };
 // pencil click that didn't move isn't kept
 const MIN_STROKE_POINTS = 2;
 
+// How far a duplicate lands from the original, down and to the right
+const DUPLICATE_OFFSET = 20;
+
+// A copy of the shape, moved by dx and dy
+const moveShape = (shape: Shape, dx: number, dy: number): Shape => {
+    switch (shape.type) {
+        case "freedraw":
+            return { ...shape, points: shape.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) };
+        case "arrow":
+        case "line":
+            return { ...shape, startX: shape.startX + dx, startY: shape.startY + dy, endX: shape.endX + dx, endY: shape.endY + dy };
+        default:
+            return { ...shape, x: shape.x + dx, y: shape.y + dy };
+    }
+};
+
+// Adds copies of the shapes, moved by the offset, as one undo step, and selects them. Each copy gets a
+// new id and each frame the next number, and a design copied along with its frame points at the copy.
+const addCopies = (state: ShapesState, shapes: Shape[], offset: Point): void => {
+    if (shapes.length === 0) return;
+    pushHistory(state);
+    const newIds = new Map(shapes.map((shape) => [shape.id, nanoid()]));
+    const copies = shapes.map((shape): Shape => {
+        const copy = { ...moveShape(shape, offset.x, offset.y), id: newIds.get(shape.id)! };
+        if (copy.type === "frame") {
+            state.frameCounter += 1;
+            return { ...copy, frameNumber: state.frameCounter };
+        }
+        if (copy.type === "generatedui") {
+            return { ...copy, sourceFrameId: newIds.get(copy.sourceFrameId) ?? copy.sourceFrameId };
+        }
+        return copy;
+    });
+    shapesAdapter.addMany(state.shapes, copies);
+    state.selected = Object.fromEntries(copies.map((copy) => [copy.id, true]));
+};
+
 const makeFrame = (p: {
     x: number;
     y: number;
@@ -475,6 +512,17 @@ const shapesSlice = createSlice({
             shapesAdapter.removeMany(state.shapes, ids);
             state.selected = {};
         },
+        // Pastes shapes from the clipboard, moved by the offset
+        pasteShapes(state, action: PayloadAction<{ shapes: Shape[]; offset: Point }>) {
+            addCopies(state, action.payload.shapes, action.payload.offset);
+        },
+        duplicateSelected(state) {
+            // In drawing order, so the copies stack the way the originals do
+            const shapes = (state.shapes.ids as string[])
+                .filter((id) => state.selected[id])
+                .map((id) => current(state.shapes.entities[id]));
+            addCopies(state, shapes, { x: DUPLICATE_OFFSET, y: DUPLICATE_OFFSET });
+        },
 
         // Explicitly record history snapshot (call at gesture start before drag/resize)
         recordHistory(state) {
@@ -563,6 +611,8 @@ export const {
     selectAll,
     setSelection,
     deleteSelected,
+    pasteShapes,
+    duplicateSelected,
     recordHistory,
     loadProject,
     undo,
