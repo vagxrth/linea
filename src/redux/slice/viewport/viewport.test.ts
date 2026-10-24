@@ -6,6 +6,7 @@ import reducer, {
     panEnd,
     panMove,
     panStart,
+    pinchMove,
     screenToWorld,
     setScale,
     setTranslate,
@@ -88,6 +89,43 @@ describe("zooming", () => {
         expect(fitted.scale).toBe(2)
         // The rectangle's center lands on the view's center
         expect(worldToScreen({ x: 200, y: 100 }, fitted.translate, fitted.scale)).toEqual({ x: 500, y: 400 })
+    })
+
+    it("fits a small rectangle without zooming past the given limit", () => {
+        const fitted = run([
+            zoomToFit({ bounds: { x: 0, y: 0, width: 40, height: 20 }, viewportPx: { width: 1000, height: 800 }, padding: 100, maxScale: 1 }),
+        ])
+
+        expect(fitted.scale).toBe(1)
+        expect(worldToScreen({ x: 20, y: 10 }, fitted.translate, fitted.scale)).toEqual({ x: 500, y: 400 })
+    })
+})
+
+describe("pinching", () => {
+    const start = { scale: panned.scale, translate: panned.translate, mid: { x: 300, y: 200 }, distance: 100 }
+
+    it("zooms by the change in the fingers' distance, keeping the drawing under their midpoint", () => {
+        const before = worldAt(panned, start.mid)
+
+        const pinched = run([pinchMove({ start, mid: start.mid, distance: 200 })], panned)
+
+        expect(pinched.scale).toBe(3)
+        const after = worldAt(pinched, start.mid)
+        expect(after.x).toBeCloseTo(before.x)
+        expect(after.y).toBeCloseTo(before.y)
+    })
+
+    it("pans when both fingers move together", () => {
+        const moved = run([pinchMove({ start, mid: { x: 350, y: 180 }, distance: 100 })], panned)
+
+        expect(moved.scale).toBe(panned.scale)
+        expect(moved.translate.x).toBeCloseTo(panned.translate.x + 50)
+        expect(moved.translate.y).toBeCloseTo(panned.translate.y - 20)
+    })
+
+    it("stays within the zoom limits", () => {
+        expect(run([pinchMove({ start, mid: start.mid, distance: 10000 })], panned).scale).toBe(8)
+        expect(run([pinchMove({ start, mid: start.mid, distance: 1 })], panned).scale).toBe(0.1)
     })
 })
 

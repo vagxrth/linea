@@ -3,10 +3,14 @@ import { describe, expect, it } from "vitest"
 import reducer, {
     addFrame,
     addFreeDrawShape,
+    addGeneratedUI,
+    addLine,
     addRect,
     clearSelection,
     deleteSelected,
+    duplicateSelected,
     loadProject,
+    pasteShapes,
     recordHistory,
     redo,
     removeShape,
@@ -145,6 +149,61 @@ describe("pencil strokes", () => {
 
         expect(ids(state)).toEqual(["line"])
         expect(shapes.ids).toEqual(["click", "line"])
+    })
+})
+
+describe("copies", () => {
+    it("duplicates the selected shapes a step down and to the right, selected, as one undo step", () => {
+        const drawn = run([addRect(rect), addLine({ startX: 0, startY: 0, endX: 50, endY: 20 }), addRect({ ...rect, x: 200 })])
+        const [box, line] = ids(drawn)
+
+        const state = run([setSelection([box, line]), duplicateSelected()], drawn)
+
+        const copies = ids(state).slice(3)
+        expect(copies).toHaveLength(2)
+        expect(state.shapes.entities[copies[0]]).toMatchObject({ type: "rect", x: 30, y: 30, w: 40, h: 30 })
+        expect(state.shapes.entities[copies[1]]).toMatchObject({ type: "line", startX: 20, startY: 20, endX: 70, endY: 40 })
+        expect(state.selected).toEqual({ [copies[0]]: true, [copies[1]]: true })
+        expect(ids(run([undo()], state))).toEqual(ids(drawn))
+    })
+
+    it("numbers copied frames after the others, and points a design copied with its frame at the copy", () => {
+        const drawn = run([
+            addFrame(frame),
+            addFrame({ ...frame, x: 300 }),
+        ])
+        const firstFrame = ids(drawn)[0]
+        const withDesign = run([addGeneratedUI({ x: 0, y: 120, w: 100, h: 80, uiSpecData: "<div></div>", sourceFrameId: firstFrame })], drawn)
+        const design = ids(withDesign)[2]
+
+        const both = run([setSelection([firstFrame, design]), duplicateSelected()], withDesign)
+        const [frameCopy, designCopy] = ids(both).slice(3)
+        expect(both.shapes.entities[frameCopy]).toMatchObject({ type: "frame", frameNumber: 3 })
+        expect(both.shapes.entities[designCopy]).toMatchObject({ type: "generatedui", sourceFrameId: frameCopy })
+
+        // A design copied on its own still came from the original frame
+        const alone = run([setSelection([design]), duplicateSelected()], withDesign)
+        expect(alone.shapes.entities[ids(alone)[3]]).toMatchObject({ type: "generatedui", sourceFrameId: firstFrame })
+    })
+
+    it("pastes shapes as new shapes, moved by the offset, as one undo step", () => {
+        const drawn = run([addRect(rect), addRect({ ...rect, x: 100 })])
+        const copied = ids(drawn).map((id) => drawn.shapes.entities[id]!)
+
+        const state = run([pasteShapes({ shapes: copied, offset: { x: 5, y: -5 } })], drawn)
+
+        const pasted = ids(state).slice(2)
+        expect(pasted).toHaveLength(2)
+        expect(pasted).not.toContain(ids(drawn)[0])
+        expect(state.shapes.entities[pasted[0]]).toMatchObject({ x: 15, y: 5 })
+        expect(state.shapes.entities[pasted[1]]).toMatchObject({ x: 105, y: 5 })
+        expect(state.past).toHaveLength(drawn.past.length + 1)
+    })
+
+    it("does nothing when nothing is selected or pasted", () => {
+        const drawn = run([addRect(rect)])
+        expect(run([duplicateSelected()], drawn)).toEqual(drawn)
+        expect(run([pasteShapes({ shapes: [], offset: { x: 20, y: 20 } })], drawn)).toEqual(drawn)
     })
 })
 

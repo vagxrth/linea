@@ -1,12 +1,14 @@
 'use client'
 
-import { addArrow, addEllipse, addFrame, addFreeDrawShape, addGeneratedUI, addLine, addRect, addText, clearSelection, deleteSelected, FrameShape, removeShape, selectAll, selectShape, setSelection, setTool, Shape, ShapeUpdate, Tool, updateShape, updateShapes, undo, redo, recordHistory } from "@/redux/slice/shapes"
-import { handToolDisable, handToolEnable, panEnd, panMove, panStart, Point, screenToWorld, wheelPan, wheelZoom } from "@/redux/slice/viewport"
+import { addArrow, addEllipse, addFrame, addFreeDrawShape, addGeneratedUI, addLine, addRect, addText, clearSelection, deleteSelected, duplicateSelected, FrameShape, pasteShapes, removeShape, selectAll, selectShape, setSelection, setTool, Shape, ShapeUpdate, Tool, updateShape, updateShapes, undo, redo, recordHistory } from "@/redux/slice/shapes"
+import { handToolDisable, handToolEnable, panEnd, panMove, panStart, pinchMove, Point, screenToWorld, wheelPan, wheelZoom } from "@/redux/slice/viewport"
 import { AppDispatch, AppStore, useAppDispatch, useAppSelector, useAppStore } from "@/redux/store"
 import { nanoid } from "@reduxjs/toolkit"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useDispatch } from "react-redux"
 import { toast } from "sonner"
+import { pasteOffset, shapesFromClipboard, shapesToClipboard } from '@/lib/clipboard'
+import { contentBounds, fitToContent, getShapeBounds } from '@/lib/shape-bounds'
 import { resizeText } from '@/lib/text-box'
 import { exportGeneratedUI } from '@/lib/utils';
 import { addErrorMessage, addUserMessage, clearChat, finishedStreamingResponse, initializeChat, startStreamingResponse, updateStreamingContent } from '@/redux/slice/chat';
@@ -36,6 +38,8 @@ const INTERVAL_MS = 8
 
 export const useCanvas = () => {
     const dispatch = useDispatch<AppDispatch>()
+    // For the keyboard and clipboard handlers, which are registered once and read the state when they run
+    const store = useAppStore()
 
     const viewport = useAppSelector((state) => state.viewport)
     const entityState = useAppSelector((state) => state.shapes.shapes)
@@ -65,7 +69,14 @@ export const useCanvas = () => {
     }, [selectedText, sidebarOpen])
 
     const canvasRef = useRef<HTMLDivElement | null>(null)
+    // Fingers on a touch screen. One draws and selects like a mouse; two pinch to zoom and pan.
     const touchMapRef = useRef<Map<number, TouchPointer>>(new Map())
+    // The view and the fingers when the current pinch began
+    const pinchRef = useRef<{ scale: number; translate: Point; mid: Point; distance: number } | null>(null)
+    // Fingers still down after a pinch ends, which do nothing until they lift
+    const pinchLeftoverRef = useRef<Set<number>>(new Set())
+    // The last text copied or cut here, and how many times it has been pasted, so each paste steps further
+    const clipboardRef = useRef<{ text: string; pastes: number } | null>(null)
 
     const draftShapeRef = useRef<DraftShape | null>(null)
     const freeDrawPointRef = useRef<Point[]>([])
@@ -223,39 +234,6 @@ export const useCanvas = () => {
         return null
     }
 
-    // The area each shape covers, matching the areas clicks hit
-    const getShapeBounds = (shape: Shape): { x: number; y: number; w: number; h: number } => {
-        switch (shape.type) {
-            case 'frame':
-            case 'rect':
-            case 'ellipse':
-            case 'generatedui':
-                return { x: shape.x, y: shape.y, w: shape.w, h: shape.h }
-            case 'freedraw': {
-                const xs = shape.points.map((p) => p.x)
-                const ys = shape.points.map((p) => p.y)
-                const x = Math.min(...xs)
-                const y = Math.min(...ys)
-                return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y }
-            }
-            case 'arrow':
-            case 'line':
-                return {
-                    x: Math.min(shape.startX, shape.endX),
-                    y: Math.min(shape.startY, shape.endY),
-                    w: Math.abs(shape.endX - shape.startX),
-                    h: Math.abs(shape.endY - shape.startY),
-                }
-            case 'text':
-                return {
-                    x: shape.x,
-                    y: shape.y,
-                    w: Math.max(shape.text.length * (shape.fontSize * 0.6), 100) + 8,
-                    h: shape.fontSize * 1.2 + 8,
-                }
-        }
-    }
-
     // Only shapes fully inside count, so a box that starts outside a frame can pick shapes within
     // it without picking the frame
     const getShapesInBox = (a: Point, b: Point): string[] => {
@@ -326,6 +304,34 @@ export const useCanvas = () => {
         }
     }
 
+    // The middle of the first two fingers and how far apart they are
+    const touchMidAndDistance = () => {
+        const [a, b] = [...touchMapRef.current.values()].map((touch) => touch.p)
+        return { mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, distance: Math.hypot(a.x - b.x, a.y - b.y) }
+    }
+
+    // Stops what the first finger began, for when a second one turns the touch into a pinch. A drawing
+    // or selection box is dropped, and shapes being dragged stay where they got to.
+    const cancelPress = (): void => {
+        drawingRef.current = false
+        draftShapeRef.current = null
+        freeDrawPointRef.current = []
+        if (freehandRef.current) {
+            window.cancelAnimationFrame(freehandRef.current)
+            freehandRef.current = null
+        }
+        selectionBoxRef.current = null
+        erasingRef.current = false
+        erasedShapeRef.current.clear()
+        if (movingRef.current) {
+            flushMove()
+            movingRef.current = false
+            moveStartRef.current = null
+            initialShapePositionRef.current = {}
+        }
+        requestRender()
+    }
+
     const onPointerDown: React.PointerEventHandler<HTMLDivElement> = (e) => {
         const target = e.target as HTMLElement
         const isButton = target.tagName === 'BUTTON' || target.closest('button') || target.classList.contains('pointer-events-auto') || target.closest('.pointer-events-auto')
@@ -338,6 +344,20 @@ export const useCanvas = () => {
 
         const local = getLocalPoint(e.nativeEvent)
         const world = screenToWorld(local, viewport.translate, viewport.scale)
+
+        if (e.pointerType === 'touch') {
+            // The first finger of a new touch, so fingers whose lift was missed are forgotten
+            if (e.isPrimary) {
+                touchMapRef.current.clear()
+                pinchLeftoverRef.current.clear()
+            }
+            touchMapRef.current.set(e.pointerId, { id: e.pointerId, p: local })
+            if (touchMapRef.current.size === 2) {
+                cancelPress()
+                pinchRef.current = { scale: viewport.scale, translate: { ...viewport.translate }, ...touchMidAndDistance() }
+                return
+            }
+        }
 
         if (touchMapRef.current.size <= 1) {
             canvasRef.current?.setPointerCapture?.(e.pointerId)
@@ -456,6 +476,16 @@ export const useCanvas = () => {
     const onPointerMove: React.PointerEventHandler<HTMLDivElement> = (e) => {
         const local = getLocalPoint(e.nativeEvent)
         const world = screenToWorld(local, viewport.translate, viewport.scale)
+
+        if (e.pointerType === 'touch') {
+            if (touchMapRef.current.has(e.pointerId)) touchMapRef.current.set(e.pointerId, { id: e.pointerId, p: local })
+            // While two fingers pinch, they only zoom and pan
+            if (pinchRef.current) {
+                if (touchMapRef.current.size >= 2) dispatch(pinchMove({ start: pinchRef.current, ...touchMidAndDistance() }))
+                return
+            }
+            if (pinchLeftoverRef.current.has(e.pointerId)) return
+        }
 
         // Only once a pan has started. Space pressed during another drag turns on the hand tool for the
         // next press, and the drag carries on instead of freezing.
@@ -627,6 +657,17 @@ export const useCanvas = () => {
     }
 
     const onPointerUp: React.PointerEventHandler<HTMLDivElement> = (e) => {
+        if (e.pointerType === 'touch') {
+            touchMapRef.current.delete(e.pointerId)
+            // Lifting either finger ends the pinch, and a finger still down does nothing until it lifts
+            if (pinchRef.current) {
+                pinchRef.current = null
+                touchMapRef.current.forEach((_, id) => pinchLeftoverRef.current.add(id))
+                return
+            }
+            if (pinchLeftoverRef.current.delete(e.pointerId)) return
+        }
+
         canvasRef.current?.releasePointerCapture?.(e.pointerId)
 
         if (viewport.mode === 'panning' || viewport.mode === 'spacePanning') {
@@ -669,16 +710,25 @@ export const useCanvas = () => {
         }
     }
 
+    // Typing in an input or textarea keeps its usual keys and clipboard. This checks the event's
+    // target rather than the focused element, because a text box can close itself on the same key
+    // (Escape ends editing) before this runs, and that Escape shouldn't also deselect.
+    const isTypingIn = (target: EventTarget | null): boolean => {
+        const element = target as HTMLElement | null
+        return Boolean(element && (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.isContentEditable))
+    }
+
+    // Zooms and pans so every shape is in view
+    const fitView = (): void => {
+        const canvas = canvasRef.current
+        if (!canvas) return
+        const { width, height } = canvas.getBoundingClientRect()
+        const fit = fitToContent(Object.values(store.getState().shapes.shapes.entities), { width, height })
+        if (fit) dispatch(fit)
+    }
+
     const onKeyDown = (e: KeyboardEvent): void => {
-        // Skip keyboard shortcuts when user is typing in an input or textarea. This checks the key's
-        // target rather than the focused element, because a text box can close itself on the same
-        // key (Escape ends editing) before this runs, and that Escape shouldn't also deselect.
-        const target = e.target as HTMLElement | null
-        const isTyping = target && (
-            target.tagName === 'INPUT' ||
-            target.tagName === 'TEXTAREA' ||
-            target.isContentEditable
-        )
+        const isTyping = isTypingIn(e.target)
         // Letter keys compare in lower case. With Shift held, browsers report "Z", except Chrome and
         // Safari on a Mac, which report "z" while Cmd is down. Caps Lock also turns "z" into "Z".
         const key = e.key.toLowerCase()
@@ -721,6 +771,18 @@ export const useCanvas = () => {
             e.preventDefault()
             dispatch(redo())
         }
+
+        // Duplicate the selected shapes: Cmd/Ctrl+D, which would otherwise bookmark the page
+        if ((e.metaKey || e.ctrlKey) && key === 'd' && !isTyping) {
+            e.preventDefault()
+            dispatch(duplicateSelected())
+        }
+
+        // Zoom to fit: Shift+1, matched by the key's place, since Shift turns 1 into another character
+        if (e.shiftKey && e.code === 'Digit1' && !e.metaKey && !e.ctrlKey && !e.altKey && !isTyping) {
+            e.preventDefault()
+            fitView()
+        }
     }
 
     const onKeyUp = (e: KeyboardEvent): void => {
@@ -729,6 +791,52 @@ export const useCanvas = () => {
             spacePress.current = false
             dispatch(handToolDisable());
         }
+    }
+
+    // Copying puts the selected shapes on the clipboard. Text being typed, or selected on the page, is
+    // copied by the browser as usual.
+    const copySelection = (e: ClipboardEvent): string | null => {
+        if (isTypingIn(e.target) || window.getSelection()?.toString()) return null
+        const { shapes, selected } = store.getState().shapes
+        // In drawing order, so pasted copies stack the way the originals do
+        const copied = (shapes.ids as string[]).filter((id) => selected[id]).map((id) => shapes.entities[id])
+        if (copied.length === 0) return null
+        const text = shapesToClipboard(copied)
+        e.preventDefault()
+        e.clipboardData?.setData('text/plain', text)
+        return text
+    }
+
+    const onCopy = (e: ClipboardEvent): void => {
+        const text = copySelection(e)
+        if (text) clipboardRef.current = { text, pastes: 0 }
+    }
+
+    // Cutting copies the shapes and deletes them, so their first paste puts them back in place
+    const onCut = (e: ClipboardEvent): void => {
+        const text = copySelection(e)
+        if (!text) return
+        clipboardRef.current = { text, pastes: -1 }
+        dispatch(deleteSelected())
+    }
+
+    const onPaste = (e: ClipboardEvent): void => {
+        const canvas = canvasRef.current
+        if (!canvas || isTypingIn(e.target)) return
+        const text = e.clipboardData?.getData('text/plain')
+        const shapes = shapesFromClipboard(text)
+        if (!text || !shapes) return
+        e.preventDefault()
+        const last = clipboardRef.current
+        const paste = last?.text === text ? last.pastes + 1 : 1
+        clipboardRef.current = { text, pastes: paste }
+        // The part of the drawing in view, so pasted shapes land where they can be seen
+        const { width, height } = canvas.getBoundingClientRect()
+        const { scale, translate } = store.getState().viewport
+        const view = { x: -translate.x / scale, y: -translate.y / scale, width: width / scale, height: height / scale }
+        // With the select tool, so the pasted shapes, which end up selected, can be moved straight away
+        dispatch(setTool('select'))
+        dispatch(pasteShapes({ shapes, offset: pasteOffset(contentBounds(shapes)!, view, paste) }))
     }
 
     // A key released while the page is in the background never reaches it. Space would stay held,
@@ -747,12 +855,18 @@ export const useCanvas = () => {
     useEffect(() => {
         document.addEventListener('keydown', onKeyDown)
         document.addEventListener('keyup', onKeyUp)
+        document.addEventListener('copy', onCopy)
+        document.addEventListener('cut', onCut)
+        document.addEventListener('paste', onPaste)
         window.addEventListener('blur', onPageLeave)
         document.addEventListener('visibilitychange', onVisibilityChange)
 
         return () => {
             document.removeEventListener('keydown', onKeyDown)
             document.removeEventListener('keyup', onKeyUp)
+            document.removeEventListener('copy', onCopy)
+            document.removeEventListener('cut', onCut)
+            document.removeEventListener('paste', onPaste)
             window.removeEventListener('blur', onPageLeave)
             document.removeEventListener('visibilitychange', onVisibilityChange)
             if (freehandRef.current) window.cancelAnimationFrame(freehandRef.current)
