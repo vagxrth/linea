@@ -10,7 +10,7 @@ type Props = {
     initialProject: any // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
-const ProjectProvider = ({ children, initialProject }: Props) => {
+const CanvasProjectProvider = ({ children, initialProject }: Props) => {
 
     const dispatch = useAppDispatch();
     // The store is shared by every project, so the canvas waits until this project is in it.
@@ -50,4 +50,4 @@ const ProjectProvider = ({ children, initialProject }: Props) => {
     )
 }
 
-export default ProjectProvider
+export default CanvasProjectProvider
