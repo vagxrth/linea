@@ -3,7 +3,7 @@
 import { clearAll, loadProject } from '@/redux/slice/shapes';
 import { resetView, restoreViewport } from '@/redux/slice/viewport';
 import { useAppDispatch } from '@/redux/store';
-import React, { useEffect } from 'react'
+import React, { useLayoutEffect, useState } from 'react'
 
 type Props = {
     children: React.ReactNode;
@@ -13,8 +13,13 @@ type Props = {
 const ProjectProvider = ({ children, initialProject }: Props) => {
 
     const dispatch = useAppDispatch();
+    // The store is shared by every project, so the canvas waits until this project is in it.
+    // Otherwise its first frame would show the project opened before.
+    const [loaded, setLoaded] = useState(false);
 
-    useEffect(() => {
+    // A layout effect runs before the browser paints, so the canvas first appears with this
+    // project's shapes and view
+    useLayoutEffect(() => {
         // Always initialize canvas state for the current project.
         // This ensures that switching projects never leaks state from a previous project.
         const projectData = initialProject?._valueJSON
@@ -33,7 +38,10 @@ const ProjectProvider = ({ children, initialProject }: Props) => {
             dispatch(clearAll())
             dispatch(resetView())
         }
+        setLoaded(true);
     }, [dispatch, initialProject])
+
+    if (!loaded) return null
 
     return (
         <>
