@@ -1,5 +1,5 @@
 import InfiniteCanvas from '@/components/canvas'
-import ProjectProvider from '@/components/projects/provider/index'
+import CanvasProjectProvider from '@/components/projects/canvas-provider'
 import { ProjectQuery } from '@/convex/query.config'
 import React from 'react'
 
@@ -43,9 +43,9 @@ const page = async ({ searchParams }: CanvasPageProps) => {
   }
 
   return (
-    <ProjectProvider key={projectId} initialProject={project}>
+    <CanvasProjectProvider key={projectId} initialProject={project}>
       <InfiniteCanvas />
-    </ProjectProvider>
+    </CanvasProjectProvider>
   )
 }
 
