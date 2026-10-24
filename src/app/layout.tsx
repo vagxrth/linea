@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Instrument_Serif } from "next/font/google";
+import { headers } from "next/headers";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
@@ -56,6 +57,9 @@ export default async function RootLayout({
     profile = null;
   }
 
+  // The middleware's nonce, for the script next-themes adds to set the dark theme before the first paint
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+
   return (
     <ConvexAuthNextjsServerProvider>
       <html lang="en" className='bg-background' suppressHydrationWarning>
@@ -71,6 +75,7 @@ export default async function RootLayout({
               forcedTheme="dark"
               enableSystem={false}
               disableTransitionOnChange
+              nonce={nonce}
             >
               <ReduxProvider preloadedState={{ profile }}>
                 {children}

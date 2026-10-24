@@ -4,6 +4,10 @@ import { z } from 'zod'
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
+// The script policy blocks evaluated code, which Zod would otherwise probe for (and log a violation)
+// to speed up checking objects. Set before the schemas below, since Zod reads it as each one is made.
+z.config({ jitless: true })
+
 const signInSchema = z.object({
     email: z.string().email('Invalid email address'),
     password: z.string().min(8, 'Password must be at least 8 characters'),
