@@ -10,7 +10,7 @@ import { toast } from "sonner"
 import { pasteOffset, shapesFromClipboard, shapesToClipboard } from '@/lib/clipboard'
 import { contentBounds, fitToContent, getShapeBounds } from '@/lib/shape-bounds'
 import { resizeText } from '@/lib/text-box'
-import { exportGeneratedUI } from '@/lib/utils';
+import { downloadBlob, exportGeneratedUI } from '@/lib/download'
 import { addErrorMessage, addUserMessage, clearChat, finishedStreamingResponse, initializeChat, startStreamingResponse, updateStreamingContent } from '@/redux/slice/chat';
 
 interface TouchPointer {
@@ -1282,17 +1282,6 @@ const blobToBase64 = (blob: Blob): Promise<string> =>
         reader.onerror = () => reject(reader.error)
         reader.readAsDataURL(blob)
     })
-
-export const downloadBlob = (blob: Blob, fileName: string): void => {
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = fileName
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
-}
 
 export const useFrame = (shape: FrameShape) => {
     const dispatch = useAppDispatch();
