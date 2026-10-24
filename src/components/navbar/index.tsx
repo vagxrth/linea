@@ -38,8 +38,8 @@ const Navbar = () => {
     const { onManage, isSubscribed, isFetching } = useSubscription();
 
     const me = useAppSelector((state) => state.profile)
-    // The profile is null when the root layout couldn't load it. The URL's name segment only labels
-    // the page, so the links reuse the current one then.
+    // The profile is null when the signed-in pages' layout couldn't load it. The URL's name segment
+    // only labels the page, so the links reuse the current one then.
     const { session } = useParams<{ session: string }>()
     const slug = me?.name ?? session
 
