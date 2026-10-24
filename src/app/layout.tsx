@@ -6,9 +6,6 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import { ConvexClientProvider } from "./ConvexClientProvider";
-import ReduxProvider from "@/redux/provider";
-import { ProfileQuery } from "@/convex/query.config";
-import { ConvexUserRaw, normalizeProfile } from "@/types/user";
 import { Analytics } from '@vercel/analytics/next';
 
 const geistSans = Geist({
@@ -47,16 +44,6 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
 
-  let profile = null;
-  try {
-    const rawProfile = await ProfileQuery();
-    profile = normalizeProfile( rawProfile._valueJSON as unknown as ConvexUserRaw | null );
-  } catch (error) {
-    // Gracefully handle profile query errors instead of crashing
-    console.error('Profile query error:', error);
-    profile = null;
-  }
-
   // The middleware's nonce, for the script next-themes adds to set the dark theme before the first paint
   const nonce = (await headers()).get("x-nonce") ?? undefined;
 
@@ -77,11 +64,9 @@ export default async function RootLayout({
               disableTransitionOnChange
               nonce={nonce}
             >
-              <ReduxProvider preloadedState={{ profile }}>
-                {children}
-                <Analytics />
-                <Toaster />
-              </ReduxProvider>
+              {children}
+              <Analytics />
+              <Toaster />
             </ThemeProvider>
           </ConvexClientProvider>
         </body>

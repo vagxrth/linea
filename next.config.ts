@@ -16,6 +16,10 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   /* config options here */
+  // Every visitor gets the title and meta tags in the page's head, where crawlers and link previews
+  // look. Otherwise Next.js streams them into the body when a page is ready before its metadata,
+  // and the public pages are. The metadata is static, so waiting for it costs nothing.
+  htmlLimitedBots: /.*/,
   images: {
     remotePatterns: [
       {
