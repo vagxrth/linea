@@ -41,12 +41,10 @@ interface InfiniteGalleryProps {
 	images: ImageItem[];
 	/** Speed multiplier applied to scroll delta (default: 1) */
 	speed?: number;
-	/** Spacing between images along Z in world units (default: 2.5) */
+	/** Spacing between images along Z in world units (default: the planes spread over 50 units) */
 	zSpacing?: number;
-	/** Number of visible planes (default: clamp to images.length, min 8) */
+	/** Number of planes (default: 8) */
 	visibleCount?: number;
-	/** Near/far distances for opacity/blur easing (default: { near: 0.5, far: 12 }) */
-	falloff?: { near: number; far: number };
 	/** Fade in/out settings with ranges based on depth range percentage (default: { fadeIn: { start: 0.05, end: 0.15 }, fadeOut: { start: 0.85, end: 0.95 } }) */
 	fadeSettings?: FadeSettings;
 	/** Blur in/out settings with ranges based on depth range percentage (default: { blurIn: { start: 0.0, end: 0.1 }, blurOut: { start: 0.9, end: 1.0 }, maxBlur: 3.0 }) */
@@ -165,18 +163,27 @@ const createClothMaterial = () => {
 	});
 };
 
+// A plane keeps its image's aspect ratio, 2 units on the shorter side
+const planeScale = (texture: THREE.Texture): [number, number, number] => {
+	const img = texture.image as { width?: number; height?: number };
+	const aspect = img?.width && img?.height ? img.width / img.height : 1;
+	return aspect > 1 ? [2 * aspect, 2, 1] : [2, 2 / aspect, 1];
+};
+
 function ImagePlane({
 	texture,
 	position,
 	scale,
 	material,
+	meshRef,
 }: {
 	texture: THREE.Texture;
 	position: [number, number, number];
 	scale: [number, number, number];
 	material: THREE.ShaderMaterial;
+	// The scene moves the mesh itself every frame, without re-rendering
+	meshRef: (mesh: THREE.Mesh | null) => void;
 }) {
-	const meshRef = useRef<THREE.Mesh>(null);
 	const [isHovered, setIsHovered] = useState(false);
 
 	useEffect(() => {
@@ -208,6 +215,7 @@ function ImagePlane({
 function GalleryScene({
 	images,
 	speed = 1,
+	zSpacing,
 	visibleCount = 8,
 	fadeSettings = {
 		fadeIn: { start: 0.05, end: 0.15 },
@@ -219,9 +227,23 @@ function GalleryScene({
 		maxBlur: 3.0,
 	},
 }: Omit<InfiniteGalleryProps, 'className' | 'style'>) {
-	const [scrollVelocity, setScrollVelocity] = useState(0);
-	const [autoPlay, setAutoPlay] = useState(true);
+	// These change every frame, so they're refs: as state, they re-rendered the scene 60 times a second
+	const scrollVelocity = useRef(0);
+	const autoPlay = useRef(true);
 	const lastInteraction = useRef(Date.now());
+	const meshes = useRef<(THREE.Mesh | null)[]>([]);
+	// Visitors who prefer reduced motion get no drifting on its own; scrolling still moves the gallery
+	const reducedMotion = useRef(false);
+
+	useEffect(() => {
+		const query = window.matchMedia('(prefers-reduced-motion: reduce)');
+		reducedMotion.current = query.matches;
+		const onChange = () => {
+			reducedMotion.current = query.matches;
+		};
+		query.addEventListener('change', onChange);
+		return () => query.removeEventListener('change', onChange);
+	}, []);
 
 	// Normalize images to objects
 	const normalizedImages = useMemo(
@@ -240,6 +262,9 @@ function GalleryScene({
 		() => Array.from({ length: visibleCount }, () => createClothMaterial()),
 		[visibleCount]
 	);
+
+	// Frees the shader programs when the gallery goes away or the pool is replaced
+	useEffect(() => () => materials.forEach((material) => material.dispose()), [materials]);
 
 	const spatialPositions = useMemo(() => {
 		const positions: { x: number; y: number }[] = [];
@@ -267,7 +292,7 @@ function GalleryScene({
 	}, [visibleCount]);
 
 	const totalImages = normalizedImages.length;
-	const depthRange = DEFAULT_DEPTH_RANGE;
+	const depthRange = zSpacing ? zSpacing * visibleCount : DEFAULT_DEPTH_RANGE;
 
 	// Initialize plane data
 	const planesData = useRef<PlaneData[]>(
@@ -297,8 +322,8 @@ function GalleryScene({
 	const handleWheel = useCallback(
 		(event: WheelEvent) => {
 			event.preventDefault();
-			setScrollVelocity((prev) => prev + event.deltaY * 0.01 * speed);
-			setAutoPlay(false);
+			scrollVelocity.current += event.deltaY * 0.01 * speed;
+			autoPlay.current = false;
 			lastInteraction.current = Date.now();
 		},
 		[speed]
@@ -308,12 +333,12 @@ function GalleryScene({
 	const handleKeyDown = useCallback(
 		(event: KeyboardEvent) => {
 			if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
-				setScrollVelocity((prev) => prev - 2 * speed);
-				setAutoPlay(false);
+				scrollVelocity.current -= 2 * speed;
+				autoPlay.current = false;
 				lastInteraction.current = Date.now();
 			} else if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
-				setScrollVelocity((prev) => prev + 2 * speed);
-				setAutoPlay(false);
+				scrollVelocity.current += 2 * speed;
+				autoPlay.current = false;
 				lastInteraction.current = Date.now();
 			}
 		},
@@ -333,31 +358,25 @@ function GalleryScene({
 		}
 	}, [handleWheel, handleKeyDown]);
 
-	// Auto-play logic
-	useEffect(() => {
-		const interval = setInterval(() => {
-			if (Date.now() - lastInteraction.current > 3000) {
-				setAutoPlay(true);
-			}
-		}, 1000);
-		return () => clearInterval(interval);
-	}, []);
-
 	useFrame((state, delta) => {
-		// Apply auto-play
-		if (autoPlay) {
-			setScrollVelocity((prev) => prev + 0.3 * delta);
+		// Auto-play: the gallery drifts on its own, and starts again 3 seconds after the last scroll or key
+		if (!autoPlay.current && Date.now() - lastInteraction.current > 3000) {
+			autoPlay.current = true;
+		}
+		if (autoPlay.current && !reducedMotion.current) {
+			scrollVelocity.current += 0.3 * delta;
 		}
 
 		// Damping
-		setScrollVelocity((prev) => prev * 0.95);
+		scrollVelocity.current *= 0.95;
+		const velocity = scrollVelocity.current;
 
 		// Update time uniform for all materials
 		const time = state.clock.getElapsedTime();
 		materials.forEach((material) => {
 			if (material && material.uniforms) {
 				material.uniforms.time.value = time;
-				material.uniforms.scrollForce.value = scrollVelocity;
+				material.uniforms.scrollForce.value = velocity;
 			}
 		});
 
@@ -367,7 +386,7 @@ function GalleryScene({
 		const totalRange = depthRange;
 
 		planesData.current.forEach((plane, i) => {
-			let newZ = plane.z + scrollVelocity * delta * 10;
+			let newZ = plane.z + velocity * delta * 10;
 			let wrapsForward = 0;
 			let wrapsBackward = 0;
 
@@ -393,6 +412,17 @@ function GalleryScene({
 			plane.x = spatialPositions[i]?.x ?? 0;
 			plane.y = spatialPositions[i]?.y ?? 0;
 
+			// The meshes are moved here rather than through props, so nothing re-renders. A plane that
+			// wrapped around shows the next image, at that image's aspect ratio.
+			const mesh = meshes.current[i];
+			const texture = textures[plane.imageIndex];
+			if (mesh) {
+				mesh.position.set(plane.x, plane.y, plane.z - totalRange / 2);
+				if (texture && materials[i] && materials[i].uniforms.map.value !== texture) {
+					materials[i].uniforms.map.value = texture;
+					mesh.scale.set(...planeScale(texture));
+				}
+			}
 
 			// Calculate opacity based on fade settings
 			const normalizedPosition = plane.z / totalRange; // 0 to 1
@@ -478,23 +508,17 @@ function GalleryScene({
 
 				if (!texture || !material) return null;
 
-				const worldZ = plane.z - depthRange / 2;
-
-				// Calculate scale to maintain aspect ratio
-				const img = texture.image as { width?: number; height?: number };
-				const aspect = img?.width && img?.height
-					? img.width / img.height
-					: 1;
-				const scale: [number, number, number] =
-					aspect > 1 ? [2 * aspect, 2, 1] : [2, 2 / aspect, 1];
-
+				// Where each plane starts; the frame loop moves it from there
 				return (
 					<ImagePlane
 						key={plane.index}
 						texture={texture}
-						position={[plane.x, plane.y, worldZ]} // Position planes relative to camera center
-						scale={scale}
+						position={[plane.x, plane.y, plane.z - depthRange / 2]} // Position planes relative to camera center
+						scale={planeScale(texture)}
 						material={material}
+						meshRef={(mesh) => {
+							meshes.current[i] = mesh;
+						}}
 					/>
 				);
 			})}
@@ -517,14 +541,18 @@ function FallbackGallery({ images }: { images: ImageItem[] }) {
 			<p className="text-gray-600 mb-4">
 				WebGL not supported. Showing image list:
 			</p>
-			<div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-h-96 overflow-y-auto">
+			<div className="grid w-full max-w-2xl grid-cols-2 md:grid-cols-3 gap-4 max-h-96 overflow-y-auto">
 				{normalizedImages.map((img, i) => (
-					<Image
-						key={i}
-						src={img.src || '/placeholder.svg'}
-						alt={img.alt || 'Image'}
-						className="w-full h-32 object-cover rounded"
-					/>
+					// next/image needs a size: each image fills its 8rem tall cell
+					<div key={i} className="relative h-32">
+						<Image
+							src={img.src}
+							alt={img.alt || 'Image'}
+							fill
+							sizes="(min-width: 768px) 224px, 50vw"
+							className="object-cover rounded"
+						/>
+					</div>
 				))}
 			</div>
 		</div>
@@ -533,6 +561,9 @@ function FallbackGallery({ images }: { images: ImageItem[] }) {
 
 export default function InfiniteGallery({
 	images,
+	speed,
+	zSpacing,
+	visibleCount,
 	className = 'h-96 w-full',
 	style,
 	fadeSettings = {
@@ -577,6 +608,9 @@ export default function InfiniteGallery({
 			>
 				<GalleryScene
 					images={images}
+					speed={speed}
+					zSpacing={zSpacing}
+					visibleCount={visibleCount}
 					fadeSettings={fadeSettings}
 					blurSettings={blurSettings}
 				/>
