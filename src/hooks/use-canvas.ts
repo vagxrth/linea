@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useDispatch } from "react-redux"
 import { toast } from "sonner"
 import { pasteOffset, shapesFromClipboard, shapesToClipboard } from '@/lib/clipboard'
+import { resizeBox } from '@/lib/resize-box'
 import { contentBounds, fitToContent, getShapeBounds } from '@/lib/shape-bounds'
 import { resizeText } from '@/lib/text-box'
 import { downloadBlob, exportGeneratedUI } from '@/lib/download'
@@ -908,33 +909,7 @@ export const useCanvas = () => {
                 resizeRecordedRef.current = true
             }
 
-            const newBounds = { ...initialBounds }
-
-            switch (corner) {
-                case 'nw':
-                    newBounds.w = Math.max(10, initialBounds.w + (initialBounds.x - world.x))
-                    newBounds.h = Math.max(10, initialBounds.h + (initialBounds.y - world.y))
-                    newBounds.x = world.x
-                    newBounds.y = world.y
-                    break
-
-                case 'ne':
-                    newBounds.w = Math.max(10, world.x - initialBounds.x)
-                    newBounds.h = Math.max(10, initialBounds.h + (initialBounds.y - world.y))
-                    newBounds.y = world.y
-                    break
-
-                case 'sw':
-                    newBounds.w = Math.max(10, initialBounds.w + (initialBounds.x - world.x))
-                    newBounds.h = Math.max(10, world.y - initialBounds.y)
-                    newBounds.x = world.x
-                    break
-
-                case 'se':
-                    newBounds.w = Math.max(10, world.x - initialBounds.x)
-                    newBounds.h = Math.max(10, world.y - initialBounds.y)
-                    break
-            }
+            const newBounds = resizeBox(initialBounds, corner, world)
 
             if (
                 shape.type === 'frame' ||
