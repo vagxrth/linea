@@ -44,7 +44,9 @@ const page = async ({ searchParams }: Props) => {
     return (
         <div>
             <TabsContent value='colors' className='space-y-6'>
-                {!guideImages.length ? (
+                {/* Empty until a style guide is generated. Generating needs moodboard images, so the
+                    hint names the next step. */}
+                {!colorGuide.length ? (
                     <div className='space-y-8'>
                         <div className='text-center py-20'>
                             <div className='w-16 h-16 mx-auto mb-4 rounded-lg bg-muted flex items-center justify-center'>
@@ -54,7 +56,9 @@ const page = async ({ searchParams }: Props) => {
                                 No colors generated
                             </h3>
                             <p className='text-sm text-muted-foreground max-w-md mx-auto mb-6'>
-                                Upload images to moodboard to generate colors and typography style guide.
+                                {guideImages.length
+                                    ? 'Click Generate Style Guide on the Moodboard tab to create colors and typography from your images.'
+                                    : 'Upload images to moodboard to generate colors and typography style guide.'}
                             </p>
                         </div>
                     </div>
