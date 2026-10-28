@@ -12,7 +12,7 @@ export const model = google('gemini-2.5-flash')
 // The project's style guide, or null when it hasn't generated one yet
 export const getStyleGuide = async (projectId: string): Promise<StyleGuide | null> => {
     const { styleGuide } = await StyleGuideQuery(projectId)
-    const guide = styleGuide._valueJSON as unknown as StyleGuide | null
+    const guide: StyleGuide | null = styleGuide
     return guide?.colorSections && guide.typographySections ? guide : null
 }
 
@@ -29,7 +29,7 @@ export const styleGuideMissing = (action: string) =>
 // The project's inspiration image URLs, in the order the user added them
 export const getInspirationImageUrls = async (projectId: string) => {
     const { images } = await InspirationImagesQuery(projectId)
-    return (images._valueJSON as unknown as { url: string }[]).map((image) => image.url).filter(Boolean)
+    return images.map((image) => image.url).filter((url): url is string => Boolean(url))
 }
 
 // Images to attach after the prompt text

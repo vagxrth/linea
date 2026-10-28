@@ -22,7 +22,7 @@ const CanvasProjectProvider = ({ children, initialProject }: Props) => {
     useLayoutEffect(() => {
         // Always initialize canvas state for the current project.
         // This ensures that switching projects never leaks state from a previous project.
-        const projectData = initialProject?._valueJSON
+        const projectData = initialProject
 
         if (projectData?.sketchesData) {
             // Restore saved shapes and viewport for existing projects

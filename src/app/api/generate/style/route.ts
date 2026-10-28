@@ -1,7 +1,6 @@
 import { ConsumeCreditsQuery, MoodboardImagesQuery } from "@/convex/query.config";
 import { checkCredits, notEnoughCredits } from "@/lib/credits";
 import { generationFailed, model } from "@/lib/generation";
-import { MoodboardImage } from "@/hooks/use-styles";
 import { prompts } from "@/prompts";
 import { NextRequest, NextResponse } from "next/server";
 import { generateObject } from "ai";
@@ -61,16 +60,15 @@ export async function POST(request: NextRequest) {
         const creditError = await checkCredits(COST)
         if (creditError) return creditError
 
-        const moodboardImages = await MoodboardImagesQuery(projectId)
+        const { images } = await MoodboardImagesQuery(projectId)
 
-        if (!moodboardImages || moodboardImages.images._valueJSON.length === 0) {
+        if (images.length === 0) {
             return NextResponse.json(
                 { error: 'No moodboard images' },
                 { status: 400 }
             )
         }
 
-        const images = moodboardImages.images._valueJSON as unknown as MoodboardImage[]
         const imageUrls = images.map((img) => img.url).filter(Boolean)
 
         if (imageUrls.length === 0) {

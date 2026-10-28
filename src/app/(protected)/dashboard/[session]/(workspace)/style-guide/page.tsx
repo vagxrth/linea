@@ -31,15 +31,17 @@ const page = async ({ searchParams }: Props) => {
         return <p className='text-center py-20 text-red-500'>Project not found</p>
     }
 
-    const styleGuide = await StyleGuideQuery(projectId);
+    const { styleGuide } = await StyleGuideQuery(projectId);
 
-    const guide = styleGuide.styleGuide?._valueJSON as unknown as StyleGuide;
+    const guide: StyleGuide | null = styleGuide;
 
     const colorGuide = guide?.colorSections || [];
     const typographyGuide = guide?.typographySections || [];
 
-    const moodboards = await MoodboardImagesQuery(projectId)
-    const guideImages = moodboards.images._valueJSON as unknown as MoodboardImage[]
+    const { images } = await MoodboardImagesQuery(projectId)
+    // Saved images come without the local preview that MoodboardImage requires; the moodboard
+    // shows their url instead
+    const guideImages = images as unknown as MoodboardImage[]
 
     return (
         <div>
