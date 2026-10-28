@@ -3,8 +3,15 @@ import { useMutation } from 'convex/react'
 import { AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
 import React, { useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { api } from '../../../convex/_generated/api'
 import { Id } from '../../../convex/_generated/dataModel'
+
+// After a failed save, the next try waits this long, doubling after each failure up to the maximum
+const RETRY_FIRST_MS = 5000
+const RETRY_MAX_MS = 60000
+// One toast for the warning and its all-clear, so repeated failures don't stack copies
+const SAVE_TOAST_ID = 'autosave'
 
 const Autosave = () => {
 
@@ -20,7 +27,14 @@ const Autosave = () => {
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const lastSavedRef = useRef<string>('')
 
-    const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+    const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+
+    // Failed saves in a row for the open project. While there are any, its latest changes aren't
+    // saved: the warning stays up, closing the tab asks first, and the save is tried again.
+    const failuresRef = useRef(0)
+    const [failing, setFailing] = useState(false)
+    const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const [retry, setRetry] = useState(0)
 
     const updateProjectSketches = useMutation(api.projects.updateProjectSketches)
 
@@ -49,19 +63,49 @@ const Autosave = () => {
                     sketchesData,
                     viewportData,
                 })
+                if (failuresRef.current > 0) {
+                    // Replaces the warning in place, so its description and close button are cleared too
+                    toast.success('Your changes are saved', {
+                        id: SAVE_TOAST_ID,
+                        description: undefined,
+                        closeButton: false,
+                        duration: 4000,
+                    })
+                }
+                failuresRef.current = 0
+                if (retryRef.current) clearTimeout(retryRef.current)
+                setFailing(false)
                 setSaveStatus('saved')
                 setTimeout(() => setSaveStatus('idle'), 2000)
             } catch (error) {
                 console.error('Autosave failed:', error)
-                setSaveStatus('error')
-                setTimeout(() => setSaveStatus('idle'), 3000)
+                // Forget this state, so the next try saves it again
+                lastSavedRef.current = ''
+                failuresRef.current += 1
+                if (failuresRef.current === 1) {
+                    toast.error("Your changes aren't being saved", {
+                        id: SAVE_TOAST_ID,
+                        description: 'Linea keeps trying. Keep this tab open until this message goes away.',
+                        duration: Infinity,
+                        // Every corner of the canvas has controls, so the warning can be closed.
+                        // The navbar keeps saying "Not saved" until a save works.
+                        closeButton: true,
+                    })
+                }
+                setFailing(true)
+                setSaveStatus('idle')
+                if (retryRef.current) clearTimeout(retryRef.current)
+                retryRef.current = setTimeout(
+                    () => setRetry((n) => n + 1),
+                    Math.min(RETRY_FIRST_MS * 2 ** (failuresRef.current - 1), RETRY_MAX_MS)
+                )
             }
         }, 1000)
 
         return () => {
             if (debounceRef.current) clearTimeout(debounceRef.current)
         }
-    }, [isReady, shapes, frameCounter, scale, translate, projectId, updateProjectSketches])
+    }, [isReady, shapes, frameCounter, scale, translate, projectId, updateProjectSketches, retry])
 
     useEffect(() => {
         return () => {
@@ -69,7 +113,39 @@ const Autosave = () => {
         }
     }, [])
 
+    // The warning and the retries belong to the open project, so they end when another project
+    // opens or the canvas closes
+    useEffect(() => {
+        return () => {
+            if (retryRef.current) clearTimeout(retryRef.current)
+            if (failuresRef.current > 0) toast.dismiss(SAVE_TOAST_ID)
+            failuresRef.current = 0
+            setFailing(false)
+        }
+    }, [projectId])
+
+    // While changes aren't saved, closing or reloading the tab asks first
+    useEffect(() => {
+        if (!failing) return
+        const warn = (e: BeforeUnloadEvent) => {
+            e.preventDefault()
+            // Older browsers ask only when returnValue is set
+            e.returnValue = true
+        }
+        window.addEventListener('beforeunload', warn)
+        return () => window.removeEventListener('beforeunload', warn)
+    }, [failing])
+
     if (!isReady) return null
+
+    if (failing) {
+        return (
+            <div className='flex items-center gap-1.5 text-sm text-destructive' title='Linea keeps trying to save your changes'>
+                <AlertCircle className='w-4 h-4' />
+                <span>Not saved</span>
+            </div>
+        )
+    }
 
     switch (saveStatus) {
         case 'saving':
@@ -82,12 +158,6 @@ const Autosave = () => {
             return (
                 <div className='flex items-center'>
                     <CheckCircle className='w-4 h-4' />
-                </div>
-            )
-        case 'error':
-            return (
-                <div className='flex items-center'>
-                    <AlertCircle className='w-4 h-4' />
                 </div>
             )
         default:
