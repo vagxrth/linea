@@ -41,7 +41,7 @@ linea/
 │   │   ├── auth/                     # Sign in, sign up and password reset pages
 │   │   ├── (protected)/              # Auth-guarded routes
 │   │   │   ├── dashboard/            # Projects list
-│   │   │   │   └── [session]/        # Workspace
+│   │   │   │   └── [slug]/           # Workspace
 │   │   │   │       ├── canvas/       # Infinite canvas editor
 │   │   │   │       └── style-guide/  # Style guide editor
 │   │   │   └── billing/              # Subscription management
