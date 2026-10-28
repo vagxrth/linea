@@ -13,6 +13,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { buttonVariants } from '@/components/ui/button';
 
 const ProjectsList = () => {
 
@@ -22,6 +33,12 @@ const ProjectsList = () => {
   const [editingName, setEditingName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Kept apart from `deleteOpen`, so the dialog's title doesn't go blank while it fades out
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  // Each card's menu button, so closing the dialog can return focus to the one that opened it.
+  // The dialog's own focus return aims at the menu item, which is gone by then.
+  const menuButtons = useRef(new Map<string, HTMLButtonElement>());
 
   useEffect(() => {
     if (editingProjectId && inputRef.current) {
@@ -158,6 +175,10 @@ const ProjectsList = () => {
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
+                      ref={(button) => {
+                        if (button) menuButtons.current.set(project._id, button)
+                        else menuButtons.current.delete(project._id)
+                      }}
                       onClick={(e) => e.preventDefault()}
                       className='p-1.5 rounded-md hover:bg-white/10 transition-colors focus:outline-none'
                     >
@@ -167,10 +188,9 @@ const ProjectsList = () => {
                   <DropdownMenuContent align='end' className='backdrop-blur-xl bg-zinc-900/95 border border-white/[0.12]'>
                     <DropdownMenuItem
                       variant='destructive'
-                      onClick={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        deleteProject(project._id)
+                      onSelect={() => {
+                        setDeleteTarget({ id: project._id, name: project.name })
+                        setDeleteOpen(true)
                       }}
                       className='cursor-pointer flex items-center gap-2'
                     >
@@ -184,6 +204,34 @@ const ProjectsList = () => {
           ))}
         </div>
       )}
+      {/* One dialog for the whole list, outside the cards, so clicks in it can't reach a card's link */}
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent
+          className='backdrop-blur-xl bg-zinc-900/95 border-white/[0.12]'
+          onCloseAutoFocus={(e) => {
+            e.preventDefault()
+            if (deleteTarget) menuButtons.current.get(deleteTarget.id)?.focus()
+          }}
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete “{deleteTarget?.name}”?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Its drawing, designs, style guide and images are deleted too. You can&apos;t undo this.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className={buttonVariants({ variant: 'destructive' })}
+              onClick={() => {
+                if (deleteTarget) deleteProject(deleteTarget.id)
+              }}
+            >
+              Delete project
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
