@@ -37,7 +37,7 @@ const guide = {
 } as unknown as StyleGuide
 
 const styleGuideIs = (value: unknown) =>
-    vi.mocked(StyleGuideQuery).mockResolvedValue({ styleGuide: { _valueJSON: value } } as unknown as Awaited<ReturnType<typeof StyleGuideQuery>>)
+    vi.mocked(StyleGuideQuery).mockResolvedValue({ styleGuide: value } as Awaited<ReturnType<typeof StyleGuideQuery>>)
 
 beforeEach(() => {
     vi.clearAllMocks()
@@ -86,7 +86,7 @@ describe("getStyleGuide", () => {
 describe("inspiration images", () => {
     it("keeps the order and drops images without a URL", async () => {
         vi.mocked(InspirationImagesQuery).mockResolvedValue({
-            images: { _valueJSON: [{ url: "https://img.test/1.png" }, { url: "" }, { url: "https://img.test/2.png" }] },
+            images: [{ url: "https://img.test/1.png" }, { url: "" }, { url: "https://img.test/2.png" }],
         } as unknown as Awaited<ReturnType<typeof InspirationImagesQuery>>)
 
         const urls = await getInspirationImageUrls("p1")

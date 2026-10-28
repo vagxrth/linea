@@ -15,8 +15,8 @@ const ProjectsListProvider = ({ children, initialProjects }: Props) => {
     const dispatch = useAppDispatch();
 
     useEffect(() => {
-        if (initialProjects?._valueJSON) {
-            const projectsData = initialProjects._valueJSON
+        if (initialProjects) {
+            const projectsData = initialProjects
             dispatch(
                 fetchProjectSuccess({
                     projects: projectsData,

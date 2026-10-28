@@ -1,7 +1,6 @@
 import React from 'react'
 import ReduxProvider from '@/redux/provider'
 import { ProfileQuery } from '@/convex/query.config'
-import { ConvexUserRaw, normalizeProfile } from '@/types/user'
 
 type Props = {
     children: React.ReactNode
@@ -13,8 +12,7 @@ const Layout = async ({ children }: Props) => {
 
     let profile = null;
     try {
-        const rawProfile = await ProfileQuery();
-        profile = normalizeProfile(rawProfile._valueJSON as unknown as ConvexUserRaw | null);
+        profile = await ProfileQuery();
     } catch (error) {
         // Gracefully handle profile query errors instead of crashing
         console.error('Profile query error:', error);
