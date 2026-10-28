@@ -80,7 +80,7 @@ linea/
 
 ## Prerequisites
 
-- **Node.js** 18+
+- **Node.js** 22+
 - **npm** (ships with Node)
 - A **Convex** account — [convex.dev](https://www.convex.dev)
 - A **Google Cloud** project with OAuth 2.0 credentials

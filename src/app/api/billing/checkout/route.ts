@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
-import { Polar } from "@polar-sh/sdk"
+// The import path pins Polar's API version
+import { createPolar, type models } from "@polar-sh/sdk/2026-10"
 import { fetchQuery } from "convex/nextjs"
 import { convexAuthNextjsToken } from "@convex-dev/auth/nextjs/server"
 import { api } from "../../../../../convex/_generated/api"
@@ -18,19 +19,16 @@ export async function GET() {
         return NextResponse.json({ error: 'Already subscribed' }, { status: 409 })
     }
 
-    const polar = new Polar({
-        server: process.env.POLAR_ENV === 'sandbox' ? 'sandbox' : 'production',
+    const polar = createPolar({
+        environment: process.env.POLAR_ENV === 'sandbox' ? 'sandbox' : 'production',
         accessToken: process.env.POLAR_ACCESS_TOKEN!,
+        // Wait up to 30 seconds, not the SDK's default of 5, so a slow reply from Polar still opens checkout
+        timeout: 30,
     })
 
-    const checkoutData: {
-        products: string[];
-        successUrl: string;
-        metadata: { userId: string };
-        customerEmail?: string;
-    } = {
+    const checkoutData: models.CheckoutCreate = {
         products: [process.env.POLAR_PLAN!],
-        successUrl: `${process.env.NEXT_PUBLIC_APP_URL}/billing/success`,
+        success_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing/success`,
         metadata: {
             userId: user._id
         }
@@ -38,7 +36,7 @@ export async function GET() {
 
     // Add customer email if available for better tracking
     if (user.email) {
-        checkoutData.customerEmail = user.email
+        checkoutData.customer_email = user.email
     }
 
     const session = await polar.checkouts.create(checkoutData);
