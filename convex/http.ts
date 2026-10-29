@@ -2,6 +2,7 @@ import { httpRouter } from "convex/server";
 import { auth } from "./auth";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { CREDITS_PER_MONTH } from "./subscription";
 import { entitledStatus, extractOrder, extractSubscription, isPolarWebhookEvent, toMs } from "../src/types/polar";
 
 const http = httpRouter();
@@ -135,21 +136,24 @@ const polarWebhook = httpAction(async (ctx, request) => {
         priceId: subscription?.prices?.[0]?.id ?? undefined,
         planCode: subscription?.plan_code ?? subscription?.product?.name ?? 'credit-purchase',
         status,
+        recurringInterval: subscription?.recurring_interval ?? undefined,
+        currentPeriodStart: toMs(subscription?.current_period_start),
         currentPeriodEnd,
         trialEndsAt: toMs(subscription?.trial_ends_at),
         cancelAt: toMs(subscription?.cancel_at),
         cancelledAt: toMs(subscription?.cancelled_at),
         seats: subscription?.seats ?? undefined,
-        creditsGrantPerPeriod: 50,
-        creditsRolloverLimit: 50,
+        creditsGrantPerPeriod: CREDITS_PER_MONTH,
+        creditsRolloverLimit: CREDITS_PER_MONTH,
     });
 
     if (entitledStatus(status)) {
-        // One grant per billing period; purchases without a period are granted once
+        // One grant per billing period, which for a yearly plan is its first month (refillYearlyCredits
+        // grants the rest); purchases without a period are granted once
         await ctx.runMutation(internal.subscription.grantCredits, {
             subscriptionId,
             idempotencyKey: `${polarSubscriptionId}:${currentPeriodEnd ?? 'first'}`,
-            amount: 50,
+            amount: CREDITS_PER_MONTH,
             reason: event.type === 'subscription.created' ? 'initial-grant' : 'period-grant',
         });
     }

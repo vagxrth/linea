@@ -12,7 +12,7 @@ Linea is an AI-powered design tool that transforms hand-drawn sketches and wiref
 - **Workflow Pages** — Automatically generate complementary pages (dashboards, settings, profiles, data tables) that match your primary design's visual language.
 - **Inspiration Sidebar** — Attach reference images that inform the AI during design generation.
 - **Project Management** — Create, rename and delete projects. Each one auto-saves and gets a generated thumbnail.
-- **Subscription Billing** — $10/month plan with 50 AI credits per billing period, powered by Polar.
+- **Subscription Billing** — Linea Pro, $15/month or $120/year, with 100 AI credits a month on both plans, powered by Polar.
 
 ## Tech Stack
 
@@ -158,7 +158,8 @@ GOOGLE_GENERATIVE_AI_API_KEY=<your-gemini-api-key>
 
 # Polar (payments)
 POLAR_ACCESS_TOKEN=<your-polar-access-token>
-POLAR_PLAN=<your-polar-product-id>
+# The monthly and yearly product ids, comma-separated, monthly first
+POLAR_PLAN=<monthly-product-id>,<yearly-product-id>
 POLAR_ENV=sandbox
 
 # App
@@ -225,9 +226,9 @@ Routes are protected by Next.js middleware:
 
 | Detail | Value |
 |---|---|
-| Price | $10/month |
-| Credits per period | 50 |
-| Unused credits | Don't roll over: the balance resets to 50 at each renewal |
+| Price | $15/month, or $120/year |
+| Credits | 100 a month, on both plans |
+| Unused credits | Don't roll over: the balance resets to 100 each month |
 | Payment provider | Polar |
 
 | AI action | Credits |
@@ -238,7 +239,7 @@ Routes are protected by Next.js middleware:
 | Generate workflow pages | 4 (1 for each of the 4 pages) |
 | Redesign a workflow page through chat | 4 |
 
-Credits are charged only once the AI starts returning output, so a failed generation costs nothing. They're granted when a subscription starts and at each renewal, by the Polar webhook handler in `convex/http.ts`.
+Credits are charged only once the AI starts returning output, so a failed generation costs nothing. They're granted when a subscription starts and at each renewal, by the Polar webhook handler in `convex/http.ts`. A yearly plan's renewal comes once a year, so `refillYearlyCredits` in `convex/subscription.ts` refills its credits on each monthly anniversary; `convex/crons.ts` runs it every hour.
 
 ## Deployment
 
@@ -248,7 +249,7 @@ Linea runs the Next.js app on **Vercel** and the backend on **Convex**. Vercel's
 2. Deploy the Convex functions to your production deployment with `npx convex deploy`. Run it again whenever `convex/` changes.
 3. Run `npx @convex-dev/auth --prod`, and give your production domain as the site URL.
 4. Set the backend's settings on the production deployment with `npx convex env set --prod`: `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_RESEND_KEY`, `AUTH_EMAIL_FROM` and `POLAR_WEBHOOK_SECRET`.
-5. In the Vercel project settings, add `NEXT_PUBLIC_CONVEX_URL` (your production deployment's URL), `GOOGLE_GENERATIVE_AI_API_KEY`, `POLAR_ACCESS_TOKEN`, `POLAR_PLAN`, `POLAR_ENV=production` and `NEXT_PUBLIC_APP_URL` (your domain). `CONVEX_DEPLOYMENT` is only for the Convex CLI and doesn't belong in Vercel.
+5. In the Vercel project settings, add `NEXT_PUBLIC_CONVEX_URL` (your production deployment's URL), `GOOGLE_GENERATIVE_AI_API_KEY`, `POLAR_ACCESS_TOKEN`, `POLAR_PLAN` (the monthly and yearly product ids, comma-separated), `POLAR_ENV=production` and `NEXT_PUBLIC_APP_URL` (your domain). `CONVEX_DEPLOYMENT` is only for the Convex CLI and doesn't belong in Vercel.
 6. In Google Cloud, add `https://<your-prod-deployment>.convex.site/api/auth/callback/google` to the OAuth client's authorized redirect URIs.
 7. Point the Polar webhook at `https://<your-prod-deployment>.convex.site/polar/webhook`.
 

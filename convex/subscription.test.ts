@@ -1,10 +1,11 @@
 // @vitest-environment edge-runtime
 /// <reference types="vite/client" />
 import { convexTest, type TestConvex } from "convex-test"
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { api, internal } from "./_generated/api"
 import type { Id } from "./_generated/dataModel"
 import schema from "./schema"
+import { monthsSince } from "./subscription"
 
 // Every Convex module except the tests, which Convex skips too (it skips files with more than one dot)
 const modules = import.meta.glob(["./**/*.*s", "!./**/*.test.ts"])
@@ -17,6 +18,8 @@ interface SubscriptionOptions {
     status?: string
     creditsBalance?: number
     creditsGrantPerPeriod?: number
+    recurringInterval?: string
+    currentPeriodStart?: number
     currentPeriodEnd?: number
 }
 
@@ -29,6 +32,8 @@ const addSubscriber = async (t: Test, options: SubscriptionOptions = {}) => {
             polarCustomerId: `cus_${userId}`,
             polarSubscriptionId: `sub_${userId}`,
             status: options.status ?? "active",
+            recurringInterval: options.recurringInterval,
+            currentPeriodStart: options.currentPeriodStart,
             currentPeriodEnd: options.currentPeriodEnd ?? Date.now() + 30 * DAY,
             creditsBalance: options.creditsBalance ?? 10,
             creditsGrantPerPeriod: options.creditsGrantPerPeriod ?? 10,
@@ -228,5 +233,85 @@ describe("hasEntitlement", () => {
         expect(await ended.asUser.query(api.subscription.hasEntitlement, {})).toBe(false)
         expect(await canceled.asUser.query(api.subscription.hasEntitlement, {})).toBe(false)
         expect(await t.query(api.subscription.hasEntitlement, {})).toBe(false)
+    })
+})
+
+describe("monthsSince", () => {
+    const start = Date.UTC(2027, 0, 15, 10)
+
+    it("counts whole months from the start's day and time", () => {
+        expect(monthsSince(start, Date.UTC(2027, 0, 20))).toBe(0)
+        expect(monthsSince(start, Date.UTC(2027, 1, 15, 9, 59))).toBe(0)
+        expect(monthsSince(start, Date.UTC(2027, 1, 15, 10))).toBe(1)
+        expect(monthsSince(start, Date.UTC(2027, 11, 15, 10))).toBe(11)
+        expect(monthsSince(start, Date.UTC(2028, 0, 15, 10))).toBe(12)
+    })
+
+    it("moves an anniversary past a shorter month's end to its last day", () => {
+        const endOfMonth = Date.UTC(2027, 0, 31)
+        expect(monthsSince(endOfMonth, Date.UTC(2027, 1, 27))).toBe(0)
+        expect(monthsSince(endOfMonth, Date.UTC(2027, 1, 28))).toBe(1)
+        expect(monthsSince(endOfMonth, Date.UTC(2027, 2, 30))).toBe(1)
+        expect(monthsSince(endOfMonth, Date.UTC(2027, 2, 31))).toBe(2)
+        expect(monthsSince(Date.UTC(2026, 10, 30), Date.UTC(2027, 1, 28))).toBe(3)
+    })
+})
+
+describe("refillYearlyCredits", () => {
+    const periodStart = Date.UTC(2027, 0, 15, 10)
+    const periodEnd = Date.UTC(2028, 0, 15, 10)
+    const yearly = { recurringInterval: "year", currentPeriodStart: periodStart, currentPeriodEnd: periodEnd }
+
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
+    const refillAt = async (t: Test, time: number) => {
+        vi.useFakeTimers()
+        vi.setSystemTime(time)
+        await t.mutation(internal.subscription.refillYearlyCredits, {})
+    }
+
+    it("refills a yearly plan on each monthly anniversary, once a month", async () => {
+        const t = convexTest(schema, modules)
+        const { userId, subscriptionId } = await addSubscriber(t, { ...yearly, creditsBalance: 12, creditsGrantPerPeriod: 100 })
+
+        await refillAt(t, Date.UTC(2027, 1, 15, 11))
+        expect(await balanceOf(t, subscriptionId)).toBe(100)
+        expect(await ledgerOf(t, subscriptionId)).toMatchObject([
+            { amount: 100, type: "grant", reasons: "monthly-refill", idempotencyKey: `sub_${userId}:${periodEnd}:month-1` },
+        ])
+
+        // Again in the same month: nothing new
+        await t.run((ctx) => ctx.db.patch(subscriptionId, { creditsBalance: 40 }))
+        await refillAt(t, Date.UTC(2027, 1, 20))
+        expect(await balanceOf(t, subscriptionId)).toBe(40)
+        expect(await ledgerOf(t, subscriptionId)).toHaveLength(1)
+
+        // The next month refills again
+        await refillAt(t, Date.UTC(2027, 2, 15, 10))
+        expect(await balanceOf(t, subscriptionId)).toBe(100)
+        expect(await ledgerOf(t, subscriptionId)).toHaveLength(2)
+    })
+
+    it("leaves the first month, monthly plans, inactive and ended subscriptions alone", async () => {
+        const t = convexTest(schema, modules)
+        const firstMonth = await addSubscriber(t, { ...yearly, creditsBalance: 5 })
+        const monthly = await addSubscriber(t, { recurringInterval: "month", currentPeriodStart: periodStart, currentPeriodEnd: periodEnd, creditsBalance: 5 })
+        const canceled = await addSubscriber(t, { ...yearly, status: "canceled", creditsBalance: 5 })
+        const ended = await addSubscriber(t, { ...yearly, currentPeriodEnd: Date.UTC(2027, 0, 30), creditsBalance: 5 })
+
+        // Still month 0: the first month's credits came with Polar's event
+        await refillAt(t, Date.UTC(2027, 1, 14))
+        expect(await balanceOf(t, firstMonth.subscriptionId)).toBe(5)
+        expect(await ledgerOf(t, firstMonth.subscriptionId)).toHaveLength(0)
+
+        // Month 1, and past the end of the last subscription's period
+        await refillAt(t, Date.UTC(2027, 1, 15, 11))
+        expect(await balanceOf(t, firstMonth.subscriptionId)).toBe(10)
+        for (const { subscriptionId } of [monthly, canceled, ended]) {
+            expect(await balanceOf(t, subscriptionId)).toBe(5)
+            expect(await ledgerOf(t, subscriptionId)).toHaveLength(0)
+        }
     })
 })

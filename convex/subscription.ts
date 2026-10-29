@@ -1,9 +1,10 @@
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, mutation, MutationCtx, query } from "./_generated/server";
+import { Id } from "./_generated/dataModel";
 
-const DEFAULT_GRANT = 50
-const DEFAULT_ROLLOVER_LIMIT = 50
+// Linea Pro's credits, granted every month whether the plan is billed monthly or yearly
+export const CREDITS_PER_MONTH = 100
 const ENTITLED = new Set(['active', 'trialing', 'trailing', 'paid'])
 
 export const hasEntitlement = query({
@@ -37,6 +38,8 @@ export const upsertFromPolar = internalMutation({
         priceId: v.optional(v.string()),
         planCode: v.optional(v.string()),
         status: v.string(),
+        recurringInterval: v.optional(v.string()),
+        currentPeriodStart: v.optional(v.number()),
         currentPeriodEnd: v.optional(v.number()),
         trialEndsAt: v.optional(v.number()),
         cancelAt: v.optional(v.number()),
@@ -64,6 +67,8 @@ export const upsertFromPolar = internalMutation({
             priceId: args.priceId,
             planCode: args.planCode,
             status: args.status,
+            recurringInterval: args.recurringInterval,
+            currentPeriodStart: args.currentPeriodStart,
             currentPeriodEnd: args.currentPeriodEnd,
             trialEndsAt: args.trialEndsAt,
             cancelAt: args.cancelAt,
@@ -73,12 +78,12 @@ export const upsertFromPolar = internalMutation({
                 args.creditsGrantPerPeriod ??
                 existingByPolar?.creditsGrantPerPeriod ??
                 existingByUser?.creditsGrantPerPeriod ??
-                DEFAULT_GRANT,
+                CREDITS_PER_MONTH,
             creditsRolloverLimit:
                 args.creditsRolloverLimit ??
                 existingByPolar?.creditsRolloverLimit ??
                 existingByUser?.creditsRolloverLimit ??
-                DEFAULT_ROLLOVER_LIMIT,
+                CREDITS_PER_MONTH,
         }
 
         if (existingByPolar) {
@@ -150,6 +155,60 @@ export const clearPolarMetadata = internalMutation({
     }
 })
 
+interface Grant {
+    subscriptionId: Id<'subscriptions'>
+    idempotencyKey: string
+    amount?: number
+    reason?: string
+}
+
+// Sets a subscription's balance to its grant (unused credits don't roll over), once per idempotency key
+const grantPeriodCredits = async (ctx: MutationCtx, { subscriptionId, idempotencyKey, amount, reason }: Grant) => {
+    const duplicate = await ctx.db
+        .query('credits_ledger')
+        .withIndex('by_idempotencyKey', (q) => q.eq('idempotencyKey', idempotencyKey))
+        .first();
+
+    if (duplicate) return { ok: true, skipped: true, reason: 'duplicate-key' }
+
+    const sub = await ctx.db.get(subscriptionId);
+    if (!sub) return { ok: false, reason: 'subscription-not-found' }
+
+    if (sub.lastGrantCursor === idempotencyKey) {
+        return { ok: true, skipped: true, reason: 'cursor-match' }
+    }
+
+    // Normalize status: lowercase and trim whitespace
+    const normalizedStatus = String(sub.status || '').toLowerCase().trim();
+
+    if (!ENTITLED.has(normalizedStatus)) {
+        return { ok: true, skipped: true, reason: 'not-entitled' }
+    }
+
+    const grant = amount ?? sub.creditsGrantPerPeriod ?? CREDITS_PER_MONTH
+
+    if (grant <= 0) return { ok: true, skipped: true, reason: 'zero-grant' }
+
+    const next = grant
+
+    await ctx.db.patch(subscriptionId, {
+        creditsBalance: next,
+        lastGrantCursor: idempotencyKey,
+    })
+
+    await ctx.db.insert('credits_ledger', {
+        userId: sub.userId,
+        subscriptionId,
+        amount: grant,
+        type: 'grant',
+        reasons: reason ?? 'period-grant',
+        idempotencyKey,
+        meta: { prev: sub.creditsBalance, next },
+    })
+
+    return { ok: true, granted: grant, balance: next }
+}
+
 export const grantCredits = internalMutation({
     args: {
         subscriptionId: v.id('subscriptions'),
@@ -157,51 +216,56 @@ export const grantCredits = internalMutation({
         amount: v.optional(v.number()),
         reason: v.optional(v.string()),
     },
-    handler: async (ctx, { subscriptionId, idempotencyKey, amount, reason }) => {
-        const duplicate = await ctx.db
-            .query('credits_ledger')
-            .withIndex('by_idempotencyKey', (q) => q.eq('idempotencyKey', idempotencyKey))
-            .first();
+    handler: (ctx, args) => grantPeriodCredits(ctx, args),
+})
 
-        if (duplicate) return { ok: true, skipped: true, reason: 'duplicate-key' }
+// Whole months from `start` to `now`: 0 until the first monthly anniversary of `start`, then 1, and
+// so on. An anniversary past the end of a shorter month (the 31st in February) falls on its last day.
+export const monthsSince = (start: number, now: number) => {
+    const from = new Date(start)
+    const to = new Date(now)
+    let months = (to.getUTCFullYear() - from.getUTCFullYear()) * 12 + (to.getUTCMonth() - from.getUTCMonth())
+    const lastDay = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth() + 1, 0)).getUTCDate()
+    const anniversary = Date.UTC(
+        to.getUTCFullYear(),
+        to.getUTCMonth(),
+        Math.min(from.getUTCDate(), lastDay),
+        from.getUTCHours(),
+        from.getUTCMinutes(),
+        from.getUTCSeconds(),
+        from.getUTCMilliseconds(),
+    )
+    if (now < anniversary) months--
+    return months
+}
 
-        const sub = await ctx.db.get(subscriptionId);
-        if (!sub) return { ok: false, reason: 'subscription-not-found' }
+// Polar sends events only when a billing period starts, so a yearly plan's credits would come once a
+// year. This refills them on each monthly anniversary of the period start instead; crons.ts runs it
+// every hour.
+export const refillYearlyCredits = internalMutation({
+    args: {},
+    handler: async (ctx) => {
+        const now = Date.now()
+        let refilled = 0
+        for (const status of ENTITLED) {
+            for await (const sub of ctx.db.query('subscriptions').withIndex('by_status', (q) => q.eq('status', status))) {
+                if (sub.recurringInterval !== 'year' || sub.currentPeriodStart == null || sub.currentPeriodEnd == null) continue
+                if (sub.currentPeriodEnd <= now) continue
 
-        if (sub.lastGrantCursor === idempotencyKey) {
-            return { ok: true, skipped: true, reason: 'cursor-match' }
+                // Month 0's credits came with Polar's event, and month 12 is the next period's renewal
+                const month = monthsSince(sub.currentPeriodStart, now)
+                if (month < 1 || month > 11) continue
+
+                const result = await grantPeriodCredits(ctx, {
+                    subscriptionId: sub._id,
+                    idempotencyKey: `${sub.polarSubscriptionId}:${sub.currentPeriodEnd}:month-${month}`,
+                    reason: 'monthly-refill',
+                })
+                if ('granted' in result) refilled++
+            }
         }
-
-        // Normalize status: lowercase and trim whitespace
-        const normalizedStatus = String(sub.status || '').toLowerCase().trim();
-
-        if (!ENTITLED.has(normalizedStatus)) {
-            return { ok: true, skipped: true, reason: 'not-entitled' }
-        }
-
-        const grant = amount ?? sub.creditsGrantPerPeriod ?? DEFAULT_GRANT
-
-        if (grant <= 0) return { ok: true, skipped: true, reason: 'zero-grant' }
-
-        const next = grant
-
-        await ctx.db.patch(subscriptionId, {
-            creditsBalance: next,
-            lastGrantCursor: idempotencyKey,
-        })
-
-        await ctx.db.insert('credits_ledger', {
-            userId: sub.userId,
-            subscriptionId,
-            amount: grant,
-            type: 'grant',
-            reasons: reason ?? 'period-grant',
-            idempotencyKey,
-            meta: { prev: sub.creditsBalance, next },
-        })
-
-        return { ok: true, granted: grant, balance: next }
-    }
+        if (refilled > 0) console.log(`Refilled credits for ${refilled} yearly subscriptions`)
+    },
 })
 
 export const getCreditsBalance = query({

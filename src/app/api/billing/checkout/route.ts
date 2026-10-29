@@ -27,7 +27,9 @@ export async function GET() {
     })
 
     const checkoutData: models.CheckoutCreate = {
-        products: [process.env.POLAR_PLAN!],
+        // POLAR_PLAN holds the product ids, comma-separated (monthly first, then yearly). Polar's
+        // checkout lets the buyer pick one, with the first selected.
+        products: process.env.POLAR_PLAN!.split(',').map((id) => id.trim()).filter(Boolean),
         success_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing/success`,
         metadata: {
             userId: user._id
