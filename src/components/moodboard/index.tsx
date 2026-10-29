@@ -1,6 +1,7 @@
 'use client'
 
 import { MoodboardImage, useMoodboard } from '@/hooks/use-styles'
+import { IMAGE_ACCEPT } from '@/lib/image-upload'
 import { cn } from '@/lib/utils'
 import React, { useRef } from 'react'
 import ImagesBoard from './images-board'
@@ -127,7 +128,7 @@ const Moodboard = ({ guideImages }: Props) => {
                         </Button>
                     </div>
                 )}
-                <input ref={fileInput} type="file" multiple className='hidden' onChange={handleFileInput} accept='image/*'/>
+                <input ref={fileInput} type="file" multiple className='hidden' onChange={handleFileInput} accept={IMAGE_ACCEPT}/>
             </div>
             <GenerateStyleGuide images={images} fileInputRef={fileInput} projectId={projectId ?? ''}/>
             {images.length > 5 && (

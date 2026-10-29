@@ -11,6 +11,7 @@ import { useGenerateStyleGuideMutation } from "@/redux/api/style-guide"
 import { useRouter } from "next/navigation"
 import { GeneratedUIShape, updateShape } from "@/redux/slice/shapes"
 import { useAppDispatch } from "@/redux/store"
+import { imageProblem } from "@/lib/image-upload"
 import DOMPurify from 'dompurify'
 
 export interface MoodboardImage {
@@ -109,8 +110,17 @@ export const useMoodboard = (guideImages: MoodboardImage[]) => {
     }, [guideImages, setValue, getValues])
 
     const addImage = (file: File) => {
-        if (images.length >= 5) {
-            toast.error('You can only add up to 5 images')
+        // Several files can arrive at once, so read the form's images rather than this render's
+        // `images`, which would keep only the last file
+        const currentImages = getValues('images')
+        if (currentImages.length >= 5) {
+            toast.error('You can only add up to 5 images', { id: 'moodboard-limit' })
+            return
+        }
+
+        const problem = imageProblem(file.type, file.size)
+        if (problem) {
+            toast.error(`${file.name} ${problem}`)
             return
         }
 
@@ -123,8 +133,7 @@ export const useMoodboard = (guideImages: MoodboardImage[]) => {
             isFromServer: false
         }
 
-        const updatedImages = [...images, newImage]
-        setValue('images', updatedImages)
+        setValue('images', [...currentImages, newImage])
 
         toast.success('Image added successfully')
     }
@@ -176,19 +185,8 @@ export const useMoodboard = (guideImages: MoodboardImage[]) => {
 
         setDragActive(false)
 
-        const files = Array.from(e.dataTransfer.files)
-        const imageFiles = files.filter((file) => file.type.startsWith('image/'))
-
-        if (imageFiles.length === 0) {
-            toast.error('Please drag and drop images only')
-            return
-        }
-
-        imageFiles.forEach((file) => {
-            if (images.length < 5) {
-                addImage(file)
-            }
-        })
+        // addImage says why it skips a file: the wrong type, too big, or no room left
+        Array.from(e.dataTransfer.files).forEach((file) => addImage(file))
     }
 
     const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
