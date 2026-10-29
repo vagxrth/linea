@@ -8,6 +8,8 @@ import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { Id } from '../../../convex/_generated/dataModel'
 import Image from 'next/image'
+import { toast } from 'sonner'
+import { IMAGE_ACCEPT, imageProblem } from '@/lib/image-upload'
 
 type InspirationSidebarProps = {
     isOpen: boolean
@@ -72,8 +74,16 @@ const InspirationSidebar = ({ isOpen, onClose }: InspirationSidebarProps) => {
     const handleFileSelect = useCallback((files: FileList | null) => {
         if (!files || files.length === 0) return
 
-        const newImages: Props[] = Array.from(files)
-            .filter((file) => file.type.startsWith('image/'))
+        const usable = Array.from(files).filter((file) => {
+            const problem = imageProblem(file.type, file.size)
+            if (problem) toast.error(`${file.name} ${problem}`)
+            return !problem
+        })
+        if (usable.length > 6 - images.length) {
+            toast.error('You can only add up to 6 images', { id: 'inspiration-limit' })
+        }
+
+        const newImages: Props[] = usable
             .slice(0, 6 - images.length)
             .map((file) => ({
                 id: `temp-${Date.now()}-${Math.random()}`,
@@ -220,7 +230,7 @@ const InspirationSidebar = ({ isOpen, onClose }: InspirationSidebarProps) => {
                 onDrop={handleDrop}
                 onClick={() => images.length < 6 && fileInputRef.current?.click()}
             >
-                <input ref={fileInputRef} type='file' multiple className='hidden' onChange={(e) => handleFileSelect(e.target.files)} accept='image/*' />
+                <input ref={fileInputRef} type='file' multiple className='hidden' onChange={(e) => handleFileSelect(e.target.files)} accept={IMAGE_ACCEPT} />
                 <div className='flex flex-col items-center gap-2'>
                     <Upload className='w-8 h-8 text-white/40' />
                     <p className='text-white/60 text-sm'>
