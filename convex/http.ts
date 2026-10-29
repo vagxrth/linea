@@ -18,8 +18,22 @@ const decodeBase64 = (value: string) => {
     }
 };
 
+const sameBytes = (a: Uint8Array, b: Uint8Array) =>
+    a.byteLength === b.byteLength && a.every((byte, i) => byte === b[i]);
+
+// The keys Polar may sign with (https://polar.sh/docs/integrate/webhooks/delivery#custom-validation).
+// Secrets generated before 8 September 2026 sign with the UTF-8 bytes of the whole "whsec_..." string;
+// newer ones follow Standard Webhooks and sign with the base64-decoded part after "whsec_". Both are
+// tried, as @polar-sh/sdk's validateEvent does, so either kind of secret works.
+const signingKeys = (secret: string) => {
+    const keys = [new TextEncoder().encode(secret)];
+    const decoded = decodeBase64(secret.startsWith('whsec_') ? secret.slice('whsec_'.length) : secret);
+    if (decoded && decoded.byteLength > 0 && !sameBytes(decoded, keys[0])) keys.push(decoded);
+    return keys;
+};
+
 // Standard Webhooks signature check, matching @polar-sh/sdk's validateEvent: an HMAC-SHA256 of
-// "<webhook-id>.<webhook-timestamp>.<raw body>" keyed with the secret's UTF-8 bytes, sent as
+// "<webhook-id>.<webhook-timestamp>.<raw body>" keyed with one of signingKeys, sent as
 // space-separated "v1,<base64>" entries in the webhook-signature header.
 const hasValidSignature = async (request: Request, body: string, secret: string): Promise<boolean> => {
     const id = request.headers.get('webhook-id');
@@ -32,22 +46,22 @@ const hasValidSignature = async (request: Request, body: string, secret: string)
         return false;
     }
 
-    const encoder = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-        'raw',
-        encoder.encode(secret),
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['verify'],
+    const keys = await Promise.all(
+        signingKeys(secret).map((raw) =>
+            crypto.subtle.importKey('raw', raw, { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']),
+        ),
     );
-    const signedContent = encoder.encode(`${id}.${seconds}.${body}`);
+    const signedContent = new TextEncoder().encode(`${id}.${seconds}.${body}`);
 
     for (const entry of signatures.split(' ')) {
         const [version, signature] = entry.split(',');
         if (version !== 'v1' || !signature) continue;
 
         const bytes = decodeBase64(signature);
-        if (bytes && (await crypto.subtle.verify('HMAC', key, bytes, signedContent))) return true;
+        if (!bytes) continue;
+        for (const key of keys) {
+            if (await crypto.subtle.verify('HMAC', key, bytes, signedContent)) return true;
+        }
     }
     return false;
 };

@@ -9,8 +9,10 @@ import schema from "./schema"
 // Every Convex module except the tests, which Convex skips too (it skips files with more than one dot)
 const modules = import.meta.glob(["./**/*.*s", "!./**/*.test.ts"])
 
-// Made-up secrets in Polar's format (whsec_ then base64), built at run time so secret scanners don't flag them
+// Made-up secrets in Polar's format (whsec_ then base64), built at run time so secret scanners don't flag them.
+// NEW_SECRET stands for one generated on or after 8 September 2026, which Polar signs the Standard Webhooks way.
 const SECRET = `whsec_${btoa("linea-webhook-test-secret")}`
+const NEW_SECRET = `whsec_${btoa("linea-standard-webhooks-test-key")}`
 const OTHER_SECRET = `whsec_${btoa("someone-else")}`
 const MINUTE = 60 * 1000
 const PERIOD_END = "2030-01-01T00:00:00.000Z"
@@ -23,17 +25,24 @@ interface Delivery {
     headers: Record<string, string>
 }
 
-// Signs an event the way Polar does for webhook secrets created before 8 September 2026: an
-// HMAC-SHA256 of "<webhook-id>.<webhook-timestamp>.<body>" keyed with the secret's UTF-8 bytes
-const signedDelivery = async (event: object, options: { secret?: string; timestamp?: number } = {}): Promise<Delivery> => {
+// Signs an event the way Polar does: an HMAC-SHA256 of "<webhook-id>.<webhook-timestamp>.<body>".
+// For secrets generated before 8 September 2026 ("polar") the key is the secret's UTF-8 bytes; for
+// newer ones ("standard", Standard Webhooks) it's the base64-decoded part after "whsec_".
+const signedDelivery = async (
+    event: object,
+    options: { secret?: string; timestamp?: number; scheme?: "polar" | "standard" } = {},
+): Promise<Delivery> => {
     const body = JSON.stringify(event)
     const id = `msg_${crypto.randomUUID()}`
     const timestamp = String(Math.floor((options.timestamp ?? Date.now()) / 1000))
+    const secret = options.secret ?? SECRET
 
     const encoder = new TextEncoder()
     const key = await crypto.subtle.importKey(
         "raw",
-        encoder.encode(options.secret ?? SECRET),
+        options.scheme === "standard"
+            ? Uint8Array.from(atob(secret.slice("whsec_".length)), (c) => c.charCodeAt(0))
+            : encoder.encode(secret),
         { name: "HMAC", hash: "SHA-256" },
         false,
         ["sign"],
@@ -58,9 +67,9 @@ const withHeader = (delivery: Delivery, name: string, value: string | null): Del
 }
 
 // Polar's own check from the SDK, so the tests can't pass with a signature Polar wouldn't send
-const polarAccepts = async ({ body, headers }: Delivery) => {
+const polarAccepts = async ({ body, headers }: Delivery, secret = SECRET) => {
     try {
-        await webhooks.validateEvent(body, headers, SECRET)
+        await webhooks.validateEvent(body, headers, secret)
         return true
     } catch (error) {
         if (error instanceof webhooks.PolarWebhookVerificationError) return false
@@ -125,6 +134,40 @@ describe("POST /polar/webhook", () => {
         const ledger = await ledgerOf(t)
         expect(ledger).toHaveLength(1)
         expect(ledger[0]).toMatchObject({ amount: 50, type: "grant", idempotencyKey: `sub_1:${Date.parse(PERIOD_END)}` })
+    })
+
+    it("accepts an event signed for a secret generated since 8 September 2026", async () => {
+        vi.stubEnv("POLAR_WEBHOOK_SECRET", NEW_SECRET)
+        const t = convexTest(schema, modules)
+        const userId = await addUser(t)
+        const delivery = await signedDelivery(subscriptionEvent("subscription.created", userId), {
+            secret: NEW_SECRET,
+            scheme: "standard",
+        })
+        expect(await polarAccepts(delivery, NEW_SECRET)).toBe(true)
+
+        const response = await post(t, delivery)
+
+        expect(response.status).toBe(200)
+        expect(await subscriptionsOf(t)).toHaveLength(1)
+        expect(await ledgerOf(t)).toHaveLength(1)
+    })
+
+    it("rejects an event signed the Standard Webhooks way with another secret, and changes nothing", async () => {
+        vi.stubEnv("POLAR_WEBHOOK_SECRET", NEW_SECRET)
+        const t = convexTest(schema, modules)
+        const userId = await addUser(t)
+        const delivery = await signedDelivery(subscriptionEvent("subscription.created", userId), {
+            secret: OTHER_SECRET,
+            scheme: "standard",
+        })
+        expect(await polarAccepts(delivery, NEW_SECRET)).toBe(false)
+
+        const response = await post(t, delivery)
+
+        expect(response.status).toBe(403)
+        expect(await subscriptionsOf(t)).toHaveLength(0)
+        expect(await ledgerOf(t)).toHaveLength(0)
     })
 
     it("grants a period's credits once when Polar delivers the event again", async () => {
