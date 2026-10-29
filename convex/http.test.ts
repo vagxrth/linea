@@ -15,6 +15,7 @@ const SECRET = `whsec_${btoa("linea-webhook-test-secret")}`
 const NEW_SECRET = `whsec_${btoa("linea-standard-webhooks-test-key")}`
 const OTHER_SECRET = `whsec_${btoa("someone-else")}`
 const MINUTE = 60 * 1000
+const PERIOD_START = "2029-01-01T00:00:00.000Z"
 const PERIOD_END = "2030-01-01T00:00:00.000Z"
 const NEXT_PERIOD_END = "2030-02-01T00:00:00.000Z"
 
@@ -129,11 +130,11 @@ describe("POST /polar/webhook", () => {
             polarCustomerId: "cus_1",
             status: "active",
             currentPeriodEnd: Date.parse(PERIOD_END),
-            creditsBalance: 50,
+            creditsBalance: 100,
         })
         const ledger = await ledgerOf(t)
         expect(ledger).toHaveLength(1)
-        expect(ledger[0]).toMatchObject({ amount: 50, type: "grant", idempotencyKey: `sub_1:${Date.parse(PERIOD_END)}` })
+        expect(ledger[0]).toMatchObject({ amount: 100, type: "grant", idempotencyKey: `sub_1:${Date.parse(PERIOD_END)}` })
     })
 
     it("accepts an event signed for a secret generated since 8 September 2026", async () => {
@@ -170,6 +171,24 @@ describe("POST /polar/webhook", () => {
         expect(await ledgerOf(t)).toHaveLength(0)
     })
 
+    it("saves a yearly plan's interval and period start, which the monthly refills go by", async () => {
+        const t = convexTest(schema, modules)
+        const userId = await addUser(t)
+        const delivery = await signedDelivery(
+            subscriptionEvent("subscription.created", userId, { recurring_interval: "year", current_period_start: PERIOD_START }),
+        )
+
+        const response = await post(t, delivery)
+
+        expect(response.status).toBe(200)
+        expect((await subscriptionsOf(t))[0]).toMatchObject({
+            recurringInterval: "year",
+            currentPeriodStart: Date.parse(PERIOD_START),
+            currentPeriodEnd: Date.parse(PERIOD_END),
+            creditsBalance: 100,
+        })
+    })
+
     it("grants a period's credits once when Polar delivers the event again", async () => {
         const t = convexTest(schema, modules)
         const userId = await addUser(t)
@@ -197,7 +216,7 @@ describe("POST /polar/webhook", () => {
         expect(response.status).toBe(200)
         expect((await subscriptionsOf(t))[0]).toMatchObject({
             currentPeriodEnd: Date.parse(NEXT_PERIOD_END),
-            creditsBalance: 50,
+            creditsBalance: 100,
         })
         expect(await ledgerOf(t)).toHaveLength(2)
     })

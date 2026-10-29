@@ -33,6 +33,8 @@ export interface PolarPrice {
 export interface PolarSubscription {
     id: string
     status: string
+    recurring_interval?: string | null
+    current_period_start?: string | null
     current_period_end?: string | null
     trial_ends_at?: string | null
     cancel_at?: string | null
@@ -60,6 +62,8 @@ export const extractSubscription = (data: unknown): PolarSubscription | null => 
             return {
                 id,
                 status,
+                recurring_interval: sub.recurring_interval as string | undefined | null,
+                current_period_start: sub.current_period_start as string | undefined | null,
                 current_period_end: sub.current_period_end as string | undefined | null,
                 trial_ends_at: sub.trial_ends_at as string | undefined | null,
                 cancel_at: sub.cancel_at as string | undefined | null,

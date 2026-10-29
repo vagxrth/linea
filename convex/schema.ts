@@ -72,6 +72,9 @@ const schema = defineSchema({
     priceId: v.optional(v.string()),
     planCode: v.optional(v.string()),
     status: v.string(),
+    // "month" or "year". Yearly subscriptions get their credits monthly (refillYearlyCredits).
+    recurringInterval: v.optional(v.string()),
+    currentPeriodStart: v.optional(v.number()),
     currentPeriodEnd: v.optional(v.number()),
     trialEndsAt: v.optional(v.number()),
     cancelAt: v.optional(v.number()),

@@ -7,7 +7,7 @@ const Billing = () => {
             <div className="mx-auto max-w-5xl px-6">
                 <div className="mx-auto max-w-2xl text-center">
                     <h2 className="text-balance text-3xl font-bold md:text-4xl lg:text-5xl">
-                        Upgrade to Linea Premium
+                        Upgrade to Linea Pro
                     </h2>
                 </div>
                 <div className="mt-8 md:mt-20">
@@ -15,13 +15,16 @@ const Billing = () => {
                         <div className="grid items-stretch gap-12 divide-y p-12 pb-6 md:grid-cols-2 md:divide-x md:divide-y-0">
                             <div className="flex flex-col pb-12 text-center md:pb-0 md:pr-12">
                                 <div>
-                                    <h3 className="text-2xl font-semibold">Linea Premium</h3>
+                                    <h3 className="text-2xl font-semibold">Linea Pro</h3>
                                     <p className="mt-2 text-lg">Perfect for individuals and small teams</p>
                                 </div>
                                 <div className="flex flex-col items-center justify-center flex-1">
-                                    <span className="mb-6 inline-block text-6xl font-bold">
-                                        <span className="text-4xl">$</span>10<span className="text-lg font-normal text-muted-foreground">/month</span>
+                                    <span className="inline-block text-6xl font-bold">
+                                        <span className="text-4xl">$</span>15<span className="text-lg font-normal text-muted-foreground">/month</span>
                                     </span>
+                                    <p className="mt-2 mb-6 text-sm text-muted-foreground">
+                                        or $120 a year, a third off
+                                    </p>
                                     <Subscribe />
                                 </div>
                             </div>
@@ -39,12 +42,12 @@ const Billing = () => {
                                             description: 'Export designs in high-resolution formats ready for sharing, handoff, or production.'
                                         },
                                         {
-                                            title: '50 Credits per Month',
-                                            description: 'Each AI design action consumes 1 credit. Credits refresh every billing cycle.'
+                                            title: '100 Credits per Month',
+                                            description: 'A design, style guide or redesign uses 1 credit, and a 4-page workflow uses 4.'
                                         },
                                         {
-                                            title: 'Monthly Renewal',
-                                            description: 'Credits auto-refresh each month. No manual top-ups needed.'
+                                            title: 'Monthly or Yearly',
+                                            description: 'Credits refill every month on both plans. No manual top-ups needed.'
                                         }
                                     ].map((item, index) => (
                                         <li
@@ -61,7 +64,7 @@ const Billing = () => {
                             </div>
                         </div>
                         <p className="text-muted-foreground text-center text-sm px-12 pb-8">
-                            Billed monthly. Cancel anytime.
+                            Billed monthly or yearly. Cancel anytime.
                         </p>
                     </div>
                 </div>
