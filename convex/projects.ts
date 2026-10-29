@@ -1,9 +1,17 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internalMutation, mutation, query, QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { deleteFileIfOwned } from "./storage";
+import { tooLargeForDocument } from "./limits";
+
+// Why a drawing couldn't be saved, so the canvas can say what happened and whether trying again can
+// help. Sent as ConvexError data, which reaches the browser on every deployment; a plain Error's
+// message is hidden on production deployments.
+export type SaveFailure = 'signed-out' | 'not-found' | 'not-yours' | 'too-large'
+
+const saveFailed = (code: SaveFailure) => new ConvexError({ code })
 
 // A project's drawing and viewport live in project_sketches, apart from the project itself
 const getSketches = (ctx: QueryCtx, projectId: Id<'projects'>) =>
@@ -146,16 +154,22 @@ export const updateProjectSketches = mutation({
     },
     handler: async (ctx, { projectId, sketchesData, viewportData }) => {
         const userId = await getAuthUserId(ctx);
-        if (!userId) throw new Error("User not authenticated!")
+        if (!userId) throw saveFailed('signed-out')
 
         const project = await ctx.db.get(projectId);
-        if (!project) throw new Error("Project not found")
+        if (!project) throw saveFailed('not-found')
 
-        if (project.userId !== userId) {
-            throw new Error("Access denied")
-        }
+        if (project.userId !== userId) throw saveFailed('not-yours')
 
         const sketches = await getSketches(ctx, projectId)
+        // The drawing's document as it would be after this save
+        const saved = {
+            projectId,
+            sketchesData,
+            viewportData: viewportData ?? sketches?.viewportData ?? project.viewportData,
+        }
+        if (tooLargeForDocument(saved)) throw saveFailed('too-large')
+
         if (sketches) {
             await ctx.db.patch(sketches._id, viewportData ? { sketchesData, viewportData } : { sketchesData })
         } else {

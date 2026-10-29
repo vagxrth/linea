@@ -4,6 +4,7 @@ import { AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
 import React, { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { describeSaveFailure } from '@/lib/save-failure'
 import { api } from '../../../convex/_generated/api'
 import { Id } from '../../../convex/_generated/dataModel'
 
@@ -30,9 +31,14 @@ const Autosave = () => {
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
 
     // Failed saves in a row for the open project. While there are any, its latest changes aren't
-    // saved: the warning stays up, closing the tab asks first, and the save is tried again.
+    // saved: the warning says why, closing the tab asks first, and the save is tried again on a
+    // timer when that can help, or else with the next edit.
     const failuresRef = useRef(0)
-    const [failing, setFailing] = useState(false)
+    // Why the last save failed, shown in the warning, or null while saves work
+    const [failure, setFailure] = useState<string | null>(null)
+    const failing = failure !== null
+    // The reason the warning shows, so it's updated only when the reason changes
+    const shownRef = useRef<string | null>(null)
     const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const [retry, setRetry] = useState(0)
 
@@ -73,32 +79,37 @@ const Autosave = () => {
                     })
                 }
                 failuresRef.current = 0
+                shownRef.current = null
                 if (retryRef.current) clearTimeout(retryRef.current)
-                setFailing(false)
+                setFailure(null)
                 setSaveStatus('saved')
                 setTimeout(() => setSaveStatus('idle'), 2000)
             } catch (error) {
                 console.error('Autosave failed:', error)
+                const problem = describeSaveFailure(error)
                 // Forget this state, so the next try saves it again
                 lastSavedRef.current = ''
                 failuresRef.current += 1
-                if (failuresRef.current === 1) {
+                if (problem.description !== shownRef.current) {
                     toast.error("Your changes aren't being saved", {
                         id: SAVE_TOAST_ID,
-                        description: 'Linea keeps trying. Keep this tab open until this message goes away.',
+                        description: problem.description,
                         duration: Infinity,
                         // Every corner of the canvas has controls, so the warning can be closed.
                         // The navbar keeps saying "Not saved" until a save works.
                         closeButton: true,
                     })
+                    shownRef.current = problem.description
                 }
-                setFailing(true)
+                setFailure(problem.description)
                 setSaveStatus('idle')
                 if (retryRef.current) clearTimeout(retryRef.current)
-                retryRef.current = setTimeout(
-                    () => setRetry((n) => n + 1),
-                    Math.min(RETRY_FIRST_MS * 2 ** (failuresRef.current - 1), RETRY_MAX_MS)
-                )
+                if (problem.retry) {
+                    retryRef.current = setTimeout(
+                        () => setRetry((n) => n + 1),
+                        Math.min(RETRY_FIRST_MS * 2 ** (failuresRef.current - 1), RETRY_MAX_MS)
+                    )
+                }
             }
         }, 1000)
 
@@ -120,7 +131,8 @@ const Autosave = () => {
             if (retryRef.current) clearTimeout(retryRef.current)
             if (failuresRef.current > 0) toast.dismiss(SAVE_TOAST_ID)
             failuresRef.current = 0
-            setFailing(false)
+            shownRef.current = null
+            setFailure(null)
         }
     }, [projectId])
 
@@ -138,9 +150,9 @@ const Autosave = () => {
 
     if (!isReady) return null
 
-    if (failing) {
+    if (failure !== null) {
         return (
-            <div className='flex items-center gap-1.5 text-sm text-destructive' title='Linea keeps trying to save your changes'>
+            <div className='flex items-center gap-1.5 text-sm text-destructive' title={failure}>
                 <AlertCircle className='w-4 h-4' />
                 <span>Not saved</span>
             </div>
