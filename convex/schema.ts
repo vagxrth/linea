@@ -52,7 +52,8 @@ const schema = defineSchema({
   // Credits ledger
   credits_ledger: defineTable({
     userId: v.id('users'),
-    subscriptionId: v.id('subscriptions'),
+    // Unset for free credits, which belong to no subscription
+    subscriptionId: v.optional(v.id('subscriptions')),
     amount: v.number(),
     type: v.string(),
     reasons: v.optional(v.string()),
@@ -62,6 +63,13 @@ const schema = defineSchema({
     .index('by_subscriptionId', ['subscriptionId'])
     .index('by_userId', ['userId'])
     .index('by_idempotencyKey', ['idempotencyKey']),
+
+  // Free credits left, per user. Users start with FREE_CREDITS (subscription.ts) once their email
+  // is confirmed; the row is added the first time they spend one.
+  free_credits: defineTable({
+    userId: v.id('users'),
+    balance: v.number(),
+  }).index('by_userId', ['userId']),
 
   // Subscriptions
   subscriptions: defineTable({

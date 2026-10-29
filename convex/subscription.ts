@@ -1,10 +1,12 @@
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { internalMutation, mutation, MutationCtx, query } from "./_generated/server";
+import { internalMutation, mutation, MutationCtx, query, QueryCtx } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 
 // Linea Pro's credits, granted every month whether the plan is billed monthly or yearly
 export const CREDITS_PER_MONTH = 100
+// Credits every account gets once its email is confirmed, to try Linea. They don't come back once spent.
+export const FREE_CREDITS = 10
 const ENTITLED = new Set(['active', 'trialing', 'trailing', 'paid'])
 
 export const hasEntitlement = query({
@@ -268,17 +270,31 @@ export const refillYearlyCredits = internalMutation({
     },
 })
 
+// The user's subscription and its credits, which count only while it's active
+const paidCredits = async (ctx: QueryCtx, userId: Id<'users'>) => {
+    const sub = await ctx.db.query('subscriptions').withIndex('by_userId', (q) => q.eq('userId', userId)).first();
+    // Normalize status: lowercase and trim whitespace
+    if (!sub || !ENTITLED.has(String(sub.status || '').toLowerCase().trim())) return { sub: null, balance: 0 }
+    return { sub, balance: sub.creditsBalance }
+}
+
+// The user's free credits. Until they spend one there's no row, and a confirmed email (which
+// Google accounts have from the start) is worth FREE_CREDITS.
+const freeCredits = async (ctx: QueryCtx, userId: Id<'users'>) => {
+    const row = await ctx.db.query('free_credits').withIndex('by_userId', (q) => q.eq('userId', userId)).first();
+    if (row) return { row, balance: row.balance }
+    const user = await ctx.db.get(userId);
+    return { row: null, balance: user?.emailVerificationTime != null ? FREE_CREDITS : 0 }
+}
+
 export const getCreditsBalance = query({
     args: {},
     handler: async (ctx) => {
         const userId = await getAuthUserId(ctx);
         if (!userId) return 0;
 
-        const sub = await ctx.db.query('subscriptions').withIndex('by_userId', (q) => q.eq('userId', userId)).first();
-        if (!sub) return 0;
-        const normalizedStatus = String(sub.status || '').toLowerCase().trim();
-        if (!ENTITLED.has(normalizedStatus)) return 0;
-        return sub.creditsBalance ?? 0;
+        const [paid, free] = await Promise.all([paidCredits(ctx, userId), freeCredits(ctx, userId)])
+        return paid.balance + free.balance
     }
 })
 
@@ -320,34 +336,39 @@ export const consumeCredits = mutation({
             if (duplicate) return { ok: true, idempotent: true }
         }
 
-        const sub = await ctx.db
-            .query('subscriptions')
-            .withIndex('by_userId', (q) => q.eq('userId', userId))
-            .first()
-
-        if (!sub) return { ok: false, reason: 'subscription-not-found' }
-        
-        // Normalize status: lowercase and trim whitespace
-        const normalizedStatus = String(sub.status || '').toLowerCase().trim();
-        if (!ENTITLED.has(normalizedStatus)) return { ok: false, reason: 'not-entitled' }
-
-        if (sub.creditsBalance < amount) {
-            return { ok: false, error: 'insufficient-balance', balance: sub.creditsBalance }
+        const [paid, free] = await Promise.all([paidCredits(ctx, userId), freeCredits(ctx, userId)])
+        const balance = paid.balance + free.balance
+        if (balance < amount) {
+            return { ok: false, error: 'insufficient-balance', balance }
         }
 
-        const next = sub.creditsBalance - amount
-        await ctx.db.patch(sub._id, { creditsBalance: next })
+        // The plan's credits go first: they're replaced every month, and free ones never come back
+        const fromPaid = Math.min(amount, paid.balance)
+        const fromFree = amount - fromPaid
+        const entry = { userId, type: 'consume', reasons: reason ?? 'ai-generation', idempotencyKey }
 
-        await ctx.db.insert('credits_ledger', {
-            userId,
-            subscriptionId: sub._id,
-            amount: -amount,
-            type: 'consume',
-            reasons: reason ?? 'ai-generation',
-            idempotencyKey,
-            meta: { prev: sub.creditsBalance, next },
-        })
+        if (paid.sub && fromPaid > 0) {
+            const next = paid.balance - fromPaid
+            await ctx.db.patch(paid.sub._id, { creditsBalance: next })
+            await ctx.db.insert('credits_ledger', {
+                ...entry,
+                subscriptionId: paid.sub._id,
+                amount: -fromPaid,
+                meta: { prev: paid.balance, next },
+            })
+        }
 
-        return { ok: true, balance: next }
+        if (fromFree > 0) {
+            const next = free.balance - fromFree
+            if (free.row) await ctx.db.patch(free.row._id, { balance: next })
+            else await ctx.db.insert('free_credits', { userId, balance: next })
+            await ctx.db.insert('credits_ledger', {
+                ...entry,
+                amount: -fromFree,
+                meta: { prev: free.balance, next },
+            })
+        }
+
+        return { ok: true, balance: balance - amount }
     }
 })

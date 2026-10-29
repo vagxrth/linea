@@ -13,6 +13,7 @@ import { contentBounds, fitToContent, getShapeBounds } from '@/lib/shape-bounds'
 import { resizeText } from '@/lib/text-box'
 import { downloadBlob, exportGeneratedUI } from '@/lib/download'
 import { addErrorMessage, addUserMessage, clearChat, finishedStreamingResponse, initializeChat, startStreamingResponse, updateStreamingContent } from '@/redux/slice/chat';
+import { useOutOfCredits } from './use-subscription'
 
 interface TouchPointer {
     id: number
@@ -1263,6 +1264,7 @@ export const useFrame = (shape: FrameShape) => {
     const store = useAppStore()
 
     const [isGenerating, setIsGenerating] = useState(false)
+    const outOfCredits = useOutOfCredits()
 
     const handleDownload = async () => {
         try {
@@ -1293,6 +1295,10 @@ export const useFrame = (shape: FrameShape) => {
                 body: formData,
             })
 
+            if (response.status === 402) {
+                await outOfCredits()
+                return
+            }
             if (!response.ok) {
                 const errorText = await response.text()
                 throw new Error(`API Request Failed: ${errorText}`)
@@ -1407,6 +1413,7 @@ export const useWorkflowGeneration = () => {
     const store = useAppStore()
     // Designs whose workflow is being generated
     const generatingRef = useRef<Set<string>>(new Set())
+    const outOfCredits = useOutOfCredits()
 
     // Keeps the same identity, so the designs it's passed to don't re-render. The design is read
     // when the button is pressed rather than subscribed to, for the same reason.
@@ -1459,6 +1466,9 @@ export const useWorkflowGeneration = () => {
                         }),
                     })
 
+                    if (response.status === 402) {
+                        return { pageIndex: index, success: false, outOfCredits: true }
+                    }
                     if (!response.ok) {
                         throw new Error(`Failed to generate workflow page ${index + 1}: ${response.status}`)
                     }
@@ -1518,6 +1528,8 @@ export const useWorkflowGeneration = () => {
             const results = await Promise.all(workflowPromises)
             const successCount = results.filter((result) => result.success).length
             const failureCount = results.length - successCount
+            // Each page costs a credit, so the credits can run out partway through
+            const ranOut = results.some((result) => 'outOfCredits' in result)
 
             if (successCount === 4 ) {
                 toast.success('Workflow generated successfully', {
@@ -1527,9 +1539,13 @@ export const useWorkflowGeneration = () => {
                 toast.success(`Generated ${successCount}/4 pages successfully`, {
                     id: 'workflow-generation',
                 })
-                if (failureCount > 0) {
+                if (ranOut) {
+                    await outOfCredits()
+                } else if (failureCount > 0) {
                     toast.error(`Failed to generate ${failureCount} pages`)
                 }
+            } else if (ranOut) {
+                await outOfCredits('workflow-generation')
             } else {
                 toast.error('Failed to generate workflow', {
                     id: 'workflow-generation',
@@ -1543,7 +1559,7 @@ export const useWorkflowGeneration = () => {
         } finally {
             generatingRef.current.delete(generatedUIId)
         }
-    }, [dispatch, store])
+    }, [dispatch, store, outOfCredits])
     return {
         generateWorkflow,
     }
@@ -1602,6 +1618,7 @@ export const useChatWindow = (generatedUIId: string, isOpen: boolean) => {
     const inputRef = useRef<HTMLInputElement>(null)
 
     const dispatch = useAppDispatch()
+    const outOfCredits = useOutOfCredits()
 
     const chatState = useAppSelector((state) => state.chat.chats[generatedUIId])
 
@@ -1694,6 +1711,11 @@ export const useChatWindow = (generatedUIId: string, isOpen: boolean) => {
                 body: JSON.stringify(requestData),
             })
 
+            if (response.status === 402) {
+                dispatch(finishedStreamingResponse({ generatedUIId, messageId: responseId, finalContent: "You're out of credits." }))
+                await outOfCredits()
+                return
+            }
             if (!response.ok) {
                 throw new Error(`API Request Failed: ${response.status}`)
             }

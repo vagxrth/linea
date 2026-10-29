@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation"
 import { GeneratedUIShape, updateShape } from "@/redux/slice/shapes"
 import { useAppDispatch } from "@/redux/store"
 import { imageProblem } from "@/lib/image-upload"
+import { useOutOfCredits } from "./use-subscription"
 import DOMPurify from 'dompurify'
 
 export interface MoodboardImage {
@@ -270,6 +271,7 @@ export const useMoodboard = (guideImages: MoodboardImage[]) => {
 export const useStyleGuide = (projectId: string, images: MoodboardImage[], fileInputRef: React.RefObject<HTMLInputElement | null>) => {
     const [generateStyleGuide, { isLoading: isGenerating }] = useGenerateStyleGuideMutation()
     const router = useRouter()
+    const outOfCredits = useOutOfCredits()
 
     const handleUploadClick = () => fileInputRef.current?.click()
 
@@ -302,6 +304,10 @@ export const useStyleGuide = (projectId: string, images: MoodboardImage[], fileI
                 toast.success('Switch to Colors tab to see the results', { duration: 5000 })
             }, 1000)
         } catch (error) {
+            if ((error as { status?: number })?.status === 402) {
+                await outOfCredits('style-guide-generation')
+                return
+            }
             const errorMessage = error && typeof error === 'object' && 'error' in error
                 ? (error as { error: string }).error
                 : 'Failed to generate style guide'
