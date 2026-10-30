@@ -43,7 +43,7 @@ A generated or redesigned page uses 1 credit, a style guide uses 1, and a 4-page
 
 ## Support
 
-Found a bug or have a question? [Open an issue](https://github.com/vagxrth/linea/issues).
+Questions, billing or account help: email [hey@vagarth.in](mailto:hey@vagarth.in). Found a bug? [Open an issue](https://github.com/vagxrth/linea/issues).
 
 ## License
 
