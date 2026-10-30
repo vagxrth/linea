@@ -239,7 +239,7 @@ Routes are protected by Next.js middleware:
 | Generate a style guide | 1 |
 | Redesign a design through chat | 1 |
 | Generate workflow pages | 4 (1 for each of the 4 pages) |
-| Redesign a workflow page through chat | 4 |
+| Redesign a workflow page through chat | 1 |
 
 Credits are charged only once the AI starts returning output, so a failed generation costs nothing. They're granted when a subscription starts and at each renewal, by the Polar webhook handler in `convex/http.ts`. A yearly plan's renewal comes once a year, so `refillYearlyCredits` in `convex/subscription.ts` refills its credits on each monthly anniversary; `convex/crons.ts` runs it every hour.
 
