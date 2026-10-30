@@ -145,53 +145,6 @@ export const upsertFromPolar = internalMutation({
     }
 })
 
-// One-off cleanup: the webhook used to save each raw Polar payload, customer details included,
-// in `metadata`. Run once after deploying: `npx convex run subscription:clearPolarMetadata`.
-export const clearPolarMetadata = internalMutation({
-    args: {},
-    handler: async (ctx) => {
-        let cleared = 0
-        for await (const sub of ctx.db.query('subscriptions')) {
-            if (sub.metadata !== undefined) {
-                await ctx.db.patch(sub._id, { metadata: undefined })
-                cleared++
-            }
-        }
-        return { cleared }
-    }
-})
-
-// One-off for going live on Polar production: until then every purchase went through Polar's sandbox
-// with test cards. This ends the subscriptions still active from it, and takes back their credits, so
-// those accounts can subscribe for real. Subscriptions to the products in POLAR_PLAN, which on the
-// deployment lists the production products, are left alone. Run once after setting POLAR_PLAN:
-// `npx convex run subscription:endSandboxSubscriptions`.
-export const endSandboxSubscriptions = internalMutation({
-    args: {},
-    handler: async (ctx) => {
-        const proProducts = productIds(process.env.POLAR_PLAN)
-        if (proProducts.length === 0) throw new Error('Set POLAR_PLAN on the deployment first')
-
-        let ended = 0
-        for await (const sub of ctx.db.query('subscriptions')) {
-            if (!ENTITLED.has(String(sub.status || '').toLowerCase().trim())) continue
-            if (sub.productId && proProducts.includes(sub.productId)) continue
-
-            await ctx.db.patch(sub._id, { status: 'canceled', creditsBalance: 0 })
-            await ctx.db.insert('credits_ledger', {
-                userId: sub.userId,
-                subscriptionId: sub._id,
-                amount: -sub.creditsBalance,
-                type: 'reset',
-                reasons: 'sandbox-ended',
-                meta: { prev: sub.creditsBalance, next: 0, status: sub.status },
-            })
-            ended++
-        }
-        return { ended }
-    }
-})
-
 interface Grant {
     subscriptionId: Id<'subscriptions'>
     idempotencyKey: string

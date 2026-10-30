@@ -21,7 +21,7 @@ const getOwnRecord = async (ctx: QueryCtx, storageId: string, userId: Id<"users"
     if (!id) return null;
 
     const owner = await getOwnerRecord(ctx, id);
-    return owner && !owner.disputed && owner.userId === userId ? owner : null;
+    return owner?.userId === userId ? owner : null;
 };
 
 export const ownsFile = async (ctx: QueryCtx, storageId: string, userId: Id<"users">) => {
@@ -33,7 +33,7 @@ export const ownsFile = async (ctx: QueryCtx, storageId: string, userId: Id<"use
 export const claimFile = async (ctx: MutationCtx, storageId: Id<"_storage">, userId: Id<"users">) => {
     const owner = await getOwnerRecord(ctx, storageId);
     if (owner) {
-        if (owner.disputed || owner.userId !== userId) throw new Error("Access denied");
+        if (owner.userId !== userId) throw new Error("Access denied");
         return;
     }
 
@@ -64,49 +64,10 @@ export const deleteFileIfOwned = async (ctx: MutationCtx, storageId: string, use
     await ctx.db.delete(owner._id);
 };
 
-// Records owners for the images projects listed before ownership was tracked. Run it once after
-// deploying with `npx convex run storage:backfillOwners` (add `--prod` for production). It pages
-// through projects and schedules itself until it reaches the end. Re-running it is harmless.
-export const backfillOwners = internalMutation({
-    args: { cursor: v.optional(v.string()) },
-    handler: async (ctx, { cursor }) => {
-        const { page, isDone, continueCursor } = await ctx.db
-            .query("projects")
-            .paginate({ cursor: cursor ?? null, numItems: 20 });
-
-        for (const project of page) {
-            const listed = new Set([...(project.moodboardImages ?? []), ...(project.inspirationImages ?? [])]);
-            for (const listedId of listed) {
-                const storageId = ctx.db.system.normalizeId("_storage", listedId);
-                if (!storageId) continue;
-
-                const owner = await getOwnerRecord(ctx, storageId);
-                if (!owner) {
-                    await ctx.db.insert("storage_owners", { storageId, userId: project.userId });
-                } else if (owner.userId !== project.userId && !owner.disputed) {
-                    // Any project could list any file before, so we can't tell who uploaded it.
-                    await ctx.db.patch(owner._id, { disputed: true });
-                    console.warn(
-                        `File ${storageId} is listed by projects of users ${owner.userId} and ${project.userId} ` +
-                        `(project ${project._id}). Marked it disputed.`
-                    );
-                }
-            }
-        }
-
-        if (isDone) {
-            console.log("Storage owner backfill finished");
-        } else {
-            await ctx.scheduler.runAfter(0, internal.storage.backfillOwners, { cursor: continueCursor });
-        }
-    },
-});
-
 // An upload that never made it into a project: it has no owner, and the claim window that let its
-// uploader attach it has passed. claimFile gives every file a project uses an owner, and
-// backfillOwners gave one to every file projects listed before that, so these are only uploads
-// that were refused or abandoned. A new way of storing files must give them owners too, or this
-// deletes them.
+// uploader attach it has passed. Every file a project uses has an owner (claimFile records it), so
+// these are only uploads that were refused or abandoned. A new way of storing files must give them
+// owners too, or this deletes them.
 const isUnusedUpload = async (ctx: QueryCtx, file: { _id: Id<"_storage">; _creationTime: number }) =>
     Date.now() - file._creationTime > CLAIM_WINDOW_MS && !(await getOwnerRecord(ctx, file._id));
 

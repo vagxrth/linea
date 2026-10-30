@@ -16,7 +16,6 @@ type Test = TestConvex<typeof schema>
 
 interface SubscriptionOptions {
     emailVerified?: boolean
-    productId?: string
     status?: string
     creditsBalance?: number
     creditsGrantPerPeriod?: number
@@ -43,7 +42,6 @@ const addSubscriber = async (t: Test, options: SubscriptionOptions = {}) => {
             userId,
             polarCustomerId: `cus_${userId}`,
             polarSubscriptionId: `sub_${userId}`,
-            productId: options.productId,
             status: options.status ?? "active",
             recurringInterval: options.recurringInterval,
             currentPeriodStart: options.currentPeriodStart,
@@ -312,43 +310,6 @@ describe("upsertFromPolar", () => {
         const id = await t.mutation(internal.subscription.upsertFromPolar, { ...event, polarCustomerId: "" })
 
         expect(await t.run(async (ctx) => (await ctx.db.get(id))?.polarCustomerId)).toBe("cus_1")
-    })
-})
-
-describe("endSandboxSubscriptions", () => {
-    afterEach(() => {
-        vi.unstubAllEnvs()
-    })
-
-    it("ends active subscriptions to other products and takes their credits back", async () => {
-        vi.stubEnv("POLAR_PLAN", "prod_monthly,prod_yearly")
-        const t = convexTest(schema, modules)
-        const sandbox = await addSubscriber(t, { productId: "prod_sandbox", creditsBalance: 40 })
-        const oneTime = await addSubscriber(t, { status: "paid", creditsBalance: 10 })
-        const canceled = await addSubscriber(t, { productId: "prod_sandbox", status: "canceled", creditsBalance: 5 })
-        const production = await addSubscriber(t, { productId: "prod_yearly", creditsBalance: 100 })
-
-        expect(await t.mutation(internal.subscription.endSandboxSubscriptions, {})).toEqual({ ended: 2 })
-
-        for (const { asUser, subscriptionId } of [sandbox, oneTime]) {
-            expect(await t.run(async (ctx) => (await ctx.db.get(subscriptionId))?.status)).toBe("canceled")
-            expect(await balanceOf(t, subscriptionId)).toBe(0)
-            expect(await asUser.query(api.subscription.hasEntitlement, {})).toBe(false)
-        }
-        expect(await ledgerOf(t, sandbox.subscriptionId)).toMatchObject([{ amount: -40, type: "reset", reasons: "sandbox-ended" }])
-        expect(await balanceOf(t, canceled.subscriptionId)).toBe(5)
-        expect(await ledgerOf(t, canceled.subscriptionId)).toHaveLength(0)
-        expect(await balanceOf(t, production.subscriptionId)).toBe(100)
-        expect(await production.asUser.query(api.subscription.hasEntitlement, {})).toBe(true)
-    })
-
-    it("refuses to run before POLAR_PLAN is set", async () => {
-        vi.stubEnv("POLAR_PLAN", undefined)
-        const t = convexTest(schema, modules)
-        const { subscriptionId } = await addSubscriber(t, { productId: "prod_sandbox" })
-
-        await expect(t.mutation(internal.subscription.endSandboxSubscriptions, {})).rejects.toThrow("Set POLAR_PLAN")
-        expect(await balanceOf(t, subscriptionId)).toBe(10)
     })
 })
 
