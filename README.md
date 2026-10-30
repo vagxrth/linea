@@ -178,10 +178,11 @@ Open [http://localhost:3000](http://localhost:3000) to see the app.
 
 ### 9. Receive Polar webhooks (optional, for billing)
 
-Polar webhooks are handled by the Convex deployment, not the Next.js app. Set the webhook secret on Convex:
+Polar webhooks are handled by the Convex deployment, not the Next.js app. Set the webhook secret on Convex, and the same product ids as `POLAR_PLAN` in `.env.local`. The webhook gives credits only for those products, so nothing else sold in your Polar organization hands out Pro credits:
 
 ```bash
 npx convex env set POLAR_WEBHOOK_SECRET <your-polar-webhook-secret>
+npx convex env set POLAR_PLAN <monthly-product-id>,<yearly-product-id>
 ```
 
 Then point a Polar webhook at `https://<your-deployment>.convex.site/polar/webhook` with the `subscription.*` and `order.*` events.
@@ -252,7 +253,7 @@ Linea runs the Next.js app on **Vercel** and the backend on **Convex**. Vercel's
 1. Push your repo to GitHub and import the project in [Vercel](https://vercel.com).
 2. Deploy the Convex functions to your production deployment with `npx convex deploy`. Run it again whenever `convex/` changes.
 3. Run `npx @convex-dev/auth --prod`, and give your production domain as the site URL.
-4. Set the backend's settings on the production deployment with `npx convex env set --prod`: `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_RESEND_KEY`, `AUTH_EMAIL_FROM` and `POLAR_WEBHOOK_SECRET`.
+4. Set the backend's settings on the production deployment with `npx convex env set --prod`: `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_RESEND_KEY`, `AUTH_EMAIL_FROM`, `POLAR_WEBHOOK_SECRET` and `POLAR_PLAN`.
 5. In the Vercel project settings, add `NEXT_PUBLIC_CONVEX_URL` (your production deployment's URL), `GOOGLE_GENERATIVE_AI_API_KEY`, `POLAR_ACCESS_TOKEN`, `POLAR_PLAN` (the monthly and yearly product ids, comma-separated), `POLAR_ENV=production` and `NEXT_PUBLIC_APP_URL` (your domain). `CONVEX_DEPLOYMENT` is only for the Convex CLI and doesn't belong in Vercel.
 6. In Google Cloud, add `https://<your-prod-deployment>.convex.site/api/auth/callback/google` to the OAuth client's authorized redirect URIs.
 7. Point the Polar webhook at `https://<your-prod-deployment>.convex.site/polar/webhook`.

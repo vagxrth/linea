@@ -2,7 +2,7 @@ import { httpRouter } from "convex/server";
 import { auth } from "./auth";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { CREDITS_PER_MONTH } from "./subscription";
+import { CREDITS_PER_MONTH, productIds } from "./subscription";
 import { entitledStatus, extractOrder, extractSubscription, isPolarWebhookEvent, toMs } from "../src/types/polar";
 
 const http = httpRouter();
@@ -104,6 +104,20 @@ const polarWebhook = httpAction(async (ctx, request) => {
         return new Response('Ignored', { status: 200 });
     }
 
+    // Only Linea Pro's products give credits. Without this, anything else sold in the Polar
+    // organization would give Pro credits to a buyer whose email matches an account.
+    const proProducts = productIds(process.env.POLAR_PLAN);
+    if (proProducts.length === 0) {
+        console.error('POLAR_PLAN is not set on the Convex deployment');
+        // A failure, so Polar delivers the event again once the variable is set
+        return new Response('Missing POLAR_PLAN', { status: 500 });
+    }
+    const productId = subscription?.product_id ?? subscription?.product?.id ?? order?.product_id ?? order?.product?.id ?? undefined;
+    if (!productId || !proProducts.includes(productId)) {
+        console.warn(`Polar ${event.type}: not a Linea Pro product`);
+        return new Response('Ignored', { status: 200 });
+    }
+
     const metadataUserId = [subscription?.metadata?.userId, order?.metadata?.userId]
         .find((value): value is string => typeof value === 'string');
 
@@ -132,7 +146,7 @@ const polarWebhook = httpAction(async (ctx, request) => {
         userId,
         polarCustomerId: subscription?.customer?.id ?? subscription?.customer_id ?? order?.customer_id ?? '',
         polarSubscriptionId,
-        productId: subscription?.product_id ?? subscription?.product?.id ?? undefined,
+        productId,
         priceId: subscription?.prices?.[0]?.id ?? undefined,
         planCode: subscription?.plan_code ?? subscription?.product?.name ?? 'credit-purchase',
         status,

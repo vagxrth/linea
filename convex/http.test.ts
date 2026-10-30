@@ -107,6 +107,7 @@ const ledgerOf = (t: Test) => t.run((ctx) => ctx.db.query("credits_ledger").coll
 describe("POST /polar/webhook", () => {
     beforeEach(() => {
         vi.stubEnv("POLAR_WEBHOOK_SECRET", SECRET)
+        vi.stubEnv("POLAR_PLAN", "prod_1, prod_2")
     })
 
     afterEach(() => {
@@ -273,6 +274,48 @@ describe("POST /polar/webhook", () => {
         const response = await post(t, delivery)
 
         expect(response.status).toBe(200)
+        expect(await subscriptionsOf(t)).toHaveLength(0)
+    })
+
+    it("ignores a product that isn't Linea Pro, and changes nothing", async () => {
+        const t = convexTest(schema, modules)
+        const userId = await addUser(t)
+        const event = subscriptionEvent("subscription.created", userId, {
+            product_id: "prod_other",
+            product: { id: "prod_other", name: "Something else" },
+        })
+
+        const response = await post(t, await signedDelivery(event))
+
+        expect(response.status).toBe(200)
+        expect(await subscriptionsOf(t)).toHaveLength(0)
+        expect(await ledgerOf(t)).toHaveLength(0)
+    })
+
+    it("reads an order's product: Linea Pro's are saved, others ignored", async () => {
+        const t = convexTest(schema, modules)
+        const userId = await addUser(t)
+        const order = (id: string, productId: string) => ({
+            type: "order.paid",
+            timestamp: new Date().toISOString(),
+            data: { id, customer_id: "cus_1", customer: { id: "cus_1", email: "buyer@example.com" }, product_id: productId, metadata: { userId } },
+        })
+
+        expect((await post(t, await signedDelivery(order("ord_other", "prod_other")))).status).toBe(200)
+        expect(await subscriptionsOf(t)).toHaveLength(0)
+
+        expect((await post(t, await signedDelivery(order("ord_pro", "prod_2")))).status).toBe(200)
+        expect(await subscriptionsOf(t)).toMatchObject([{ polarSubscriptionId: "ord_pro", productId: "prod_2", polarCustomerId: "cus_1" }])
+    })
+
+    it("fails without POLAR_PLAN on the deployment, so Polar delivers the event again", async () => {
+        vi.stubEnv("POLAR_PLAN", undefined)
+        const t = convexTest(schema, modules)
+        const userId = await addUser(t)
+
+        const response = await post(t, await signedDelivery(subscriptionEvent("subscription.created", userId)))
+
+        expect(response.status).toBe(500)
         expect(await subscriptionsOf(t)).toHaveLength(0)
     })
 

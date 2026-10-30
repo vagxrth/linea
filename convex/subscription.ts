@@ -5,6 +5,9 @@ import { Id } from "./_generated/dataModel";
 
 // Linea Pro's credits, granted every month whether the plan is billed monthly or yearly
 export const CREDITS_PER_MONTH = 100
+
+// Linea Pro's Polar product ids, from POLAR_PLAN: comma-separated, monthly first, the same value as on Vercel
+export const productIds = (plan: string | undefined) => (plan ?? '').split(',').map((id) => id.trim()).filter(Boolean)
 // Credits every account gets once its email is confirmed, to try Linea. They don't come back once spent.
 export const FREE_CREDITS = 10
 const ENTITLED = new Set(['active', 'trialing', 'trailing', 'paid'])
@@ -63,7 +66,8 @@ export const upsertFromPolar = internalMutation({
 
         const base = {
             userId: args.userId,
-            polarCustomerId: args.polarCustomerId,
+            // An event without the customer keeps the one already saved, which Manage plan needs
+            polarCustomerId: args.polarCustomerId || existingByPolar?.polarCustomerId || existingByUser?.polarCustomerId || '',
             polarSubscriptionId: args.polarSubscriptionId,
             productId: args.productId,
             priceId: args.priceId,
@@ -154,6 +158,37 @@ export const clearPolarMetadata = internalMutation({
             }
         }
         return { cleared }
+    }
+})
+
+// One-off for going live on Polar production: until then every purchase went through Polar's sandbox
+// with test cards. This ends the subscriptions still active from it, and takes back their credits, so
+// those accounts can subscribe for real. Subscriptions to the products in POLAR_PLAN, which on the
+// deployment lists the production products, are left alone. Run once after setting POLAR_PLAN:
+// `npx convex run subscription:endSandboxSubscriptions`.
+export const endSandboxSubscriptions = internalMutation({
+    args: {},
+    handler: async (ctx) => {
+        const proProducts = productIds(process.env.POLAR_PLAN)
+        if (proProducts.length === 0) throw new Error('Set POLAR_PLAN on the deployment first')
+
+        let ended = 0
+        for await (const sub of ctx.db.query('subscriptions')) {
+            if (!ENTITLED.has(String(sub.status || '').toLowerCase().trim())) continue
+            if (sub.productId && proProducts.includes(sub.productId)) continue
+
+            await ctx.db.patch(sub._id, { status: 'canceled', creditsBalance: 0 })
+            await ctx.db.insert('credits_ledger', {
+                userId: sub.userId,
+                subscriptionId: sub._id,
+                amount: -sub.creditsBalance,
+                type: 'reset',
+                reasons: 'sandbox-ended',
+                meta: { prev: sub.creditsBalance, next: 0, status: sub.status },
+            })
+            ended++
+        }
+        return { ended }
     }
 })
 
