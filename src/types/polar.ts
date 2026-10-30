@@ -88,6 +88,8 @@ export interface PolarOrder {
     subscription_id?: string | null
     customer?: PolarCustomer | null
     customer_id?: string | null
+    product?: PolarProduct | null
+    product_id?: string | null
     metadata?: Record<string, unknown> | null
 }
 
@@ -102,6 +104,8 @@ export const extractOrder = (data: unknown): PolarOrder | null => {
         subscription_id: d.subscription_id as string | undefined | null,
         customer: d.customer as PolarCustomer | undefined | null,
         customer_id: d.customer_id as string | undefined | null,
+        product: d.product as PolarProduct | undefined | null,
+        product_id: d.product_id as string | undefined | null,
         metadata: (d.metadata as Record<string, unknown> | undefined) ?? null,
     }
 }
