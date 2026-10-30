@@ -104,8 +104,9 @@ describe("deleteUnusedUploads", () => {
 
         const used = await upload(t, 100, "image/png")
         await asOwner.mutation(api.moodboard.addMoodboardImage, { projectId, storageId: used })
-        const disputed = await upload(t, 100, "image/png")
-        await t.run((ctx) => ctx.db.insert("storage_owners", { storageId: disputed, userId, disputed: true }))
+        // Owned but in no project, e.g. removed from its moodboard: an owner keeps it
+        const owned = await upload(t, 100, "image/png")
+        await t.run((ctx) => ctx.db.insert("storage_owners", { storageId: owned, userId }))
         const abandoned = await upload(t, 100, "image/png")
         const refused = await upload(t, 100, "application/pdf")
 
@@ -125,7 +126,7 @@ describe("deleteUnusedUploads", () => {
         expect(await exists(t, abandoned)).toBe(false)
         expect(await exists(t, refused)).toBe(false)
         expect(await exists(t, used)).toBe(true)
-        expect(await exists(t, disputed)).toBe(true)
+        expect(await exists(t, owned)).toBe(true)
         expect(await exists(t, fresh)).toBe(true)
         // The image the project uses still loads
         const images = await asOwner.query(api.moodboard.getMoodboardImages, { projectId })

@@ -1,6 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import { internalMutation, mutation, query, QueryCtx } from "./_generated/server";
-import { internal } from "./_generated/api";
+import { mutation, query, QueryCtx } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { deleteFileIfOwned } from "./storage";
@@ -36,13 +35,8 @@ export const getProject = query({
             return null
         }
 
-        // Projects the migration hasn't reached yet still carry their drawing themselves
         const sketches = await getSketches(ctx, project._id)
-        return {
-            ...project,
-            sketchesData: sketches?.sketchesData ?? project.sketchesData,
-            viewportData: sketches?.viewportData ?? project.viewportData,
-        }
+        return { ...project, sketchesData: sketches?.sketchesData, viewportData: sketches?.viewportData }
     }
 })
 
@@ -166,26 +160,17 @@ export const updateProjectSketches = mutation({
         const saved = {
             projectId,
             sketchesData,
-            viewportData: viewportData ?? sketches?.viewportData ?? project.viewportData,
+            viewportData: viewportData ?? sketches?.viewportData,
         }
         if (tooLargeForDocument(saved)) throw saveFailed('too-large')
 
         if (sketches) {
             await ctx.db.patch(sketches._id, viewportData ? { sketchesData, viewportData } : { sketchesData })
         } else {
-            await ctx.db.insert('project_sketches', {
-                projectId,
-                sketchesData,
-                viewportData: viewportData ?? project.viewportData,
-            })
+            await ctx.db.insert('project_sketches', { projectId, sketchesData, viewportData })
         }
 
-        // Also drops the old copy from a project the migration hasn't reached yet
-        await ctx.db.patch(projectId, {
-            lastModified: Date.now(),
-            sketchesData: undefined,
-            viewportData: undefined,
-        });
+        await ctx.db.patch(projectId, { lastModified: Date.now() });
         return { success: true }
     }
 })
@@ -275,36 +260,3 @@ export const renameProject = mutation({
         return { success: true, name: trimmedName, lastModified }
     }
 })
-
-// Moves each project's drawing and viewport into project_sketches. Run it once after deploying with
-// `npx convex run projects:moveSketchesToOwnTable` (add `--prod` for production). It pages through
-// projects and schedules itself until it reaches the end. Re-running it is harmless.
-export const moveSketchesToOwnTable = internalMutation({
-    args: { cursor: v.optional(v.string()) },
-    handler: async (ctx, { cursor }) => {
-        // Drawings can be a few hundred KB each, so batches stay small
-        const { page, isDone, continueCursor } = await ctx.db
-            .query('projects')
-            .paginate({ cursor: cursor ?? null, numItems: 10 });
-
-        for (const project of page) {
-            if (project.sketchesData === undefined && project.viewportData === undefined) continue;
-
-            // An autosave since the deploy already wrote a newer drawing there
-            if (!(await getSketches(ctx, project._id))) {
-                await ctx.db.insert('project_sketches', {
-                    projectId: project._id,
-                    sketchesData: project.sketchesData ?? null,
-                    viewportData: project.viewportData,
-                });
-            }
-            await ctx.db.patch(project._id, { sketchesData: undefined, viewportData: undefined });
-        }
-
-        if (isDone) {
-            console.log("Moving project drawings finished");
-        } else {
-            await ctx.scheduler.runAfter(0, internal.projects.moveSketchesToOwnTable, { cursor: continueCursor });
-        }
-    },
-});
