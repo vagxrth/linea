@@ -1,260 +1,116 @@
-# Linea
+<p align="center">
+  <img src="public/images/open-graph.png" alt="Linea: think. sketch. design." width="100%" />
+</p>
 
-**Think. Sketch. Design.**
+<h1 align="center">Linea</h1>
 
-Linea is an AI-powered design tool that transforms hand-drawn sketches and wireframes into polished, production-ready designs. It features an infinite canvas for sketching, AI-driven style guide generation from moodboard images, and automatic workflow page creation — all within a seamless SaaS experience.
+<p align="center">
+  <strong>Sketch a wireframe. Get a production-ready design.</strong><br />
+  Linea is an AI design tool that turns hand-drawn wireframes into polished HTML/CSS pages, styled by a design system it builds from your moodboard.
+</p>
+
+<p align="center">
+  <a href="https://linea.vagarth.in"><strong>Try Linea free</strong></a> ·
+  <a href="#pricing">Pricing</a> ·
+  <a href="https://github.com/vagxrth/linea/issues">Report an issue</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/vagxrth/linea/actions/workflows/checks.yml"><img src="https://github.com/vagxrth/linea/actions/workflows/checks.yml/badge.svg" alt="Checks" /></a>
+</p>
 
 ## Features
 
-- **Infinite Canvas** — Draw shapes (rectangles, ellipses, arrows, lines, freehand), add text, pan/zoom (pinch on touch screens), zoom to fit, select several shapes at once, copy, cut, paste and duplicate them, undo/redo, and auto-save as you work.
-- **Wireframe-to-Design** — Sketch a wireframe inside a frame, and Linea generates a complete HTML/CSS design using your style guide, with WCAG AA accessibility baked in.
-- **Style Guide Generation** — Upload moodboard images and Linea extracts a full design system: color palette (primary, secondary, UI, utility, status), typography hierarchy, and spacing guidelines.
-- **Workflow Pages** — Automatically generate complementary pages (dashboards, settings, profiles, data tables) that match your primary design's visual language.
-- **Inspiration Sidebar** — Attach reference images that inform the AI during design generation.
-- **Project Management** — Create, rename and delete projects. Each one auto-saves and gets a generated thumbnail.
-- **Subscription Billing** — Linea Pro, $15/month or $120/year, with 100 AI credits a month on both plans, powered by Polar. Every account gets 10 free credits to try it.
+- **Infinite canvas.** Sketch with shapes, arrows, lines, text and freehand. Select, copy, paste, undo and zoom, and every change saves automatically.
+- **Wireframe to design.** Draw a layout inside a frame and generate a complete, accessible HTML/CSS page from it.
+- **Style guide from a moodboard.** Upload reference images and get a color palette, type scale and spacing rules that every design follows.
+- **Matching pages.** Generate dashboards, settings, profiles and listings in the same visual language as your design.
+- **Redesign in chat.** Describe a change in plain words and the design updates in place.
+- **Export.** Download any design or frame as an image.
 
-## Tech Stack
+## Pricing
 
-| Layer | Technology |
-|---|---|
-| **Framework** | Next.js 15 (App Router, Turbopack) |
-| **Frontend** | React 19, TypeScript 5 |
-| **Styling** | Tailwind CSS 4, shadcn/ui (Radix UI) |
-| **State Management** | Redux Toolkit, RTK Query |
-| **3D / Landing** | Three.js, React Three Fiber, Drei |
-| **Database** | Convex (real-time serverless database) |
-| **Authentication** | Convex Auth (email/password + Google OAuth) |
-| **Email** | Resend (verification and password reset codes) |
-| **AI** | Google Gemini 2.5 Flash via Vercel AI SDK |
-| **Payments** | Polar ($15/mo or $120/yr subscription + credits) |
-| **Analytics** | Vercel Analytics |
-| **Deployment** | Vercel |
+| Plan | Price | Credits |
+|---|---|---|
+| **Free** | $0 | 10 credits to try Linea |
+| **Pro** | $15 a month, or $120 a year | 100 credits every month |
 
-## Project Structure
+A generated or redesigned page uses 1 credit, a style guide uses 1, and a 4-page workflow uses 4. Generations that fail cost nothing. Subscribe from the app, then switch plans or cancel anytime from **Manage plan**.
 
-```
-linea/
-├── src/
-│   ├── app/                          # Next.js App Router
-│   │   ├── page.tsx                  # Landing page (3D gallery)
-│   │   ├── auth/                     # Sign in, sign up and password reset pages
-│   │   ├── (protected)/              # Auth-guarded routes
-│   │   │   ├── dashboard/            # Projects list
-│   │   │   │   └── [slug]/           # Workspace
-│   │   │   │       ├── canvas/       # Infinite canvas editor
-│   │   │   │       └── style-guide/  # Style guide editor
-│   │   │   └── billing/              # Subscription management
-│   │   └── api/
-│   │       ├── generate/             # AI generation endpoints
-│   │       │   ├── route.ts          # Wireframe → design
-│   │       │   ├── style/            # Moodboard → style guide
-│   │       │   └── workflow/         # Complementary page generation
-│   │       └── billing/              # Polar checkout and customer portal
-│   ├── components/                   # UI components
-│   │   ├── canvas/                   # Canvas rendering
-│   │   ├── shapes/                   # Shape components
-│   │   ├── toolbar/                  # Canvas toolbar
-│   │   ├── moodboard/                # Moodboard uploads
-│   │   └── ui/                       # shadcn/ui primitives
-│   ├── hooks/                        # Custom React hooks
-│   │   ├── use-canvas.ts             # Canvas state & interactions
-│   │   ├── use-project.ts            # Project CRUD
-│   │   ├── use-styles.ts             # Style guide management
-│   │   └── use-subscription.ts       # Entitlement checks
-│   ├── redux/                        # Redux store, slices, API
-│   ├── prompts/                      # AI system prompts
-│   └── middleware.ts                 # Auth & route protection
-├── convex/                           # Convex backend
-│   ├── schema.ts                     # Database schema
-│   ├── auth.ts                       # Auth configuration
-│   ├── otp.ts                        # Emailed verification and reset codes
-│   ├── http.ts                       # HTTP routes (auth, Polar webhook)
-│   ├── user.ts                       # User queries
-│   ├── projects.ts                   # Project mutations/queries
-│   ├── subscription.ts               # Credits & subscription logic
-│   ├── moodboard.ts                  # Moodboard image storage
-│   └── inspiration.ts                # Inspiration image storage
-└── public/                           # Static assets
-```
+## Built with
 
-## Prerequisites
+[Next.js](https://nextjs.org) · [React](https://react.dev) · [TypeScript](https://www.typescriptlang.org) · [Tailwind CSS](https://tailwindcss.com) · [shadcn/ui](https://ui.shadcn.com) · [Convex](https://www.convex.dev) · [Google Gemini](https://ai.google.dev) with the [AI SDK](https://ai-sdk.dev) · [Polar](https://polar.sh) · [Resend](https://resend.com) · [Vercel](https://vercel.com)
 
-- **Node.js** 22+
-- **npm** (ships with Node)
-- A **Convex** account — [convex.dev](https://www.convex.dev)
-- A **Google Cloud** project with OAuth 2.0 credentials
-- A **Google AI** (Gemini) API key — [ai.google.dev](https://ai.google.dev)
-- A **Polar** account for payments — [polar.sh](https://polar.sh)
+## Run it locally
 
-## Getting Started
-
-### 1. Clone the repository
+You'll need Node.js 22 or later, and accounts with Convex, Google Cloud (for sign-in), Google AI Studio (for Gemini) and Resend. Polar is only needed to test billing.
 
 ```bash
 git clone https://github.com/vagxrth/linea.git
 cd linea
-```
-
-### 2. Install dependencies
-
-```bash
 npm install
+npx convex dev   # creates a dev deployment and writes .env.local; leave it running
 ```
 
-The backend's settings live on your Convex deployment (set with `npx convex env set`), and the Next.js app's settings live in `.env.local`. The steps below set both.
+Then finish the setup below in a second terminal and start the app with `npm run dev`.
 
-### 3. Set up Convex
+<details>
+<summary><strong>Full setup</strong></summary>
 
-```bash
-npx convex dev
-```
+1. **Sign-in keys.** Run `npx @convex-dev/auth` and give `http://localhost:3000` as the site URL. If it offers to replace files in `convex/`, say no.
 
-This prompts you to create a Convex project (or link to an existing one), pushes the `convex/` functions to your dev deployment, and writes `CONVEX_DEPLOYMENT` and `NEXT_PUBLIC_CONVEX_URL` to `.env.local`. Leave it running in its own terminal while you work.
+2. **Google sign-in.** Create a Google OAuth client of type *Web application* with this redirect URI, using your deployment's `.convex.site` address from the Convex dashboard:
 
-### 4. Set up Convex Auth
+   ```
+   https://<your-deployment>.convex.site/api/auth/callback/google
+   ```
 
-In a second terminal:
+   Then set its ID and secret on Convex:
 
-```bash
-npx @convex-dev/auth
-```
+   ```bash
+   npx convex env set AUTH_GOOGLE_ID <client-id>
+   npx convex env set AUTH_GOOGLE_SECRET <client-secret>
+   ```
 
-This sets `SITE_URL`, `JWT_PRIVATE_KEY` and `JWKS` on your Convex deployment, which sign-in needs. When it asks for your site's URL, use `http://localhost:3000`. The repo already has its auth files in `convex/`, so if it offers to replace any of them, say no.
+3. **Email codes.** Email sign-ups and password resets send a code through Resend. Verify your sending domain there, then:
 
-### 5. Set up Google sign-in
+   ```bash
+   npx convex env set AUTH_RESEND_KEY <resend-api-key>
+   npx convex env set AUTH_EMAIL_FROM "Linea <noreply@your-domain.com>"
+   ```
 
-In the Google Cloud Console, create an OAuth client of type **Web application** and add this authorized redirect URI:
+4. **App settings.** Add these to `.env.local`, below the lines `npx convex dev` wrote:
 
-```
-https://<your-deployment>.convex.site/api/auth/callback/google
-```
+   ```env
+   GOOGLE_GENERATIVE_AI_API_KEY=<gemini-api-key>
+   NEXT_PUBLIC_APP_URL=http://localhost:3000
 
-Use your deployment's HTTP Actions URL, which ends in `.convex.site` and is shown in the Convex dashboard's settings. Then set the client's ID and secret on Convex. Convex Auth reads them there, not from `.env.local`:
+   # Keeps billing on Polar's sandbox. Without it, Linea uses Polar production.
+   POLAR_ENV=sandbox
+   # Only needed to test billing
+   POLAR_ACCESS_TOKEN=<polar-sandbox-token>
+   POLAR_PLAN=<monthly-product-id>,<yearly-product-id>
+   ```
 
-```bash
-npx convex env set AUTH_GOOGLE_ID <your-google-client-id>
-npx convex env set AUTH_GOOGLE_SECRET <your-google-client-secret>
-```
+5. **Billing webhooks (optional).** Polar's webhooks go to Convex. Set the webhook's secret and the same product ids there, then point a Polar sandbox webhook at `https://<your-deployment>.convex.site/polar/webhook` with the `subscription.*` and `order.*` events:
 
-### 6. Send email codes (required for email and password accounts)
+   ```bash
+   npx convex env set POLAR_WEBHOOK_SECRET <webhook-secret>
+   npx convex env set POLAR_PLAN <monthly-product-id>,<yearly-product-id>
+   ```
 
-New email and password accounts confirm their email with an emailed code, and forgotten passwords are reset with one. The codes are sent through [Resend](https://resend.com). Verify your sending domain in Resend, create an API key, and set both on Convex:
+6. **Run it** with `npm run dev` and open [localhost:3000](http://localhost:3000).
 
-```bash
-npx convex env set AUTH_RESEND_KEY <your-resend-api-key>
-npx convex env set AUTH_EMAIL_FROM "Linea <noreply@your-domain.com>"
-```
+Before pushing, run `npm run typecheck`, `npm run lint` and `npm test`. GitHub runs them on every pull request.
 
-Without them, email and password sign-ups can't finish. Google sign-in doesn't use them.
+**Deploying:** Vercel builds only the Next.js app. Deploy the backend with `npx convex deploy` whenever `convex/` changes, and set production settings with `npx convex env set --prod`.
 
-### 7. Add the Next.js environment variables
+</details>
 
-Add these to `.env.local`, below the two lines `npx convex dev` wrote:
+## Support
 
-```env
-# Google Gemini AI
-GOOGLE_GENERATIVE_AI_API_KEY=<your-gemini-api-key>
+Found a bug or have a question? [Open an issue](https://github.com/vagxrth/linea/issues).
 
-# Polar (payments)
-POLAR_ACCESS_TOKEN=<your-polar-access-token>
-# The monthly and yearly product ids, comma-separated, monthly first
-POLAR_PLAN=<monthly-product-id>,<yearly-product-id>
-POLAR_ENV=sandbox
+## License
 
-# App
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-```
-
-`CONVEX_SITE_URL` doesn't belong here: Convex sets it on the deployment by itself.
-
-### 8. Run the development server
-
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) to see the app.
-
-### 9. Receive Polar webhooks (optional, for billing)
-
-Polar webhooks are handled by the Convex deployment, not the Next.js app. Set the webhook secret on Convex, and the same product ids as `POLAR_PLAN` in `.env.local`. The webhook gives credits only for those products, so nothing else sold in your Polar organization hands out Pro credits:
-
-```bash
-npx convex env set POLAR_WEBHOOK_SECRET <your-polar-webhook-secret>
-npx convex env set POLAR_PLAN <monthly-product-id>,<yearly-product-id>
-```
-
-Then point a Polar webhook at `https://<your-deployment>.convex.site/polar/webhook` with the `subscription.*` and `order.*` events.
-
-## Scripts
-
-| Command | Description |
-|---|---|
-| `npm run dev` | Start dev server with Turbopack |
-| `npm run build` | Build for production |
-| `npm start` | Start production server |
-| `npm run lint` | Run ESLint |
-| `npm run typecheck` | Generate Next.js route types, then type-check with TypeScript |
-| `npm test` | Run the Vitest tests for the credit logic and the canvas state |
-| `npx convex dev` | Start Convex dev sync |
-
-GitHub runs `npm run typecheck`, `npm run lint` and `npm test` on every pull request and every push to `main` (`.github/workflows/checks.yml`).
-
-## Database Schema
-
-Linea uses Convex with the following core tables:
-
-- **users** — Managed by Convex Auth (email, name, image, OAuth accounts)
-- **projects** — Names, style guides, moodboard/inspiration images and thumbnails
-- **project_sketches** — Each project's drawing, including its generated designs, and viewport, kept apart so listing projects stays cheap
-- **subscriptions** — Polar subscription state and credit balance
-- **free_credits** — Free credits left per user, added the first time they spend one
-- **credits_ledger** — Log of credit grants and charges, with idempotency keys
-
-## Authentication
-
-Linea supports two auth methods via Convex Auth:
-
-- **Email/Password** — Sign-up confirms the email with an emailed 8-digit code, and "Forgot your Password?" (`/auth/reset`) resets a password with one
-- **Google OAuth** — One-click sign-in with Google
-
-Routes are protected by Next.js middleware:
-- `/` and `/auth/*` — Public (redirects to dashboard if already signed in)
-- `/dashboard/*` and `/billing/*` — Protected (redirects to sign-in if not authenticated)
-- `/api/auth/*` and `/convex/*` — Bypassed (no auth required)
-
-## Billing & Credits
-
-| Detail | Value |
-|---|---|
-| Price | $15/month, or $120/year |
-| Credits | 100 a month, on both plans |
-| Unused credits | Don't roll over: the balance resets to 100 each month |
-| Free credits | 10 for every account with a confirmed email, once |
-| Payment provider | Polar |
-
-| AI action | Credits |
-|---|---|
-| Generate a design from a frame | 1 |
-| Generate a style guide | 1 |
-| Redesign a design through chat | 1 |
-| Generate workflow pages | 4 (1 for each of the 4 pages) |
-| Redesign a workflow page through chat | 1 |
-
-Credits are charged only once the AI starts returning output, so a failed generation costs nothing. They're granted when a subscription starts and at each renewal, by the Polar webhook handler in `convex/http.ts`. A yearly plan's renewal comes once a year, so `refillYearlyCredits` in `convex/subscription.ts` refills its credits on each monthly anniversary; `convex/crons.ts` runs it every hour.
-
-Free credits need a confirmed email: Google sign-ins have one from the start, and email sign-ups once they enter the emailed code. A plan's credits are spent before free ones, which don't come back once used.
-
-## Deployment
-
-Linea runs the Next.js app on **Vercel** and the backend on **Convex**. Vercel's build only runs `npm run build`, so the Convex functions are deployed separately:
-
-1. Push your repo to GitHub and import the project in [Vercel](https://vercel.com).
-2. Deploy the Convex functions to your production deployment with `npx convex deploy`. Run it again whenever `convex/` changes.
-3. Run `npx @convex-dev/auth --prod`, and give your production domain as the site URL.
-4. Set the backend's settings on the production deployment with `npx convex env set --prod`: `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_RESEND_KEY`, `AUTH_EMAIL_FROM`, `POLAR_WEBHOOK_SECRET` and `POLAR_PLAN`.
-5. In the Vercel project settings, add `NEXT_PUBLIC_CONVEX_URL` (your production deployment's URL), `GOOGLE_GENERATIVE_AI_API_KEY`, `POLAR_ACCESS_TOKEN`, `POLAR_PLAN` (the monthly and yearly product ids, comma-separated), `POLAR_ENV=production` and `NEXT_PUBLIC_APP_URL` (your domain). `CONVEX_DEPLOYMENT` is only for the Convex CLI and doesn't belong in Vercel.
-6. In Google Cloud, add `https://<your-prod-deployment>.convex.site/api/auth/callback/google` to the OAuth client's authorized redirect URIs.
-7. Point the Polar webhook at `https://<your-prod-deployment>.convex.site/polar/webhook`.
-
+Copyright © 2025–2026 Vagarth Pandey. All rights reserved.
