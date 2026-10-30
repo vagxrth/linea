@@ -2,7 +2,7 @@ import { checkCredits } from "@/lib/credits";
 import { colorsText, generationFailed, getStyleGuide, streamDesign, styleGuideMissing, typographyText } from "@/lib/generation";
 import { NextRequest, NextResponse } from "next/server";
 
-const COST = 4
+const COST = 1
 
 export async function POST(request: NextRequest) {
     try {
