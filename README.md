@@ -45,6 +45,8 @@ A generated or redesigned page uses 1 credit, a style guide uses 1, and a 4-page
 
 Questions, billing or account help: email [hey@vagarth.in](mailto:hey@vagarth.in). Found a bug? [Open an issue](https://github.com/vagxrth/linea/issues).
 
+Found a security issue? Please [report it privately](https://github.com/vagxrth/linea/security/advisories/new) instead of opening an issue.
+
 ## License
 
 Copyright © 2025–2026 Vagarth Pandey. All rights reserved.
