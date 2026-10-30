@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { api, internal } from "./_generated/api"
 import type { Id } from "./_generated/dataModel"
 import schema from "./schema"
-import { monthsSince } from "./subscription"
+import { FREE_CREDITS, monthsSince } from "./subscription"
 
 // Every Convex module except the tests, which Convex skips too (it skips files with more than one dot)
 const modules = import.meta.glob(["./**/*.*s", "!./**/*.test.ts"])
@@ -15,6 +15,7 @@ const DAY = 24 * 60 * 60 * 1000
 type Test = TestConvex<typeof schema>
 
 interface SubscriptionOptions {
+    emailVerified?: boolean
     status?: string
     creditsBalance?: number
     creditsGrantPerPeriod?: number
@@ -23,11 +24,21 @@ interface SubscriptionOptions {
     currentPeriodEnd?: number
 }
 
+// Adds a user, and returns a client signed in as them. Only a confirmed email earns free credits.
+const addUser = async (t: Test, { emailVerified = false } = {}) => {
+    const userId = await t.run((ctx) =>
+        ctx.db.insert("users", { email: "test@example.com", emailVerificationTime: emailVerified ? Date.now() : undefined })
+    )
+    // Convex Auth puts "userId|sessionId" in the token's subject
+    const asUser = t.withIdentity({ subject: `${userId}|test-session` })
+    return { asUser, userId }
+}
+
 // Adds a user with a subscription, and returns a client signed in as them
 const addSubscriber = async (t: Test, options: SubscriptionOptions = {}) => {
-    const { userId, subscriptionId } = await t.run(async (ctx) => {
-        const userId = await ctx.db.insert("users", { email: "test@example.com" })
-        const subscriptionId = await ctx.db.insert("subscriptions", {
+    const { asUser, userId } = await addUser(t, options)
+    const subscriptionId = await t.run((ctx) =>
+        ctx.db.insert("subscriptions", {
             userId,
             polarCustomerId: `cus_${userId}`,
             polarSubscriptionId: `sub_${userId}`,
@@ -39,10 +50,7 @@ const addSubscriber = async (t: Test, options: SubscriptionOptions = {}) => {
             creditsGrantPerPeriod: options.creditsGrantPerPeriod ?? 10,
             creditsRolloverLimit: 0,
         })
-        return { userId, subscriptionId }
-    })
-    // Convex Auth puts "userId|sessionId" in the token's subject
-    const asUser = t.withIdentity({ subject: `${userId}|test-session` })
+    )
     return { asUser, userId, subscriptionId }
 }
 
@@ -55,6 +63,16 @@ const ledgerOf = (t: Test, subscriptionId: Id<"subscriptions">) =>
             .query("credits_ledger")
             .withIndex("by_subscriptionId", (q) => q.eq("subscriptionId", subscriptionId))
             .collect()
+    )
+
+// Null until the user spends a free credit
+const freeBalanceOf = (t: Test, userId: Id<"users">) =>
+    t.run(async (ctx) => (await ctx.db.query("free_credits").withIndex("by_userId", (q) => q.eq("userId", userId)).first())?.balance)
+
+const freeLedgerOf = (t: Test, userId: Id<"users">) =>
+    t.run(async (ctx) =>
+        (await ctx.db.query("credits_ledger").withIndex("by_userId", (q) => q.eq("userId", userId)).collect())
+            .filter((entry) => entry.subscriptionId === undefined)
     )
 
 describe("consumeCredits", () => {
@@ -101,13 +119,13 @@ describe("consumeCredits", () => {
         expect(result).toEqual({ ok: false, reason: "not-authenticated" })
     })
 
-    it("refuses users whose subscription isn't active", async () => {
+    it("doesn't spend the credits of a subscription that isn't active", async () => {
         const t = convexTest(schema, modules)
         const { asUser, subscriptionId } = await addSubscriber(t, { status: "canceled", creditsBalance: 10 })
 
         const result = await asUser.mutation(api.subscription.consumeCredits, { amount: 1 })
 
-        expect(result).toEqual({ ok: false, reason: "not-entitled" })
+        expect(result).toEqual({ ok: false, error: "insufficient-balance", balance: 0 })
         expect(await balanceOf(t, subscriptionId)).toBe(10)
     })
 
@@ -143,6 +161,88 @@ describe("consumeCredits", () => {
         const grant = await t.mutation(internal.subscription.grantCredits, { subscriptionId, idempotencyKey: "order_123" })
 
         expect(grant).toEqual({ ok: true, granted: 10, balance: 10 })
+    })
+})
+
+describe("free credits", () => {
+    it("gives a confirmed email FREE_CREDITS to spend without a plan", async () => {
+        const t = convexTest(schema, modules)
+        const { asUser, userId } = await addUser(t, { emailVerified: true })
+
+        expect(await asUser.query(api.subscription.getCreditsBalance, {})).toBe(FREE_CREDITS)
+        expect(await freeBalanceOf(t, userId)).toBeNull()
+
+        const result = await asUser.mutation(api.subscription.consumeCredits, { amount: 4 })
+
+        expect(result).toEqual({ ok: true, balance: FREE_CREDITS - 4 })
+        expect(await asUser.query(api.subscription.getCreditsBalance, {})).toBe(FREE_CREDITS - 4)
+        expect(await freeBalanceOf(t, userId)).toBe(FREE_CREDITS - 4)
+        expect(await freeLedgerOf(t, userId)).toMatchObject([
+            { amount: -4, type: "consume", meta: { prev: FREE_CREDITS, next: FREE_CREDITS - 4 } },
+        ])
+    })
+
+    it("gives nothing until the email is confirmed", async () => {
+        const t = convexTest(schema, modules)
+        const { asUser, userId } = await addUser(t)
+
+        expect(await asUser.query(api.subscription.getCreditsBalance, {})).toBe(0)
+        const result = await asUser.mutation(api.subscription.consumeCredits, { amount: 1 })
+
+        expect(result).toEqual({ ok: false, error: "insufficient-balance", balance: 0 })
+        expect(await freeBalanceOf(t, userId)).toBeNull()
+    })
+
+    it("don't come back once spent", async () => {
+        const t = convexTest(schema, modules)
+        const { asUser, userId } = await addUser(t, { emailVerified: true })
+
+        await asUser.mutation(api.subscription.consumeCredits, { amount: FREE_CREDITS })
+        const result = await asUser.mutation(api.subscription.consumeCredits, { amount: 1 })
+
+        expect(result).toEqual({ ok: false, error: "insufficient-balance", balance: 0 })
+        expect(await asUser.query(api.subscription.getCreditsBalance, {})).toBe(0)
+        expect(await freeBalanceOf(t, userId)).toBe(0)
+    })
+
+    it("are spent after a plan's credits, and a plan's grant doesn't refill them", async () => {
+        const t = convexTest(schema, modules)
+        const { asUser, userId, subscriptionId } = await addSubscriber(t, { emailVerified: true, creditsBalance: 3, creditsGrantPerPeriod: 100 })
+
+        expect(await asUser.query(api.subscription.getCreditsBalance, {})).toBe(3 + FREE_CREDITS)
+        expect(await asUser.mutation(api.subscription.consumeCredits, { amount: 2 })).toEqual({ ok: true, balance: 1 + FREE_CREDITS })
+        expect(await freeBalanceOf(t, userId)).toBeNull()
+
+        // 1 plan credit left, so 4 takes it and 3 free ones
+        expect(await asUser.mutation(api.subscription.consumeCredits, { amount: 4 })).toEqual({ ok: true, balance: FREE_CREDITS - 3 })
+        expect(await balanceOf(t, subscriptionId)).toBe(0)
+        expect(await freeBalanceOf(t, userId)).toBe(FREE_CREDITS - 3)
+        expect(await ledgerOf(t, subscriptionId)).toMatchObject([{ amount: -2 }, { amount: -1, meta: { prev: 1, next: 0 } }])
+        expect(await freeLedgerOf(t, userId)).toMatchObject([{ amount: -3, meta: { prev: FREE_CREDITS, next: FREE_CREDITS - 3 } }])
+
+        await t.mutation(internal.subscription.grantCredits, { subscriptionId, idempotencyKey: "period-2" })
+        expect(await asUser.query(api.subscription.getCreditsBalance, {})).toBe(100 + FREE_CREDITS - 3)
+    })
+
+    it("stay usable after a plan ends", async () => {
+        const t = convexTest(schema, modules)
+        const { asUser, subscriptionId } = await addSubscriber(t, { emailVerified: true, status: "canceled", creditsBalance: 8 })
+
+        expect(await asUser.query(api.subscription.getCreditsBalance, {})).toBe(FREE_CREDITS)
+        expect(await asUser.mutation(api.subscription.consumeCredits, { amount: 1 })).toEqual({ ok: true, balance: FREE_CREDITS - 1 })
+        expect(await balanceOf(t, subscriptionId)).toBe(8)
+    })
+
+    it("charge a repeated idempotency key once", async () => {
+        const t = convexTest(schema, modules)
+        const { asUser, userId } = await addUser(t, { emailVerified: true })
+
+        await asUser.mutation(api.subscription.consumeCredits, { amount: 3, idempotencyKey: "generation-1" })
+        const repeat = await asUser.mutation(api.subscription.consumeCredits, { amount: 3, idempotencyKey: "generation-1" })
+
+        expect(repeat).toEqual({ ok: true, idempotent: true })
+        expect(await freeBalanceOf(t, userId)).toBe(FREE_CREDITS - 3)
+        expect(await freeLedgerOf(t, userId)).toHaveLength(1)
     })
 })
 

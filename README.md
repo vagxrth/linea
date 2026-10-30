@@ -12,7 +12,7 @@ Linea is an AI-powered design tool that transforms hand-drawn sketches and wiref
 - **Workflow Pages** — Automatically generate complementary pages (dashboards, settings, profiles, data tables) that match your primary design's visual language.
 - **Inspiration Sidebar** — Attach reference images that inform the AI during design generation.
 - **Project Management** — Create, rename and delete projects. Each one auto-saves and gets a generated thumbnail.
-- **Subscription Billing** — Linea Pro, $15/month or $120/year, with 100 AI credits a month on both plans, powered by Polar.
+- **Subscription Billing** — Linea Pro, $15/month or $120/year, with 100 AI credits a month on both plans, powered by Polar. Every account gets 10 free credits to try it.
 
 ## Tech Stack
 
@@ -27,7 +27,7 @@ Linea is an AI-powered design tool that transforms hand-drawn sketches and wiref
 | **Authentication** | Convex Auth (email/password + Google OAuth) |
 | **Email** | Resend (verification and password reset codes) |
 | **AI** | Google Gemini 2.5 Flash via Vercel AI SDK |
-| **Payments** | Polar ($10/mo subscription + credits) |
+| **Payments** | Polar ($15/mo or $120/yr subscription + credits) |
 | **Analytics** | Vercel Analytics |
 | **Deployment** | Vercel |
 
@@ -208,6 +208,7 @@ Linea uses Convex with the following core tables:
 - **projects** — Names, style guides, moodboard/inspiration images and thumbnails
 - **project_sketches** — Each project's drawing, including its generated designs, and viewport, kept apart so listing projects stays cheap
 - **subscriptions** — Polar subscription state and credit balance
+- **free_credits** — Free credits left per user, added the first time they spend one
 - **credits_ledger** — Log of credit grants and charges, with idempotency keys
 
 ## Authentication
@@ -229,6 +230,7 @@ Routes are protected by Next.js middleware:
 | Price | $15/month, or $120/year |
 | Credits | 100 a month, on both plans |
 | Unused credits | Don't roll over: the balance resets to 100 each month |
+| Free credits | 10 for every account with a confirmed email, once |
 | Payment provider | Polar |
 
 | AI action | Credits |
@@ -240,6 +242,8 @@ Routes are protected by Next.js middleware:
 | Redesign a workflow page through chat | 4 |
 
 Credits are charged only once the AI starts returning output, so a failed generation costs nothing. They're granted when a subscription starts and at each renewal, by the Polar webhook handler in `convex/http.ts`. A yearly plan's renewal comes once a year, so `refillYearlyCredits` in `convex/subscription.ts` refills its credits on each monthly anniversary; `convex/crons.ts` runs it every hour.
+
+Free credits need a confirmed email: Google sign-ins have one from the start, and email sign-ups once they enter the emailed code. A plan's credits are spent before free ones, which don't come back once used.
 
 ## Deployment
 
