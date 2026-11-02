@@ -35,6 +35,8 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  /* Linea's one warm accent, from the bronze end of the logo. Darker here, to read on white. */
+  --brass: oklch(0.52 0.08 62);
 }
 
 .dark {
@@ -69,6 +71,7 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --brass: oklch(0.78 0.075 70);
 }
 
 @layer base {
@@ -78,5 +81,12 @@
   /* Set on body, not html: next/font defines Geist's variable on the body element */
   body {
     @apply bg-background text-foreground font-sans;
+  }
+  /* The landing page glides to its sections. Only that page does: the app, and the generated
+     designs' frames, which get a copy of this stylesheet, keep instant scrolling. */
+  @media (prefers-reduced-motion: no-preference) {
+    html:has([data-landing]) {
+      scroll-behavior: smooth;
+    }
   }
 }

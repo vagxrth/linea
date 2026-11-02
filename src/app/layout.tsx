@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Instrument_Serif } from "next/font/google";
+import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 import { headers } from "next/headers";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -13,6 +13,14 @@ const geistSans = Geist({
   subsets: ["latin"],
 });
 
+// For code. Generated designs get the app's fonts, so their font-mono and <code> use it too. It isn't
+// preloaded: most pages never show code, and the browser fetches it the first time one does.
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+  preload: false,
+});
+
 const instrumentSerif = Instrument_Serif({
 	variable: '--font-instrument',
 	subsets: ['latin'],
@@ -23,7 +31,7 @@ const instrumentSerif = Instrument_Serif({
 export const metadata: Metadata = {
   metadataBase: new URL('https://linea.vagarth.in'),
   title: "Linea",
-  description: "Think. Sketch. Design",
+  description: "Sketch a wireframe. Get a production-ready design. Linea turns hand-drawn wireframes into polished HTML/CSS pages, styled by a design system it builds from your moodboard.",
   openGraph: {
     url: 'https://linea.vagarth.in',
     siteName: 'Linea',
@@ -49,9 +57,11 @@ export default async function RootLayout({
 
   return (
     <ConvexAuthNextjsServerProvider>
-      <html lang="en" className='bg-background' suppressHydrationWarning>
+      {/* data-scroll-behavior: the landing page scrolls smoothly to its sections (globals.css), and
+          this tells Next.js to turn that off while it changes pages, so a new page opens at the top at once */}
+      <html lang="en" className='bg-background' data-scroll-behavior='smooth' suppressHydrationWarning>
         <body
-          className={`${geistSans.variable} ${instrumentSerif.variable} antialiased`}
+          className={`${geistSans.variable} ${geistMono.variable} ${instrumentSerif.variable} antialiased`}
         >
           <ConvexClientProvider>
             {/* The canvas and panels are drawn for a dark background (white strokes and labels),
