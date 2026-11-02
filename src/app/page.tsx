@@ -1,41 +1,50 @@
-import Link from "next/link"
-import { ArrowRight } from "lucide-react"
-import InfiniteGallery from "@/components/infinite-gallery"
+import type { Metadata } from "next"
+import Hero from "@/components/landing/hero"
+import HowItWorks from "@/components/landing/how-it-works"
+import Pricing from "@/components/landing/pricing"
+import Proof from "@/components/landing/proof"
+import { LandingMotion, Reveal } from "@/components/landing/reveal"
+import SiteFooter from "@/components/landing/site-footer"
+import SiteNav from "@/components/landing/site-nav"
+
+export const metadata: Metadata = {
+  title: "Linea: sketch a wireframe, get a production-ready design",
+}
 
 export default function Home() {
-  const sampleImages = [
-    { src: "/images/1.webp", alt: "Image 1" },
-    { src: "/images/2.webp", alt: "Image 2" },
-    { src: "/images/3.webp", alt: "Image 3" },
-    { src: "/images/4.webp", alt: "Image 4" },
-    { src: "/images/5.webp", alt: "Image 5" },
-    { src: "/images/6.webp", alt: "Image 6" },
-    { src: "/images/7.webp", alt: "Image 7" },
-    { src: "/images/8.webp", alt: "Image 8" },
-  ]
-
   return (
-    <main className="min-h-screen ">
-      <InfiniteGallery
-        images={sampleImages}
-        speed={1.2}
-        zSpacing={3}
-        visibleCount={12}
-        className="h-screen w-full rounded-lg overflow-hidden"
-      />
-      <div className="h-screen inset-0 pointer-events-none fixed flex flex-col items-center justify-center text-center px-3 mix-blend-exclusion text-white">
-        <h1 className="font-serif text-4xl md:text-7xl tracking-tight">
-          <span className="italic">Experience, </span>
-          <span className="bold">Linea</span>
-        </h1>
-        <p className="font-serif text-lg md:text-2xl tracking-wide mt-4 opacity-90">Think. Sketch. Design</p>
-        <Link href="/auth/signin" className="pointer-events-auto mt-16">
-          <button className="px-8 py-3 bg-white text-black font-serif text-lg rounded-lg hover:bg-gray-200 transition-all duration-300 flex items-center gap-2 group hover:gap-3 cursor-pointer">
-            Get Started
-            <ArrowRight className="w-5 h-5 transition-transform duration-300 group-hover:translate-x-1" />
-          </button>
-        </Link>
+    <LandingMotion>
+      {/* Sections fade in as they scroll into view. Without JavaScript nothing would show them, so they start visible. */}
+      <noscript>
+        <style>{`[data-reveal]{opacity:1!important;transform:none!important}`}</style>
+      </noscript>
+      <div id="top">
+        <SiteNav />
+        <main data-landing>
+          <Hero />
+
+          <section aria-labelledby="proof-title" className="px-6 pt-8 pb-24 md:pb-32">
+            <div className="mx-auto max-w-6xl">
+              <Reveal className="max-w-2xl">
+                <h2 id="proof-title" className="font-serif text-[clamp(2.3rem,4.6vw,3.6rem)] leading-[1.02] tracking-[-0.015em] text-balance">
+                  From a rough sketch to a finished page
+                </h2>
+                <p className="mt-4 text-lg/relaxed text-pretty text-muted-foreground">
+                  Draw boxes where things go and name them: navbar, hero image, card. Linea reads the layout
+                  and builds a real page from it, in the colors and type of your style guide.
+                </p>
+              </Reveal>
+              <Reveal className="mt-12 md:mt-16">
+                <Proof />
+              </Reveal>
+            </div>
+          </section>
+
+          <HowItWorks />
+          <Pricing />
+        </main>
+        <SiteFooter />
       </div>
-    </main>
+    </LandingMotion>
   )
 }
