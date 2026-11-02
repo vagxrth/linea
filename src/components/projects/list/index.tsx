@@ -27,6 +27,7 @@ import { buttonVariants } from '@/components/ui/button';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import CreateProject from '@/components/buttons/create-project';
 import SketchThumbnail from '@/components/projects/sketch-thumbnail';
+import { projectThumbnail } from '@/lib/project-thumbnail';
 
 const ProjectsList = () => {
 
@@ -131,7 +132,7 @@ const ProjectsList = () => {
               <Link href={`/dashboard/${user?.name}/canvas?project=${project._id}`} className='cursor-pointer block'>
                 <div className='space-y-3'>
                   <div className='aspect-[4/3] rounded-lg overflow-hidden bg-muted'>
-                    {project.thumbnail ? (
+                    {projectThumbnail(project.thumbnail) ? (
                       <Image src={project.thumbnail} alt={project.name} width={300} height={200} className='w-full h-full object-cover group-hover:scale-105 transition-transform duration-200' />
                     ) : (
                       <SketchThumbnail className='size-full' />

@@ -1,7 +1,8 @@
 import { cn } from '@/lib/utils'
 
 // A dark stand-in for a project's thumbnail: a small frame sketched on the canvas, the way a new
-// project starts. Used for the empty dashboard and for projects saved without a thumbnail.
+// project starts. Used for the empty dashboard, for new projects (they're created without a
+// thumbnail), and for older projects whose thumbnail was only a random gradient.
 const SketchThumbnail = ({ className }: { className?: string }) => (
     <div
         className={cn(
