@@ -1,5 +1,26 @@
 import { cn } from '@/lib/utils'
+import { cva } from 'class-variance-authority'
 import React from 'react'
+
+// Linea's frosted glass. The canvas toolbars use it here, and every other glass control gets it through
+// the Button's glass variant, so they all look and respond the same.
+export const liquidGlass = cva('border backdrop-blur-xl saturate-150', {
+    variants: {
+        variant: {
+            default: 'bg-white/[0.08] border-white/[0.12]',
+            subtle: 'backdrop-blur-lg saturate-125 bg-white/[0.05] border-white/[0.08]',
+        },
+        // Hover and press states, for glass that is a control rather than a panel
+        interactive: {
+            true: 'hover:bg-white/[0.12] hover:border-white/[0.16] active:bg-white/[0.06]',
+            false: '',
+        },
+    },
+    defaultVariants: {
+        variant: 'default',
+        interactive: false,
+    },
+})
 
 interface LiquidGlassButtonProps {
     children: React.ReactNode
@@ -26,11 +47,6 @@ export const LiquidGlassButton: React.FC<LiquidGlassButtonProps> = ({
         lg: 'px-4 py-3 text-base rounded-2xl'
     }
 
-    const variantClasses = {
-        default: 'backdrop-blur-xl bg-white/[0.08] border border-white/[0.12] saturate-150',
-        subtle: 'backdrop-blur-lg bg-white/[0.05] border border-white/[0.08] saturate-125'
-    }
-
     return (
         <button
             onClick={onClick}
@@ -42,11 +58,10 @@ export const LiquidGlassButton: React.FC<LiquidGlassButtonProps> = ({
                 'flex items-center gap-2',
                 'pointer-events-auto cursor-pointer',
 
-                variantClasses[variant],
+                liquidGlass({ variant, interactive: true }),
                 sizeClasses[size],
-                
-                'hover:bg-white/[0.12] hover:border-white/[0.16]',
-                'active:bg-white/[0.06] active:scale-[0.98]',
+
+                'active:scale-[0.98]',
                 'focus:outline-none focus:ring-2 focus:ring-white/20 focus:ring-offset-2 focus:ring-offset-transparent',
 
                 disabled && 'opacity-50 cursor-not-allowed hover:bg-white/[0.08] hover:border-white/[0.12] active:scale-100',

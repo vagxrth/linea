@@ -21,7 +21,7 @@ const CreateProject = () => {
         ) : (
             <PlusIcon className='h-4 w-4' />
         )}
-        { isCreating ? 'Creating...' : 'New Project'}
+        { isCreating ? 'Creating...' : 'New project'}
     </Button>
   )
 }
