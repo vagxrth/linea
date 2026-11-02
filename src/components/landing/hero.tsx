@@ -2,7 +2,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import HeroAtmosphere from "./hero-atmosphere"
 
-// The promise from the README, with the way in. Pages of Linea output float up on either side of it.
+// The promise from the README, with the way in. Screenshots of Linea float up on either side of it.
 const Hero = () => (
     // Fills the first screen from tablets up. Phones have no scene beside the copy, so it sits near the top.
     <section className="relative isolate flex items-center overflow-hidden md:min-h-[calc(100svh-4rem)]">
