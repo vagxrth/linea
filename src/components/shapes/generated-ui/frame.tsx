@@ -1,4 +1,5 @@
 import { createDesignCompiler, designClasses } from '@/lib/design-css'
+import { loadWebFonts } from '@/lib/web-fonts'
 import React, { useEffect, useRef, useState } from 'react'
 
 type Props = {
@@ -9,6 +10,16 @@ type Props = {
 // The sandbox leaves out allow-scripts, allow-forms and allow-popups, so nothing in a design can run, submit or open
 // a window. allow-same-origin only lets the app fill the page in, measure it and export it.
 const BLANK_PAGE = '<!doctype html><html class="dark" style="color-scheme: dark; overflow: hidden"><head><meta charset="utf-8"></head><body style="margin: 0; background: transparent"></body></html>'
+
+// Loads the fonts the design's elements use (the style guide's, usually) into its page, so the design
+// shows in them rather than a fallback
+const loadDesignFonts = (page: Document) => {
+    const view = page.defaultView
+    if (!view) return
+    const families = new Set<string>()
+    page.body.querySelectorAll('*').forEach((element) => families.add(view.getComputedStyle(element).fontFamily))
+    loadWebFonts(page, families)
+}
 
 // Shows a generated design in its own page, so the design's CSS can't restyle the app
 const DesignFrame = ({ html, onResize }: Props) => {
@@ -35,13 +46,18 @@ const DesignFrame = ({ html, onResize }: Props) => {
     useEffect(() => {
         if (!page) return
         page.body.innerHTML = html
+        loadDesignFonts(page)
         // The app's stylesheet only covers the classes Linea itself uses, so the design's classes are compiled here
         let current = true
         compilerRef.current ??= createDesignCompiler()
         compilerRef.current
             .then((compiler) => {
                 const designStyles = page.getElementById('design-classes')
-                if (current && designStyles) designStyles.textContent = compiler.build(designClasses(page))
+                if (current && designStyles) {
+                    designStyles.textContent = compiler.build(designClasses(page))
+                    // Fonts set by the design's classes only apply now
+                    loadDesignFonts(page)
+                }
             })
             .catch((error) => {
                 compilerRef.current = null

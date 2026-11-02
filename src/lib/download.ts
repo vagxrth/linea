@@ -1,5 +1,7 @@
 // Saving files from the canvas: frame snapshots and exported designs
 
+import { webFontEmbedCSS } from './web-fonts'
+
 // How long a downloaded file's address stays valid. The browser can start the download after the
 // click returns, and revoking the address before then cancels it in Safari and Firefox, so this
 // waits as long as FileSaver.js does.
@@ -26,7 +28,11 @@ const captureVisualContent = async (ctx: CanvasRenderingContext2D, contentDiv: H
     cacheBust: true,
     includeQueryParams: false,
     skipAutoScale: true,
-    skipFonts: true,
+    // The design's web fonts (its style guide's), so the image shows them as the canvas does. Without
+    // them, text took a fallback font's wider widths and wrapped where it doesn't on the canvas.
+    // Given here because html-to-image can't find a design's fonts itself; the app's own fonts stay
+    // out, as before.
+    fontEmbedCSS: await webFontEmbedCSS(contentDiv.ownerDocument),
     filter: (node) => {
       if (node.nodeType === Node.TEXT_NODE) return true
       if (node.nodeType === Node.ELEMENT_NODE) {
