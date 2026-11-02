@@ -1,5 +1,6 @@
 import { Type } from 'lucide-react'
 import React from 'react'
+import WebFonts from '@/components/web-fonts'
 
 type Props = {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -21,6 +22,9 @@ const StyleGuideTypography = ({ typographyGuide }: Props) => {
                 </div>
             ) : (
                 <div className='flex flex-col gap-10'>
+                    {/* The fonts the styles name, so the samples show in them rather than a fallback */}
+                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                    <WebFonts families={typographyGuide.flatMap((section: any) => section.styles?.map((style: any) => style.fontFamily) ?? [])} />
                     {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                     {typographyGuide.map((section: any, index: number) => (
                         <div key={index} className='flex flex-col gap-5'>

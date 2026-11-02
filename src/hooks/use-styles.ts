@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation"
 import { GeneratedUIShape, updateShape } from "@/redux/slice/shapes"
 import { useAppDispatch } from "@/redux/store"
 import { imageProblem } from "@/lib/image-upload"
+import { createUploadQueue } from "@/lib/upload-queue"
 import { useOutOfCredits } from "./use-subscription"
 import DOMPurify from 'dompurify'
 
@@ -196,55 +197,23 @@ export const useMoodboard = (guideImages: MoodboardImage[]) => {
         e.target.value = ''
     }
 
+    // The latest render's upload, so a queued image goes to the project the page shows now
+    const uploadImageRef = useRef(uploadImage)
     useEffect(() => {
-        const uploadPendingImages = async () => {
-            const currentImages = getValues('images')
-            for (let i = 0; i < currentImages.length; i++) {
-                const image = currentImages[i]
-                if (!image.uploaded && !image.uploading && !image.error) {
-                    const updatedImages = [...currentImages]
-                    updatedImages[i] = { ...image, uploading: true }
-                    setValue('images', updatedImages)
-                    try {
-                        const { storageId } = await uploadImage(image.file!)
-                        const finalImages = getValues('images')
-                        const finalIndex = finalImages.findIndex(
-                            (img) => img.id === image.id
-                        )
-                        if (finalIndex !== -1) {
-                            finalImages[finalIndex] = {
-                                ...finalImages[finalIndex],
-                                storageId,
-                                uploaded: true,
-                                uploading: false,
-                                isFromServer: true
-                            }
-                            setValue('images', [...finalImages])
-                        }
-                    } catch (error) {
-                        console.error(error)
-                        const errorImages = getValues('images')
-                        const errorIndex = errorImages.findIndex(
-                            (img) => img.id === image.id
-                        )
-                        if (errorIndex !== -1) {
-                            errorImages[errorIndex] = {
-                                ...errorImages[errorIndex],
-                                uploading: false,
-                                error: 'Upload Failed'
-                            }
-                            setValue('images', [...errorImages])
-                        }
-                    }
-                }
-            }
-        }
+        uploadImageRef.current = uploadImage
+    })
 
-        if (images.length > 0) {
-            uploadPendingImages()
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [images, setValue, getValues])
+    // Uploads each added image once, one at a time (lib/upload-queue). Made once, on the first render.
+    const uploadQueue = useRef<ReturnType<typeof createUploadQueue<MoodboardImage>> | null>(null)
+    uploadQueue.current ??= createUploadQueue<MoodboardImage>({
+        current: () => getValues('images'),
+        update: (id, patch) => setValue('images', getValues('images').map((image) => image.id === id ? { ...image, ...patch } : image)),
+        upload: async (image) => ({ storageId: (await uploadImageRef.current(image.file!)).storageId, isFromServer: true }),
+    })
+
+    useEffect(() => {
+        uploadQueue.current?.add(images)
+    }, [images])
 
     useEffect(() => {
         return () => {
