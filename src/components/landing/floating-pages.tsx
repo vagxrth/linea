@@ -5,8 +5,9 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Suspense, useEffect, useMemo, useRef, type RefObject } from 'react'
 import * as THREE from 'three'
 
-// Pages of Linea output floating up both sides of the hero. Until there are real screenshots these
-// are placeholders, labelled as such: replace public/images/1.webp to 8.webp to change them.
+// Screenshots from a demo project in Linea, floating up both sides of the hero: the canvas, the
+// moodboard and style guide, the generated page and a chat redesign. To change them, replace
+// public/images/1.webp to 8.webp with new 16:10 screenshots.
 const IMAGES = Array.from({ length: 8 }, (_, i) => `/images/${i + 1}.webp`)
 
 const PER_SIDE = 7
