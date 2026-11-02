@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react'
 import { useProjectCreation } from '@/hooks/use-project';
-import { Plus, MoreVertical, Trash2, Pencil } from 'lucide-react';
+import { MoreVertical, Trash2, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import { useAppSelector } from '@/redux/store';
 import Image from 'next/image';
@@ -24,6 +24,9 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { buttonVariants } from '@/components/ui/button';
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
+import CreateProject from '@/components/buttons/create-project';
+import SketchThumbnail from '@/components/projects/sketch-thumbnail';
 
 const ProjectsList = () => {
 
@@ -100,26 +103,26 @@ const ProjectsList = () => {
 
   return (
     <div className='space-y-8'>
-      <div className='flex items-center justify-between'>
-        <h1 className='text-3xl font-semibold text-foreground'>
-          Your Projects
-        </h1>
-        <p className='text-muted-foreground mt-2'>
-          Manage your projects
-        </p>
-      </div>
+      <h1 className='font-serif text-4xl tracking-tight text-foreground'>
+        Your projects
+      </h1>
       {projects.length === 0 ? (
-        <div className='text-center py-20'>
-          <div className='w-16 h-16 mx-auto mb-4 rounded-lg bg-muted flex items-center justify-center'>
-            <Plus className='w-8 h-8 text-muted-foreground' />
-          </div>
-          <h3 className='text-lg font-medium text-foreground mb-2'>
-            No Projects Found
-          </h3>
-          <p className='text-sm text-muted-foreground mb-6'>
-            Create your first project
-          </p>
-        </div>
+        // Until there's a project, the place the grid will take holds the way to make one
+        <Empty className='rounded-2xl border border-solid bg-card/40 py-14'>
+          <EmptyHeader className='max-w-md'>
+            <EmptyMedia className='mb-4'>
+              <SketchThumbnail className='w-56 shadow-2xl shadow-black/40' />
+            </EmptyMedia>
+            <EmptyTitle className='font-serif text-3xl font-normal'>No projects yet</EmptyTitle>
+            <EmptyDescription className='text-[0.9375rem]/relaxed'>
+              A project holds a canvas for your sketches, the style guide from your moodboard,
+              and every design you generate from them.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <CreateProject />
+          </EmptyContent>
+        </Empty>
       ) : (
         <div className='grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6'>
           {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
@@ -131,9 +134,7 @@ const ProjectsList = () => {
                     {project.thumbnail ? (
                       <Image src={project.thumbnail} alt={project.name} width={300} height={200} className='w-full h-full object-cover group-hover:scale-105 transition-transform duration-200' />
                     ) : (
-                      <div className='w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center'>
-                        <Plus className='w-8 h-8 text-gray-400' />
-                      </div>
+                      <SketchThumbnail className='size-full' />
                     )}
                   </div>
                   <div className='space-y-1'>

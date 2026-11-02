@@ -13,6 +13,7 @@ import CreateProject from '../buttons/create-project';
 import Autosave from '../autosave';
 import Image from 'next/image';
 import { Button } from '../ui/button';
+import { Skeleton } from '../ui/skeleton';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { useSubscription } from '@/hooks/use-subscription';
@@ -47,6 +48,7 @@ const Navbar = () => {
     const hasCanvas = pathname.includes('canvas');
     const hasStyleGuide = pathname.includes('style-guide');
 
+    // undefined until the balance loads
     const creditsBalance = useQuery(api.subscription.getCreditsBalance, {})
 
     const project = useQuery(
@@ -106,15 +108,22 @@ const Navbar = () => {
                 </div>
             )}
             <div className='flex items-center gap-4 justify-end'>
-                <span className='text-sm text-white/50'>{creditsBalance} Credits</span>
+                {creditsBalance === undefined ? (
+                    <Skeleton className='h-4 w-16 rounded-full' />
+                ) : (
+                    <span className='text-sm tabular-nums text-muted-foreground'>
+                        {creditsBalance} {creditsBalance === 1 ? 'credit' : 'credits'}
+                    </span>
+                )}
                 {/* Subscribers manage their plan in Polar's portal; nothing shows until the check loads */}
                 {!hasCanvas && !hasStyleGuide && isSubscribed !== undefined && (
                     <Button
+                        variant='glass'
+                        shape='pill'
                         onClick={isSubscribed ? onManage : () => router.push(`/billing/${slug}`)}
                         disabled={isFetching}
-                        className='backdrop-blur-xl bg-white/[0.08] border border-white/[0.12] saturate-150 rounded-full hover:bg-white/[0.12] hover:border-white/[0.16] transition-all duration-200 active:bg-white/[0.06] active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-white/20 text-white font-medium text-sm px-4 py-2 h-auto'
                     >
-                        <Coins className='h-4 w-4 mr-1' />
+                        <Coins />
                         {isSubscribed ? 'Manage plan' : 'Subscribe'}
                     </Button>
                 )}
