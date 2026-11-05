@@ -77,15 +77,17 @@ const ToolbarShapes = () => {
     const selectTool = (tool: Tool) => dispatch(setTool(tool))
 
   return (
-    <div className='col-span-1 flex justify-center items-center'>
-        <div className='flex items-center backdrop-blur-xl bg-white/[0.08] border border-white/[0.12] gap-2 rounded-full p-3 saturate-150'>
+    // On a phone the tools are wider than the screen, so the pill scrolls sideways. mx-auto centers it
+    // when it fits; justify-center would push its first tools out of reach once it doesn't.
+    <div className='flex min-w-0 items-center'>
+        <div className='pointer-events-auto mx-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-full border border-white/[0.12] bg-neutral-800/85 p-2 saturate-150 backdrop-blur-xl [scrollbar-width:none] sm:gap-2 sm:p-3 [&::-webkit-scrollbar]:hidden'>
             {tools.map((tool) => (
                 <Button
                     key={tool.id}
                     variant={'ghost'}
                     size='lg'
                     onClick={() => selectTool(tool.id)}
-                    className={cn('cursor-pointer rounded-full p-3', currentTool === tool.id ? 'text-primary/100 bg-white/[0.12] border border-white/[0.16]' : 'text-primary/50 hover:bg-white/[0.06] border border-transparent')}
+                    className={cn('shrink-0 cursor-pointer rounded-full p-3', currentTool === tool.id ? 'text-primary/100 bg-white/[0.12] border border-white/[0.16]' : 'text-primary/75 hover:text-primary hover:bg-white/[0.06] border border-transparent')}
                     title={`${tool.label} - ${tool.description}`}
                 >
                     {tool.icon}

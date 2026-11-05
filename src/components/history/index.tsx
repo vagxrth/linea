@@ -24,8 +24,8 @@ const History = () => {
   }
 
   return (
-    <div className='col-span-1 flex justify-start items-center'>
-        <div className='inline-flex items-center rounded-full backdrop-blur-xl bg-white/[0.08] border border-white/[0.12] p-2 text-neutral-300 saturate-150'>
+    <div className='flex justify-start items-center'>
+        <div className='pointer-events-auto inline-flex items-center rounded-full backdrop-blur-xl bg-neutral-800/85 border border-white/[0.12] p-2 text-neutral-200 saturate-150'>
             {/* Each title is the button's tooltip and the name screen readers announce */}
             <button
               type='button'

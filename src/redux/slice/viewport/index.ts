@@ -10,6 +10,13 @@ export interface Rect {
   width: number;
   height: number;
 }
+// Room to leave on each side of the view
+export interface Insets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
 export type ViewportMode = "idle" | "panning" | "spacePanning";
 
 interface ViewportState {
@@ -226,14 +233,19 @@ const viewportSlice = createSlice({
       action: PayloadAction<{
         bounds: Rect;
         viewportPx: { width: number; height: number };
-        padding?: number;
+        // The same on every side, or set per side
+        padding?: number | Insets;
         // The most it zooms in, below the usual limit
         maxScale?: number;
       }>
     ) {
       const { bounds, viewportPx, padding = 50, maxScale = state.maxScale } = action.payload;
-      const aw = Math.max(1, viewportPx.width - padding * 2);
-      const ah = Math.max(1, viewportPx.height - padding * 2);
+      const inset =
+        typeof padding === "number"
+          ? { top: padding, right: padding, bottom: padding, left: padding }
+          : padding;
+      const aw = Math.max(1, viewportPx.width - inset.left - inset.right);
+      const ah = Math.max(1, viewportPx.height - inset.top - inset.bottom);
       const bw = Math.max(1e-6, bounds.width);
       const bh = Math.max(1e-6, bounds.height);
 
@@ -245,8 +257,9 @@ const viewportSlice = createSlice({
         Math.min(maxScale, state.maxScale)
       );
 
-      const centerX = viewportPx.width / 2;
-      const centerY = viewportPx.height / 2;
+      // The middle of the area left between the insets
+      const centerX = inset.left + aw / 2;
+      const centerY = inset.top + ah / 2;
       const boundsCenterX = bounds.x + bounds.width / 2;
       const boundsCenterY = bounds.y + bounds.height / 2;
 

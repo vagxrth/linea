@@ -167,7 +167,7 @@ const ProjectsList = () => {
                         </button>
                       </div>
                     )}
-                    <p className='text-xs text-muted-foreground'>
+                    <p className='text-sm text-muted-foreground'>
                       {formatDistanceToNow(new Date(project.lastModified), { addSuffix: true })}
                     </p>
                   </div>

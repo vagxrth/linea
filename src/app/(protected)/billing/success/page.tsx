@@ -61,7 +61,7 @@ const Success = () => {
             <div className='mb-1 text-lg'>
                 Finishing up your subscription...
             </div>
-            <div className='text-sm text-gray-500' aria-live="polite">
+            <div className='text-sm text-muted-foreground' aria-live="polite">
                 {me === undefined
                     ? "Checking your account..."
                     : entitled === undefined
@@ -72,7 +72,7 @@ const Success = () => {
                 }
             </div>
             {timedOut && (
-                <div className='mt-4 text-xs text-gray-400'>
+                <div className='mt-4 text-sm text-muted-foreground'>
                     Your credits will appear in your account shortly.
                 </div>
             )}

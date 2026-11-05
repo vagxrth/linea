@@ -16,7 +16,7 @@ const StyleGuideTypography = ({ typographyGuide }: Props) => {
                     <h3 className='text-lg font-medium text-foreground mb-2'>
                         No typography generated
                     </h3>
-                    <p className='text-sm text-muted-foreground mb-6'>
+                    <p className='text-[0.9375rem]/relaxed text-muted-foreground mb-6'>
                         Generate typography style guide for typography
                     </p>
                 </div>
@@ -29,7 +29,7 @@ const StyleGuideTypography = ({ typographyGuide }: Props) => {
                     {typographyGuide.map((section: any, index: number) => (
                         <div key={index} className='flex flex-col gap-5'>
                             <div>
-                                <h3 className='text-lg font-medium text-foreground/50'>
+                                <h3 className='text-lg font-medium text-muted-foreground'>
                                     {section.title}
                                 </h3>
                             </div>
@@ -42,7 +42,7 @@ const StyleGuideTypography = ({ typographyGuide }: Props) => {
                                                 {style.name}
                                             </h4>
                                             {style.description && (
-                                                <p className='text-xs text-muted-foreground'>
+                                                <p className='text-sm text-muted-foreground'>
                                                     {style.description}
                                                 </p>
                                             )}
@@ -50,7 +50,7 @@ const StyleGuideTypography = ({ typographyGuide }: Props) => {
                                         <div className='text-foreground' style={{ fontFamily: style.fontFamily, fontSize: style.fontSize, fontWeight: style.fontWeight, lineHeight: style.lineHeight, letterSpacing: style.letterSpacing || 'normal' }}>
                                             The quick brown fox jumps over the lazy dog
                                         </div>
-                                        <div className='text-xs text-muted-foreground space-y-1'>
+                                        <div className='text-sm text-muted-foreground space-y-1'>
                                             <div>Font : {style.fontFamily}</div>
                                             <div>Size: {style.fontSize}</div>
                                             <div>Weight: {style.fontWeight}</div>

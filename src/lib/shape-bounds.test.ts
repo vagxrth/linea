@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { Shape } from "@/redux/slice/shapes"
 import { zoomToFit } from "@/redux/slice/viewport"
-import { contentBounds, fitToContent } from "./shape-bounds"
+import { contentBounds, fitInsets, fitToContent } from "./shape-bounds"
 
 const rect = { id: "r1", type: "rect", x: 10, y: 10, w: 40, h: 30, stroke: "#fff", strokeWidth: 2, fill: null } as Shape
 const line = { id: "l1", type: "line", startX: 100, startY: -20, endX: 60, endY: 50, stroke: "#fff", strokeWidth: 2, fill: null } as Shape
@@ -20,8 +20,16 @@ describe("content bounds", () => {
 describe("zoom to fit", () => {
     it("fits every shape at no more than 100%, leaving room for the bars over the canvas", () => {
         expect(fitToContent([rect], view)).toEqual(
-            zoomToFit({ bounds: { x: 10, y: 10, width: 40, height: 30 }, viewportPx: view, padding: 96, maxScale: 1 })
+            zoomToFit({ bounds: { x: 10, y: 10, width: 40, height: 30 }, viewportPx: view, padding: fitInsets(view), maxScale: 1 })
         )
+    })
+
+    it("keeps clear of the navigation bar and a design's toolbar at the top, and the tools at the bottom", () => {
+        expect(fitInsets(view)).toEqual({ top: 136, right: 96, bottom: 104, left: 96 })
+    })
+
+    it("leaves room for two rows of tools on a phone, with narrower sides", () => {
+        expect(fitInsets({ width: 390, height: 844 })).toEqual({ top: 136, right: 24, bottom: 152, left: 24 })
     })
 
     it("does nothing without shapes", () => {

@@ -13,7 +13,7 @@ type Props = {
 // The frame around the sign-in, sign-up, password reset and email confirmation forms. It uses the
 // landing page's logo, type and colors, so going from the landing page to a form feels like one site.
 const AuthShell = ({ title, description, children, footer }: Props) => (
-    <div className="flex min-h-svh flex-col">
+    <div data-app-chrome className="flex min-h-svh flex-col">
         <header className="mx-auto flex h-16 w-full max-w-6xl items-center px-4 sm:px-6">
             <Logo />
         </header>
@@ -30,7 +30,7 @@ const AuthShell = ({ title, description, children, footer }: Props) => (
 
 // Between the Google button and the email form
 export const AuthDivider = () => (
-    <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
+    <div className="my-6 flex items-center gap-3 text-sm text-muted-foreground">
         <span aria-hidden className="h-px flex-1 bg-border" />
         or
         <span aria-hidden className="h-px flex-1 bg-border" />

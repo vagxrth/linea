@@ -88,7 +88,7 @@ const GeneratedUI = ({ shape, toggleChat, generateWorkflow, exportDesign }: Prop
                     {shape.uiSpecData ? (
                         <DesignFrame html={html} onResize={setFrameHeight} />
                     ) : (
-                        <div className='flex items-center justify-center p-8 text-white/60'>
+                        <div className='flex items-center justify-center p-8 text-white/75'>
                             <div className='animate-pulse'>
                                 Generating Design...
                             </div>
@@ -96,7 +96,7 @@ const GeneratedUI = ({ shape, toggleChat, generateWorkflow, exportDesign }: Prop
                     )}
                 </div>
             </div>
-            <div className='absolute -top-6 left-0 text-xs px-2 py-1 rounded whitespace-nowrap text-white/60 bg-black/40' style={{fontSize: '10px'}}>
+            <div className='absolute -top-6 left-0 text-xs px-2 py-1 rounded whitespace-nowrap text-white/85 bg-black/40' style={{fontSize: '12px'}}>
                 Generated UI
             </div>
         </div>

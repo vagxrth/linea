@@ -14,7 +14,7 @@ export const ColorSwatch = ({ name, value, className }: ColorSwatchProps) => {
                 <h4 className="text-sm font-medium text-foreground">
                     {name}
                 </h4>
-                <p className="text-xs text-muted-foreground font-mono uppercase">
+                <p className="text-sm text-muted-foreground font-mono uppercase">
                     {value}
                 </p>
             </div>

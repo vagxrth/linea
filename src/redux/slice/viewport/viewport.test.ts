@@ -99,6 +99,19 @@ describe("zooming", () => {
         expect(fitted.scale).toBe(1)
         expect(worldToScreen({ x: 20, y: 10 }, fitted.translate, fitted.scale)).toEqual({ x: 500, y: 400 })
     })
+
+    it("fits a rectangle in the area left between uneven insets", () => {
+        const padding = { top: 200, right: 100, bottom: 100, left: 100 }
+        const fitted = run([
+            zoomToFit({ bounds: { x: 0, y: 0, width: 400, height: 200 }, viewportPx: { width: 1000, height: 800 }, padding }),
+        ])
+
+        // 800 by 500 is left: 2× fills its width
+        expect(fitted.scale).toBe(2)
+        // The rectangle sits in the middle of that area, not of the view
+        expect(worldToScreen({ x: 0, y: 0 }, fitted.translate, fitted.scale)).toEqual({ x: 100, y: 250 })
+        expect(worldToScreen({ x: 400, y: 200 }, fitted.translate, fitted.scale)).toEqual({ x: 900, y: 650 })
+    })
 })
 
 describe("pinching", () => {

@@ -21,7 +21,10 @@ const Layout = async ({ children }: Props) => {
 
     return (
         <ReduxProvider preloadedState={{ profile }}>
-            {children}
+            {/* Lighter secondary text on the signed-in pages (globals.css). contents: no box, so layout is untouched. */}
+            <div data-app-chrome className='contents'>
+                {children}
+            </div>
         </ReduxProvider>
     )
 }

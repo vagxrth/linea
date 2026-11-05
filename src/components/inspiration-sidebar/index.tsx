@@ -196,7 +196,7 @@ const InspirationSidebar = ({ isOpen, onClose }: InspirationSidebarProps) => {
     }, [existingImages])
 
     return (
-        <div className={cn('fixed left-5 top-1/2 transform -translate-y-1/2 w-80 backdrop-blur-xl bg-white/[0.08] border-white/[0.12] gap-2 p-3 saturate-150 border rounded-lg z-50 transition-all duration-300',
+        <div className={cn('fixed left-5 top-1/2 transform -translate-y-1/2 w-80 backdrop-blur-xl bg-neutral-800/85 border-white/[0.12] gap-2 p-3 saturate-150 border rounded-lg z-50 transition-all duration-300',
             isOpen ? 'translate-x-0 opacity-100' : '-translate-x-full opacity-0'
         )}>
             <div className='p-4 flex flex-col gap-4 overflow-y-auto max-h-[calc(100vh-8rem)]'>
@@ -205,13 +205,13 @@ const InspirationSidebar = ({ isOpen, onClose }: InspirationSidebarProps) => {
                         variant='ghost'
                         size='sm'
                         onClick={onClose}
-                        className='h-8 w-8 p-0 text-white/60 hover:text-white hover:bg-white/12'
+                        className='h-8 w-8 p-0 text-white/75 hover:text-white hover:bg-white/12'
                     >
                         <X className='w-4 h-4' />
                     </Button>
                     <div className='flex items-center gap-2'>
-                        <ImageIcon className='w-5 h-5 text-white/80' />
-                        <Label className='text-white/80 font-medium'>
+                        <ImageIcon className='w-5 h-5 text-white/90' />
+                        <Label className='text-white/90 font-medium'>
                             Inspiration Board
                         </Label>
                     </div>
@@ -232,14 +232,14 @@ const InspirationSidebar = ({ isOpen, onClose }: InspirationSidebarProps) => {
             >
                 <input ref={fileInputRef} type='file' multiple className='hidden' onChange={(e) => handleFileSelect(e.target.files)} accept={IMAGE_ACCEPT} />
                 <div className='flex flex-col items-center gap-2'>
-                    <Upload className='w-8 h-8 text-white/40' />
-                    <p className='text-white/60 text-sm'>
+                    <Upload className='w-8 h-8 text-white/60' />
+                    <p className='text-white/75 text-sm'>
                         {images.length < 6 ? (
                             <>
                                 Drop images here or {' '}
                                 <span className='text-blue-400'>browse</span>
                                 <br />
-                                <span className='text-xs text-white/40'>
+                                <span className='text-xs text-white/60'>
                                     {images.length}/6 images uploaded
                                 </span>
                             </>
@@ -253,14 +253,14 @@ const InspirationSidebar = ({ isOpen, onClose }: InspirationSidebarProps) => {
                 {images.length > 0 && (
                     <div className='space-y-3'>
                         <div className='flex items-center justify-between'>
-                            <Label className='text-white/80 text-sm'>
+                            <Label className='text-white/90 text-sm'>
                                 Uploaded Images ({images.length})
                             </Label>
                             <Button
                                 variant='ghost'
                                 size='sm'
                                 onClick={clearAllImages}
-                                className='h-7 px-2 text-xs text-white/60 hover:text-white hover:bg-white/12'
+                                className='h-7 px-2 text-xs text-white/75 hover:text-white hover:bg-white/12'
                             >
                                 <Trash2 className='w-3 h-3 mr-1' />
                                 Clear all
@@ -306,7 +306,7 @@ const InspirationSidebar = ({ isOpen, onClose }: InspirationSidebarProps) => {
                                     onClick={() => fileInputRef.current?.click()}
                                     className='aspect-square rounded-lg border-2 border-dashed border-white/20 bg-white/5 hover:border-white/40 hover:bg-white/10 transition-all duration-200 flex items-center justify-center group'
                                 >
-                                    <Plus className='w-6 h-6 text-white/40 group-hover:text-white/60 transition-colors' />
+                                    <Plus className='w-6 h-6 text-white/60 group-hover:text-white/75 transition-colors' />
                                 </Button>
                             )}
                         </div>

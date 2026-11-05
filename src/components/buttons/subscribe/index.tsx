@@ -12,11 +12,14 @@ const Subscribe = () => {
     return (
         <Button
             type='button'
-            size='lg'
+            variant='brass'
+            size='xl'
             shape='pill'
             className='px-8'
             onClick={isSubscribed ? onManage : onSubscribe}
-            disabled={isFetching || isSubscribed === undefined}
+            // Not disabled while the plan check loads: before it does, this subscribes, and someone who
+            // already has a plan gets a 409 and a toast pointing to Manage plan
+            disabled={isFetching}
         >
             {isFetching ? (
                 <>

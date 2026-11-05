@@ -72,7 +72,7 @@ const TextSidebar = ({ isOpen }: Props) => {
     if (!isOpen || !selectedTextShape) return null
 
     return (
-        <div className={cn('fixed right-5 top-1/2 transform -translate-y-1/2 w-80 backdrop-blur-xl bg-white/[0.08] border-white/[0.12] gap-2 p-3 saturate-150 border rounded-lg z-50 transition-transform duration-300', isOpen ? 'translate-x-0' : 'translate-x-full')}>
+        <div className={cn('fixed right-5 top-1/2 transform -translate-y-1/2 w-80 backdrop-blur-xl bg-neutral-800/85 border-white/[0.12] gap-2 p-3 saturate-150 border rounded-lg z-50 transition-transform duration-300', isOpen ? 'translate-x-0' : 'translate-x-full')}>
             <div className='p-4 flex flex-col gap-10 overflow-y-auto max-h-[calc(100vh-8rem)]'>
                 <div className='space-y-2'>
                     <Label className='text-white/80'>Font Family</Label>

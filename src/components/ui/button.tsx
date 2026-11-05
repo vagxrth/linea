@@ -21,6 +21,8 @@ const buttonVariants = cva(
         ghost:
           "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
         link: "text-primary underline-offset-4 hover:underline",
+        // Linea's warm accent, for the one action a page is for (like Subscribe)
+        brass: "bg-brass text-black hover:bg-brass/90",
         // Frosted glass, for controls that float over the canvas or the landing page's 3D scene
         glass: cn(liquidGlass({ interactive: true }), "text-white/90 hover:text-white"),
       },
