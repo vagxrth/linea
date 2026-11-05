@@ -15,7 +15,7 @@ const Loading = () => {
                     <p className="text-sm font-medium text-foreground">
                         Loading your dashboard...
                     </p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                         Preparing your workspace...
                     </p>
                 </div>

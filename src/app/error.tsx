@@ -23,7 +23,7 @@ const ErrorPage = ({ error, reset }: { error: Error & { digest?: string }; reset
     })
 
     return (
-        <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div data-app-chrome className="min-h-screen bg-background flex items-center justify-center p-6">
             <div className="flex max-w-sm flex-col items-center gap-4 text-center">
                 <div className="space-y-2">
                     <h1 className="text-2xl font-semibold text-foreground">Something went wrong</h1>

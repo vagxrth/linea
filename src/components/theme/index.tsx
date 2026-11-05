@@ -15,7 +15,7 @@ export const ColorTheme = ({ title, swatches, className }: Props) => {
     return (
         <div className={cn('flex flex-col gap-5', className)}>
             <div>
-                <h3 className="text-lg font-medium text-foreground/50">{title}</h3>
+                <h3 className="text-lg font-medium text-muted-foreground">{title}</h3>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
@@ -23,7 +23,7 @@ export const ColorTheme = ({ title, swatches, className }: Props) => {
                     <div key={swatch.name}>
                         <ColorSwatch name={swatch.name} value={swatch.hexColor} />
                         {swatch.description && (
-                            <p className="text-xs text-muted-foreground mt-2">
+                            <p className="text-sm text-muted-foreground mt-2">
                                 {swatch.description}
                             </p>
                         )}

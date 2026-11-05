@@ -1,5 +1,5 @@
 import type { Shape } from '@/redux/slice/shapes'
-import { zoomToFit, type Rect } from '@/redux/slice/viewport'
+import { zoomToFit, type Insets, type Rect } from '@/redux/slice/viewport'
 
 // The area each shape covers, matching the areas clicks hit
 export const getShapeBounds = (shape: Shape): { x: number; y: number; w: number; h: number } => {
@@ -45,12 +45,18 @@ export const contentBounds = (shapes: Shape[]): Rect | null => {
     return { x, y, width: right - x, height: bottom - y }
 }
 
-// Room left around the drawing, so the bars over the canvas don't cover it
-const FIT_PADDING = 96
+// Room left around the drawing, so the bars over the canvas cover none of it. At the top, the
+// navigation bar (88px) and the 32px toolbar that sits above a design, with its Chat button. At the
+// bottom, the tools: one row from the md breakpoint (768px) up, two rows below it, as on phones,
+// which also get narrower margins at the sides.
+export const fitInsets = (viewportPx: { width: number; height: number }): Insets =>
+    viewportPx.width < 768
+        ? { top: 136, right: 24, bottom: 152, left: 24 }
+        : { top: 136, right: 96, bottom: 104, left: 96 }
 
 // Zooms and pans so every shape is in view, at no more than 100%, so a small drawing isn't blown up.
 // Null when there's nothing to fit.
 export const fitToContent = (shapes: Shape[], viewportPx: { width: number; height: number }) => {
     const bounds = contentBounds(shapes)
-    return bounds ? zoomToFit({ bounds, viewportPx, padding: FIT_PADDING, maxScale: 1 }) : null
+    return bounds ? zoomToFit({ bounds, viewportPx, padding: fitInsets(viewportPx), maxScale: 1 }) : null
 }

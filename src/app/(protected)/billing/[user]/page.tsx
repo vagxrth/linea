@@ -6,7 +6,7 @@ const Billing = () => {
         <div className="relative py-16 md:py-32">
             <div className="mx-auto max-w-5xl px-6">
                 <div className="mx-auto max-w-2xl text-center">
-                    <h2 className="text-balance text-3xl font-bold md:text-4xl lg:text-5xl">
+                    <h2 className="text-balance font-serif text-4xl tracking-tight md:text-5xl lg:text-6xl">
                         Upgrade to Linea Pro
                     </h2>
                 </div>
@@ -15,8 +15,8 @@ const Billing = () => {
                         <div className="grid items-stretch gap-12 divide-y p-12 pb-6 md:grid-cols-2 md:divide-x md:divide-y-0">
                             <div className="flex flex-col pb-12 text-center md:pb-0 md:pr-12">
                                 <div>
-                                    <h3 className="text-2xl font-semibold">Linea Pro</h3>
-                                    <p className="mt-2 text-lg">Perfect for individuals and small teams</p>
+                                    <h3 className="font-serif text-3xl">Linea Pro</h3>
+                                    <p className="mt-2 text-lg text-muted-foreground">Perfect for individuals and small teams</p>
                                 </div>
                                 <div className="flex flex-col items-center justify-center flex-1">
                                     <span className="inline-block text-6xl font-bold">
@@ -53,10 +53,10 @@ const Billing = () => {
                                         <li
                                             key={index}
                                             className="flex items-start gap-3">
-                                            <Check className="size-5 shrink-0 mt-0.5 text-green-500" />
+                                            <Check className="size-5 shrink-0 mt-0.5 text-brass" />
                                             <div>
                                                 <span className="font-medium">{item.title}</span>
-                                                <p className="text-muted-foreground text-sm mt-0.5">{item.description}</p>
+                                                <p className="text-muted-foreground text-[0.9375rem]/relaxed mt-0.5">{item.description}</p>
                                             </div>
                                         </li>
                                     ))}

@@ -25,11 +25,11 @@ export const Frame = ({
         }}
       />
       <div
-        className="absolute pointer-events-none whitespace-nowrap text-xs font-medium text-white/80 select-none"
+        className="absolute pointer-events-none whitespace-nowrap text-xs font-medium text-white/90 select-none"
         style={{
           left: shape.x,
           top: shape.y - 24, // Position above the frame
-          fontSize: "11px",
+          fontSize: "12px",
           lineHeight: "1.2",
         }}>
         Frame {shape.frameNumber}

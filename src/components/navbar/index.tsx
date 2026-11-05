@@ -70,13 +70,15 @@ const Navbar = () => {
     ]
 
     return (
-        <div className='flex items-center justify-between p-6 fixed top-0 left-0 right-0 z-50'>
-            <div className='flex items-center gap-4'>
+        // pointer-events-none on the bar, auto on its controls: the bar spans the top edge, and its empty
+        // space was taking clicks meant for the canvas beneath, like a design's Chat button at fit
+        <div className='flex items-center justify-between p-6 fixed top-0 left-0 right-0 z-50 pointer-events-none'>
+            <div className='flex items-center gap-4 pointer-events-auto'>
                 <Link href={`/dashboard/${slug}`} className='w-16 h-16 rounded-full border-none bg-transparent flex items-center justify-center'>
                     <Image src='/images/logo.webp' alt="Linea" width={64} height={64} className='rounded-lg' />
                 </Link>
                 {(hasCanvas || hasStyleGuide) && (
-                    <div className='lg:inline-block hidden rounded-full text-primary/60 border border-white/[0.12] backdrop-blur-xl bg-white/[0.08] px-4 py-2 text-sm saturate-150'>
+                    <div className='lg:inline-block hidden rounded-full text-primary/80 border border-white/[0.12] backdrop-blur-xl bg-neutral-800/85 px-4 py-2 text-sm saturate-150'>
                         Project / {project?.name}
                     </div>
                 )}
@@ -84,7 +86,7 @@ const Navbar = () => {
 
             {projectId && (
                 <div className='lg:flex hidden items-center justify-center gap-2 absolute left-1/2 -translate-x-1/2'>
-                    <div className='flex items-center gap-2 backdrop-blur-xl bg-white/[0.08] border border-white/[0.12] rounded-full p-2 saturate-150'>
+                    <div className='flex items-center gap-2 backdrop-blur-xl bg-neutral-800/85 border border-white/[0.12] rounded-full p-2 saturate-150 pointer-events-auto'>
                         {tabs.map((t) => (
                             <Link
                                 key={t.href}
@@ -93,7 +95,7 @@ const Navbar = () => {
                                     'group inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm transition',
                                     `${pathname}?project=${projectId}` === t.href
                                         ? 'bg-white/[0.12] text-white border border-white/[0.16] backdrop-blur-sm'
-                                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06] border border-transparent',
+                                        : 'text-zinc-300 hover:text-white hover:bg-white/[0.06] border border-transparent',
                                 ].join(' ')}
                             >
                                 <span
@@ -107,7 +109,7 @@ const Navbar = () => {
                     </div>
                 </div>
             )}
-            <div className='flex items-center gap-4 justify-end'>
+            <div className='flex items-center gap-4 justify-end pointer-events-auto'>
                 {creditsBalance === undefined ? (
                     <Skeleton className='h-4 w-16 rounded-full' />
                 ) : (

@@ -54,17 +54,12 @@ export const Text = ({ shape }: { shape: TextShape }) => {
     }
   };
 
+  // Enter and Escape both finish editing and keep what was typed, as on other canvases. A box left
+  // empty is removed (handleBlur). Escape used to drop a new box's text, and undo an edit.
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
+    if (e.key === "Enter" || e.key === "Escape") {
+      e.preventDefault();
       handleBlur();
-    } else if (e.key === "Escape") {
-      if (shape.text === "Type here...") {
-        // Delete placeholder text box on escape
-        dispatch(removeShape(shape.id));
-      } else {
-        setIsEditing(false);
-        setTempText(shape.text);
-      }
     }
   };
 

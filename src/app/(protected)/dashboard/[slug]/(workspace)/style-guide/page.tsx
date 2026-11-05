@@ -57,7 +57,7 @@ const page = async ({ searchParams }: Props) => {
                             <h3 className='text-lg font-medium text-foreground mb-2'>
                                 No colors generated
                             </h3>
-                            <p className='text-sm text-muted-foreground max-w-md mx-auto mb-6'>
+                            <p className='text-[0.9375rem]/relaxed text-muted-foreground max-w-md mx-auto mb-6'>
                                 {guideImages.length
                                     ? 'Click Generate Style Guide on the Moodboard tab to create colors and typography from your images.'
                                     : 'Upload images to moodboard to generate colors and typography style guide.'}

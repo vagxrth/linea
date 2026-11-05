@@ -110,7 +110,7 @@ const Moodboard = ({ guideImages }: Props) => {
                             <h3 className='text-lg font-medium text-foreground'>
                                 Add images to your moodboard
                             </h3>
-                            <p className='text-sm text-muted-foreground max-w-md mx-auto'>
+                            <p className='text-[0.9375rem]/relaxed text-muted-foreground max-w-md mx-auto'>
                                 Drag and drop images here or click to upload
                             </p>
                         </div>
