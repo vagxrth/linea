@@ -4,8 +4,9 @@ import { createPolar, type models } from "@polar-sh/sdk/2026-10"
 import { fetchQuery } from "convex/nextjs"
 import { convexAuthNextjsToken } from "@convex-dev/auth/nextjs/server"
 import { api } from "../../../../../convex/_generated/api"
+import { checkoutProducts, planProductIds } from "@/lib/plans"
 
-export async function GET() {
+export async function GET(request: Request) {
     // Take the buyer from the session, never the request: the webhook credits the userId in the checkout metadata
     const token = await convexAuthNextjsToken()
     const user = await fetchQuery(api.user.getCurrentUser, {}, { token })
@@ -27,9 +28,8 @@ export async function GET() {
     })
 
     const checkoutData: models.CheckoutCreate = {
-        // POLAR_PLAN holds the product ids, comma-separated (monthly first, then yearly). Polar's
-        // checkout lets the buyer pick one, with the first selected.
-        products: process.env.POLAR_PLAN!.split(',').map((id) => id.trim()).filter(Boolean),
+        // Monthly and yearly when both are set up, with the period picked on the billing page selected
+        products: checkoutProducts(planProductIds(), new URL(request.url).searchParams.get('period') === 'yearly' ? 'yearly' : 'monthly'),
         success_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing/success`,
         metadata: {
             userId: user._id

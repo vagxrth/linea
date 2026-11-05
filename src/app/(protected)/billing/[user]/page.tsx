@@ -1,10 +1,34 @@
-import Subscribe from "@/components/buttons/subscribe"
-import { Check } from "lucide-react"
+import Link from "next/link"
+import { ArrowLeft, Check } from "lucide-react"
+import PlanPrice from "@/components/billing/plan-price"
+import Logo from "@/components/landing/logo"
+import { Button } from "@/components/ui/button"
+import { planProductIds } from "@/lib/plans"
 
-const Billing = () => {
+type Props = {
+    // The signed-in user's name, as in /dashboard/[slug]
+    params: Promise<{ user: string }>
+}
+
+const Billing = async ({ params }: Props) => {
+    const { user } = await params
+    const dashboard = `/dashboard/${user}`
+    // The yearly plan is offered only when its Polar product is set up
+    const hasYearly = planProductIds().length > 1
+
     return (
-        <div className="relative py-16 md:py-32">
-            <div className="mx-auto max-w-5xl px-6">
+        <div className="relative">
+            {/* A light header, so the page has a way back to the app */}
+            <header className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between px-6">
+                <Logo href={dashboard} />
+                <Button asChild variant="ghost" size="sm">
+                    <Link href={dashboard}>
+                        <ArrowLeft />
+                        Back to dashboard
+                    </Link>
+                </Button>
+            </header>
+            <div className="mx-auto max-w-5xl px-6 pt-10 pb-16 md:pt-20 md:pb-32">
                 <div className="mx-auto max-w-2xl text-center">
                     <h2 className="text-balance font-serif text-4xl tracking-tight md:text-5xl lg:text-6xl">
                         Upgrade to Linea Pro
@@ -18,15 +42,7 @@ const Billing = () => {
                                     <h3 className="font-serif text-3xl">Linea Pro</h3>
                                     <p className="mt-2 text-lg text-muted-foreground">Perfect for individuals and small teams</p>
                                 </div>
-                                <div className="flex flex-col items-center justify-center flex-1">
-                                    <span className="inline-block text-6xl font-bold">
-                                        <span className="text-4xl">$</span>15<span className="text-lg font-normal text-muted-foreground">/month</span>
-                                    </span>
-                                    <p className="mt-2 mb-6 text-sm text-muted-foreground">
-                                        or $120 a year, a third off
-                                    </p>
-                                    <Subscribe />
-                                </div>
+                                <PlanPrice hasYearly={hasYearly} />
                             </div>
                             <div className="relative">
                                 <ul
@@ -45,10 +61,10 @@ const Billing = () => {
                                             title: '100 Credits per Month',
                                             description: 'A design, style guide or redesign uses 1 credit, and a 4-page workflow uses 4.'
                                         },
-                                        {
+                                        ...(hasYearly ? [{
                                             title: 'Monthly or Yearly',
                                             description: 'Credits refill every month on both plans. No manual top-ups needed.'
-                                        }
+                                        }] : [])
                                     ].map((item, index) => (
                                         <li
                                             key={index}
@@ -64,7 +80,7 @@ const Billing = () => {
                             </div>
                         </div>
                         <p className="text-muted-foreground text-center text-sm px-12 pb-8">
-                            Billed monthly or yearly. Cancel anytime.
+                            {hasYearly ? 'Billed monthly or yearly. Cancel anytime.' : 'Billed monthly. Cancel anytime.'}
                         </p>
                     </div>
                 </div>

@@ -5,9 +5,11 @@ import WebFonts from '@/components/web-fonts'
 type Props = {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     typographyGuide: any
+    // What to do next, shown when there's no typography yet
+    emptyHint: string
 }
 
-const StyleGuideTypography = ({ typographyGuide }: Props) => {
+const StyleGuideTypography = ({ typographyGuide, emptyHint }: Props) => {
     return (
         <>
             {typographyGuide.length === 0 ? (
@@ -16,8 +18,8 @@ const StyleGuideTypography = ({ typographyGuide }: Props) => {
                     <h3 className='text-lg font-medium text-foreground mb-2'>
                         No typography generated
                     </h3>
-                    <p className='text-[0.9375rem]/relaxed text-muted-foreground mb-6'>
-                        Generate typography style guide for typography
+                    <p className='text-[0.9375rem]/relaxed text-muted-foreground max-w-md mx-auto mb-6'>
+                        {emptyHint}
                     </p>
                 </div>
             ) : (

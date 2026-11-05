@@ -76,10 +76,12 @@
 
 /* The app's own pages (sign-in, dashboard, canvas, style guide, billing) set secondary text at small
    sizes, so they get a lighter muted color than the landing page: about 10:1 on the background
-   instead of 7.6:1. Pages opt in with data-app-chrome. Set on the root, so menus, dialogs and toasts
-   portalled out of the page get it too. Generated designs' frames have no such element. */
+   instead of 7.6:1. Their focus rings are brass, Linea's accent, like the active tool and tab.
+   Pages opt in with data-app-chrome. Set on the root, so menus, dialogs and toasts portalled out of
+   the page get it too. Generated designs' frames have no such element. */
 html.dark:has([data-app-chrome]) {
   --muted-foreground: oklch(0.78 0 0);
+  --ring: var(--brass);
 }
 
 @layer base {

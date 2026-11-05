@@ -87,7 +87,8 @@ const ToolbarShapes = () => {
                     variant={'ghost'}
                     size='lg'
                     onClick={() => selectTool(tool.id)}
-                    className={cn('shrink-0 cursor-pointer rounded-full p-3', currentTool === tool.id ? 'text-primary/100 bg-white/[0.12] border border-white/[0.16]' : 'text-primary/75 hover:text-primary hover:bg-white/[0.06] border border-transparent')}
+                    className={cn('shrink-0 cursor-pointer rounded-full p-3', currentTool === tool.id ? 'border border-brass/40 bg-brass/15 text-brass hover:text-brass dark:hover:bg-brass/20' : 'text-primary/75 hover:text-primary hover:bg-white/[0.06] border border-transparent')}
+                    aria-pressed={currentTool === tool.id}
                     title={`${tool.label} - ${tool.description}`}
                 >
                     {tool.icon}

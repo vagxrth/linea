@@ -1,6 +1,6 @@
 'use client'
 
-import { MoodboardImage, useMoodboard } from '@/hooks/use-styles'
+import { MOODBOARD_LIMIT, MoodboardImage, useMoodboard } from '@/hooks/use-styles'
 import { IMAGE_ACCEPT } from '@/lib/image-upload'
 import { cn } from '@/lib/utils'
 import React, { useRef } from 'react'
@@ -111,7 +111,7 @@ const Moodboard = ({ guideImages }: Props) => {
                                 Add images to your moodboard
                             </h3>
                             <p className='text-[0.9375rem]/relaxed text-muted-foreground max-w-md mx-auto'>
-                                Drag and drop images here or click to upload
+                                Drag and drop up to {MOODBOARD_LIMIT} images here, or choose files
                             </p>
                         </div>
                         <Button onClick={handleUpload} variant='outline'>
@@ -119,6 +119,14 @@ const Moodboard = ({ guideImages }: Props) => {
                             Choose files
                         </Button>
                     </div>
+                )}
+                {images.length > 0 && (
+                    // How many images there are against the limit, so a full board explains why Add more is gone
+                    <p className='absolute top-6 left-6 z-20 text-sm text-muted-foreground' aria-live='polite'>
+                        {canAddMore
+                            ? `${images.length} of ${MOODBOARD_LIMIT} images`
+                            : `Full: ${MOODBOARD_LIMIT} of ${MOODBOARD_LIMIT} images`}
+                    </p>
                 )}
                 {images.length > 0 && canAddMore && (
                     <div className='absolute bottom-6 right-6 z-20'>
@@ -131,13 +139,6 @@ const Moodboard = ({ guideImages }: Props) => {
                 <input ref={fileInput} type="file" multiple className='hidden' onChange={handleFileInput} accept={IMAGE_ACCEPT}/>
             </div>
             <GenerateStyleGuide images={images} fileInputRef={fileInput} projectId={projectId ?? ''}/>
-            {images.length > 5 && (
-                <div className='text-center p-4 bg-muted/50 rounded-2xl'>
-                    <p className='text-sm text-muted-foreground'>
-                        Maximum 5 images allowed
-                    </p>
-                </div>
-            )}
         </div>
     )
 }

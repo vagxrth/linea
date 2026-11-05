@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback } from "react";
 import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
+import type { BillingPeriod } from "@/lib/plans";
 
 export const useSubscription = () => {
     const [trigger, { isFetching: isFetchingCheckout }] = useLazyGetCheckoutQuery()
@@ -13,13 +14,13 @@ export const useSubscription = () => {
     const isSubscribed = useQuery(api.subscription.hasEntitlement, {})
 
     const profile = useAppSelector((state) => state.profile)
-    const onSubscribe = async () => {
+    const onSubscribe = async (period: BillingPeriod = 'monthly') => {
         if (!profile?.id) {
             toast.error('Please sign in to subscribe')
             return
         }
         try {
-            const res = await trigger().unwrap()
+            const res = await trigger(period).unwrap()
             window.location.href = res.url
         } catch (error) {
             console.error(error)

@@ -16,6 +16,9 @@ import { createUploadQueue } from "@/lib/upload-queue"
 import { useOutOfCredits } from "./use-subscription"
 import DOMPurify from 'dompurify'
 
+// How many images a moodboard holds. The server (convex/moodboard.ts) enforces the same number.
+export const MOODBOARD_LIMIT = 5
+
 export interface MoodboardImage {
     id: string
     file?: File
@@ -115,8 +118,8 @@ export const useMoodboard = (guideImages: MoodboardImage[]) => {
         // Several files can arrive at once, so read the form's images rather than this render's
         // `images`, which would keep only the last file
         const currentImages = getValues('images')
-        if (currentImages.length >= 5) {
-            toast.error('You can only add up to 5 images', { id: 'moodboard-limit' })
+        if (currentImages.length >= MOODBOARD_LIMIT) {
+            toast.error(`You can only add up to ${MOODBOARD_LIMIT} images`, { id: 'moodboard-limit' })
             return
         }
 
@@ -233,7 +236,7 @@ export const useMoodboard = (guideImages: MoodboardImage[]) => {
         handleDrag,
         handleDrop,
         handleFileInput,
-        canAddMore: images.length < 5
+        canAddMore: images.length < MOODBOARD_LIMIT
     }
 }
 

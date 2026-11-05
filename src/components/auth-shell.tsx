@@ -17,7 +17,8 @@ const AuthShell = ({ title, description, children, footer }: Props) => (
         <header className="mx-auto flex h-16 w-full max-w-6xl items-center px-4 sm:px-6">
             <Logo />
         </header>
-        <main className="flex flex-1 items-center justify-center px-6 pt-6 pb-20">
+        {/* Centered in the space under the header, with as much room above the form as below it */}
+        <main className="flex flex-1 items-center justify-center px-6 py-10">
             <div className="w-full max-w-sm">
                 <h1 className="font-serif text-[2.75rem] leading-[1.05] tracking-[-0.015em] text-balance">{title}</h1>
                 <p className="mt-3 text-[0.9375rem]/relaxed text-pretty text-muted-foreground">{description}</p>

@@ -30,8 +30,12 @@ const ChatWindow = ({ generatedUIId, isOpen, onClose }: Props) => {
     if (!isOpen) return null
 
     return (
-        <div className={cn('fixed right-5 top-1/2 transform -translate-y-1/2 w-96 h-[600px] backdrop-blur-xl bg-neutral-800/85 border-white/[0.12] border rounded-lg z-50 transition-all duration-300 flex flex-col',
-            isOpen ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'
+        // On phones a sheet along the bottom, inset from the edges: the 384px side panel ran off a 390px
+        // screen. From sm up, the panel at the right. Either way it sits above the canvas's bars (z-50),
+        // which would otherwise cover its message box.
+        <div className={cn('fixed inset-x-3 bottom-3 z-[60] flex h-[min(600px,calc(100svh-6rem))] flex-col rounded-lg border border-white/[0.12] bg-neutral-800/85 backdrop-blur-xl transition-all duration-300',
+            'sm:inset-x-auto sm:bottom-auto sm:right-5 sm:top-1/2 sm:h-[600px] sm:w-96 sm:-translate-y-1/2',
+            isOpen ? 'opacity-100' : 'opacity-0'
         )}>
             <div className='flex items-center justify-between p-4 border-b border-white/[0.12]'>
                 <div className='flex items-center gap-2'>

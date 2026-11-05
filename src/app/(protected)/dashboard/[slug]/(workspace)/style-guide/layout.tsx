@@ -32,7 +32,7 @@ const layout = ({ children }: Props) => {
                 <div>
                     <div className='flex flex-col lg:flex-row gap-4 lg:gap-5 items-center justify-between'>
                         <div>
-                            <h1 className='text-3xl lg:text-left text-center font-bold text-foreground'>
+                            <h1 className='font-serif text-4xl tracking-tight lg:text-left text-center text-foreground'>
                                 Style Guide
                             </h1>
                             <p className='text-muted-foreground mt-2 text-center lg:text-left'>
@@ -43,10 +43,11 @@ const layout = ({ children }: Props) => {
                             {tabs.map((tab) => {
                                 const Icon = tab.icon;
                                 return (
-                                    <TabsTrigger key={tab.value} value={tab.value} className='flex items-center gap-2 rounded-xl data-[state=active]:bg-white/[0.15] data-[state=active]:backdrop-blur-xl data-[state=active]:border data-[state=active]:border-white/[0.2] transition-all duration-200 text-xs sm:text-sm'>
+                                    // The open tab is brass, Linea's accent. The trigger sets its own active colors
+                                    // under dark:, so these do too, to take their place.
+                                    <TabsTrigger key={tab.value} value={tab.value} className='flex items-center gap-2 rounded-full px-3 py-1.5 text-xs transition-colors sm:text-sm dark:data-[state=active]:border-brass/40 dark:data-[state=active]:bg-brass/15 dark:data-[state=active]:text-brass data-[state=active]:shadow-none'>
                                         <Icon className='w-4 h-4' />
-                                        <span className='hidden sm:inline'>{tab.label}</span>
-                                        <span className='sm:hidden'>{tab.value}</span>
+                                        {tab.label}
                                     </TabsTrigger>
                                 )
                             })}
