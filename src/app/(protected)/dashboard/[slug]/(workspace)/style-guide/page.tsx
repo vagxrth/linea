@@ -43,6 +43,12 @@ const page = async ({ searchParams }: Props) => {
     // shows their url instead
     const guideImages = images as unknown as MoodboardImage[]
 
+    // Colors and typography are generated together, from the moodboard, so both empty tabs name the
+    // same next step
+    const emptyHint = guideImages.length
+        ? 'Click Generate Style Guide on the Moodboard tab to create colors and typography from your images.'
+        : 'Add images to your moodboard, then generate a style guide to get colors and typography.'
+
     return (
         <div>
             <TabsContent value='colors' className='space-y-6'>
@@ -58,9 +64,7 @@ const page = async ({ searchParams }: Props) => {
                                 No colors generated
                             </h3>
                             <p className='text-[0.9375rem]/relaxed text-muted-foreground max-w-md mx-auto mb-6'>
-                                {guideImages.length
-                                    ? 'Click Generate Style Guide on the Moodboard tab to create colors and typography from your images.'
-                                    : 'Upload images to moodboard to generate colors and typography style guide.'}
+                                {emptyHint}
                             </p>
                         </div>
                     </div>
@@ -70,7 +74,7 @@ const page = async ({ searchParams }: Props) => {
             </TabsContent>
 
             <TabsContent value='typography'>
-                <StyleGuideTypography typographyGuide={typographyGuide} />
+                <StyleGuideTypography typographyGuide={typographyGuide} emptyHint={emptyHint} />
             </TabsContent>
 
             <TabsContent value='moodboard'>

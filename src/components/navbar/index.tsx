@@ -13,6 +13,7 @@ import CreateProject from '../buttons/create-project';
 import Autosave from '../autosave';
 import Image from 'next/image';
 import { Button } from '../ui/button';
+import { cn } from '@/lib/utils';
 import { Skeleton } from '../ui/skeleton';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
@@ -72,10 +73,11 @@ const Navbar = () => {
     return (
         // pointer-events-none on the bar, auto on its controls: the bar spans the top edge, and its empty
         // space was taking clicks meant for the canvas beneath, like a design's Chat button at fit
-        <div className='flex items-center justify-between p-6 fixed top-0 left-0 right-0 z-50 pointer-events-none'>
+        // On phones the bar is tighter, to leave room for the Canvas / Style Guide switch.
+        <div className='flex items-center justify-between gap-3 p-4 sm:p-6 fixed top-0 left-0 right-0 z-50 pointer-events-none'>
             <div className='flex items-center gap-4 pointer-events-auto'>
-                <Link href={`/dashboard/${slug}`} className='w-16 h-16 rounded-full border-none bg-transparent flex items-center justify-center'>
-                    <Image src='/images/logo.webp' alt="Linea" width={64} height={64} className='rounded-lg' />
+                <Link href={`/dashboard/${slug}`} className='size-12 sm:size-16 shrink-0 rounded-full border-none bg-transparent flex items-center justify-center'>
+                    <Image src='/images/logo.webp' alt="Linea" width={64} height={64} className='size-full rounded-lg' />
                 </Link>
                 {(hasCanvas || hasStyleGuide) && (
                     <div className='lg:inline-block hidden rounded-full text-primary/80 border border-white/[0.12] backdrop-blur-xl bg-neutral-800/85 px-4 py-2 text-sm saturate-150'>
@@ -85,31 +87,34 @@ const Navbar = () => {
             </div>
 
             {projectId && (
-                <div className='lg:flex hidden items-center justify-center gap-2 absolute left-1/2 -translate-x-1/2'>
-                    <div className='flex items-center gap-2 backdrop-blur-xl bg-neutral-800/85 border border-white/[0.12] rounded-full p-2 saturate-150 pointer-events-auto'>
-                        {tabs.map((t) => (
-                            <Link
-                                key={t.href}
-                                href={t.href}
-                                className={[
-                                    'group inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm transition',
-                                    `${pathname}?project=${projectId}` === t.href
-                                        ? 'bg-white/[0.12] text-white border border-white/[0.16] backdrop-blur-sm'
-                                        : 'text-zinc-300 hover:text-white hover:bg-white/[0.06] border border-transparent',
-                                ].join(' ')}
-                            >
-                                <span
-                                    className={`${pathname}?project=${projectId}` === t.href ? 'opacity-100' : 'opacity-70 group-hover:opacity-90'}
+                // Centered on wide screens. Below lg it sits between the logo and the account controls,
+                // and on phones it shows only the icons. The open page is brass, Linea's accent.
+                <nav aria-label='Project' className='pointer-events-auto flex items-center lg:absolute lg:left-1/2 lg:-translate-x-1/2'>
+                    <div className='flex items-center gap-1 rounded-full border border-white/[0.12] bg-neutral-800/85 p-1 saturate-150 backdrop-blur-xl lg:gap-2 lg:p-2'>
+                        {tabs.map((t) => {
+                            const active = `${pathname}?project=${projectId}` === t.href
+                            return (
+                                <Link
+                                    key={t.href}
+                                    href={t.href}
+                                    aria-label={t.label}
+                                    aria-current={active ? 'page' : undefined}
+                                    className={cn(
+                                        'group inline-flex items-center gap-2 rounded-full border px-3 py-2.5 text-sm transition sm:py-2 lg:px-4',
+                                        active
+                                            ? 'border-brass/40 bg-brass/15 text-brass'
+                                            : 'border-transparent text-zinc-300 hover:bg-white/[0.06] hover:text-white'
+                                    )}
                                 >
-                                    {t.icon}
-                                </span>
-                                <span>{t.label}</span>
-                            </Link>
-                        ))}
+                                    <span className={active ? undefined : 'opacity-70 group-hover:opacity-90'}>{t.icon}</span>
+                                    <span className='hidden sm:inline'>{t.label}</span>
+                                </Link>
+                            )
+                        })}
                     </div>
-                </div>
+                </nav>
             )}
-            <div className='flex items-center gap-4 justify-end pointer-events-auto'>
+            <div className='flex items-center gap-3 sm:gap-4 justify-end pointer-events-auto'>
                 {creditsBalance === undefined ? (
                     <Skeleton className='h-4 w-16 rounded-full' />
                 ) : (
@@ -134,7 +139,7 @@ const Navbar = () => {
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <button className='cursor-pointer focus:outline-none rounded-full'>
-                            <Avatar className='size-12 ml-2'>
+                            <Avatar className='size-10 sm:size-12 sm:ml-2'>
                                 <AvatarImage src={me?.image || ''}/>
                                 <AvatarFallback>
                                     <User className='size-5 text-black' />

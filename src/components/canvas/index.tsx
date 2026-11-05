@@ -14,6 +14,7 @@ import { FreeDrawStrokePreview } from '../shapes/stroke/preview'
 import { SelectionBox, SelectionOverlay } from '../overlay'
 import InspirationSidebar from '../inspiration-sidebar'
 import ChatWindow from '../shapes/generated-ui/chat'
+import EmptyCanvasCoach from './empty-canvas-coach'
 
 const InfiniteCanvas = () => {
 
@@ -82,6 +83,8 @@ const InfiniteCanvas = () => {
         }}
         draggable={false}
         >
+            {shapes.length === 0 && !draftShape && freeDrawPoints.length === 0 && <EmptyCanvasCoach />}
+
             <div className='absolute origin-top-left pointer-events-none z-10' style={{
                 transform: `translate3d(${viewport.translate.x}px, ${viewport.translate.y}px, 0) scale(${viewport.scale})`,
                 transformOrigin: '0 0',

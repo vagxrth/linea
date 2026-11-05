@@ -3,7 +3,7 @@ import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 import { headers } from "next/headers";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
-import { Toaster } from "@/components/ui/sonner";
+import AppToaster from "@/components/app-toaster";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import { ConvexClientProvider } from "./ConvexClientProvider";
 import { Analytics } from '@vercel/analytics/next';
@@ -76,7 +76,7 @@ export default async function RootLayout({
             >
               {children}
               <Analytics />
-              <Toaster />
+              <AppToaster />
             </ThemeProvider>
           </ConvexClientProvider>
         </body>
