@@ -118,7 +118,7 @@ const Navbar = () => {
                 {creditsBalance === undefined ? (
                     <Skeleton className='h-4 w-16 rounded-full' />
                 ) : (
-                    <span className='text-sm tabular-nums text-muted-foreground'>
+                    <span className='text-sm tabular-nums whitespace-nowrap text-muted-foreground'>
                         {creditsBalance} {creditsBalance === 1 ? 'credit' : 'credits'}
                     </span>
                 )}
@@ -131,10 +131,11 @@ const Navbar = () => {
                         disabled={isFetching}
                     >
                         <Coins />
-                        {isSubscribed ? 'Manage plan' : 'Subscribe'}
+                        {/* Only the icon on phones, so credits, New project and the account menu fit */}
+                        <span className='max-sm:sr-only'>{isSubscribed ? 'Manage plan' : 'Subscribe'}</span>
                     </Button>
                 )}
-                {!hasCanvas && !hasStyleGuide && <CreateProject />}
+                {!hasCanvas && !hasStyleGuide && <CreateProject compact />}
                 {hasCanvas && <Autosave />}
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>

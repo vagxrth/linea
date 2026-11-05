@@ -2,10 +2,17 @@
 
 import { Button } from '@/components/ui/button'
 import { useProjectCreation } from '@/hooks/use-project'
+import { cn } from '@/lib/utils'
 import { Loader2, PlusIcon } from 'lucide-react'
 import React from 'react'
 
-const CreateProject = () => {
+type Props = {
+    // In the navigation bar: below sm only the icon shows (the label stays for screen readers), so
+    // the bar fits a phone
+    compact?: boolean
+}
+
+const CreateProject = ({ compact = false }: Props) => {
 
     const { createProject, isCreating, canCreate } = useProjectCreation();
 
@@ -21,7 +28,7 @@ const CreateProject = () => {
         ) : (
             <PlusIcon className='h-4 w-4' />
         )}
-        { isCreating ? 'Creating...' : 'New project'}
+        <span className={cn(compact && 'max-sm:sr-only')}>{ isCreating ? 'Creating...' : 'New project'}</span>
     </Button>
   )
 }
