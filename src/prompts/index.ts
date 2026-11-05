@@ -151,7 +151,7 @@ INSPIRATION MAPPING SECOND: Map inspiration images to wireframe slots:
 
 Primary/hero image → largest/topmost image slot
 Remaining images → fill remaining slots left-to-right, top-to-bottom
-Extra slots → use placeholder skeletons
+Extra slots → a plain c-muted-bg block in the slot's shape, still (no pulsing)
 Extra images → ignore
 
 
@@ -172,7 +172,7 @@ Label-to-Component Mapping:
 "image" → <img> or placeholder in that slot
 "button/cta" → <button> element
 "card" → article/section with image + text
-Numbers in boxes → metric displays
+Numbers written in boxes → metric displays showing those numbers
 "form/input" → form controls
 
 Layout Authority:
@@ -180,6 +180,17 @@ Layout Authority:
 Wireframe defines ALL structure - never add/remove sections
 Respect relative positioning and sizing
 Maintain visual hierarchy shown in wireframe
+
+Wireframe Outline (when the request includes one):
+
+It is read from the canvas shapes, so it is exact where the image is rough: every box, its label, its position (percent of the frame) and what sits inside it
+Build one component per box, at its position and in its order; nothing more, nothing less
+"row of N side by side" → exactly N items in one row on wide screens, stacking only on narrow ones
+"N columns side by side" → N columns next to each other on wide screens, each holding its items top to bottom (a hero's text column beside its image), stacking only on narrow ones
+A box's label says what the box is ("card", "pricing", "testimonial", "footer"): use it to choose the component, never as visible text
+"image slot (crossed box)" → an image
+Text outside any box → a heading or copy at that spot; scribbles and short lines stand for lines of text
+Positions place things; they don't size text: a "headline" is the section's main heading at full heading size, however small its label is
 
 HTML Generation Requirements
 Structure:
@@ -241,13 +252,20 @@ Images:
 
 Use inspiration image URLs where wireframe shows image slots
 Generate descriptive alt text based on visible image content
-For empty slots: use skeleton <div class="w-full aspect-video c-muted-bg animate-pulse"></div>
+For empty slots: <div class="w-full aspect-video c-muted-bg rounded-lg"></div>, still, so it doesn't look like a page still loading
 
 Text Content:
 
-Generate realistic but brief copy inspired by image themes
-Headings: concise, relevant to inspiration images
-Body text: 1-2 sentences maximum
+Write for the subject the inspiration images and the wireframe's labels point to, in plain, specific words: say what the thing is, sells or does
+Lead with the specific: what it is, who it's for, and one concrete detail (a product, a place, a schedule)
+Headings: short and concrete (a product, a place, an action), not slogans
+Body text: 1-2 sentences, specific to the subject
+Buttons and links: the real action or destination ("Shop plants", "Book a visit"), not "Learn more" everywhere
+No marketing filler: never "discover", "explore our", "unique", "curated", "transform" in any form, "sanctuary", "oasis", "elevate", "unlock", "seamless", "empower", "cutting-edge", "next-level", "world-class", "revolutionize", "your journey", and no exclamation marks
+Brand name: when the design needs one, make up a short name that fits the subject; never "BrandCo", "Acme", "Logo", "Company Name" or "Your Brand"
+No placeholder people or data: never "Jane Doe", "John Doe", "John Smith", "Lorem ipsum" or "user@example.com"
+Testimonials, ratings, customer logos, statistics and charts only when the wireframe has a box for them; then use believable specifics (varied full names with a role, exact numbers), not stock lines like "10,000+ happy customers"
+A chart box: a labeled bar chart built from divs (bar heights in %), with axis labels and values, in the .c-* colors; never empty grey bars
 Keep tone neutral and professional
 
 Components:
@@ -276,6 +294,9 @@ Images: id="hero-image", id="product-image-1"
 
 Critical Don'ts
 ❌ Never render wireframe labels as actual UI text
+❌ Never use placeholder names, brands or data (Jane Doe, Acme, BrandCo, Lorem ipsum)
+❌ Never add testimonials, statistics or charts the wireframe doesn't have
+❌ Never use animate-pulse skeletons
 ❌ Never add sections not shown in wireframe
 ❌ Never use Tailwind color classes
 ❌ Never use viewport sizing
@@ -291,6 +312,8 @@ Before outputting HTML, verify:
 ✅ Container constrains all layout
 ✅ Semantic HTML is used throughout
 ✅ Content matches inspiration image themes
+✅ Copy is specific to the subject: no filler words, placeholder names or invented statistics
+✅ With an outline: every box is built once, in order, and each row keeps its count
 SPACING & CONTRAST VERIFICATION:
 ✅ Every section has EXACTLY py-16 px-6 or larger (verify: no py-8, py-12)
 ✅ Cards have EXACTLY p-6 or p-8 internal padding (verify: not p-4)

@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
         return streamDesign(request, COST, [
             { type: 'text', text: userPrompt },
             ...imageParts(imageUrls),
-        ])
+        ], imageUrls)
     } catch (error) {
         return generationFailed('Failed to process workflow generation request', error)
     }

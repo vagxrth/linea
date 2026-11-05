@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
             { type: 'text', text: userPrompt },
             ...(hasWireframe ? [{ type: 'image' as const, image: wireframeSnapshot as string }] : []),
             ...imageParts(imageUrls),
-        ])
+        ], imageUrls)
 
     } catch (error) {
         return generationFailed('Failed to process redesign request', error)

@@ -21,3 +21,7 @@ const tooLong = (value: unknown): boolean => {
 // and _creationTime that Convex adds.
 export const tooLargeForDocument = (fields: Record<string, Value>) =>
     tooLong(fields) || getDocumentSize(fields) > MAX_DOCUMENT_BYTES
+
+// How many images a project's moodboard and its inspiration board each hold. The mutations enforce
+// it, and the app imports it to say so, so the boards and the server can't drift apart.
+export const BOARD_IMAGE_LIMIT = 5

@@ -1,9 +1,11 @@
 import { ConvexError, v } from "convex/values";
-import { mutation, query, QueryCtx } from "./_generated/server";
+import { internalMutation, mutation, query, QueryCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { deleteFileIfOwned } from "./storage";
 import { tooLargeForDocument } from "./limits";
+import { sketchThumbnail } from "./thumbnail";
 
 // Why a drawing couldn't be saved, so the canvas can say what happened and whether trying again can
 // help. Sent as ConvexError data, which reaches the browser on every deployment; a plain Error's
@@ -170,8 +172,35 @@ export const updateProjectSketches = mutation({
             await ctx.db.insert('project_sketches', { projectId, sketchesData, viewportData })
         }
 
-        await ctx.db.patch(projectId, { lastModified: Date.now() });
+        // The dashboard's thumbnail is redrawn from the saved shapes, or removed when nothing's drawn
+        await ctx.db.patch(projectId, { lastModified: Date.now(), thumbnail: sketchThumbnail(sketchesData) });
         return { success: true }
+    }
+})
+
+// One-off, for projects saved before thumbnails were drawn from the canvas (November 2026): draws each
+// project's thumbnail from its saved drawing. It also replaces the random gradients older projects got.
+// Goes through the drawings a few at a time, each batch scheduling the next.
+//   npx convex run projects:backfillThumbnails
+export const backfillThumbnails = internalMutation({
+    args: { cursor: v.optional(v.union(v.string(), v.null())) },
+    handler: async (ctx, { cursor }) => {
+        const batch = await ctx.db.query('project_sketches').paginate({ cursor: cursor ?? null, numItems: 10 })
+        let updated = 0
+        for (const sketches of batch.page) {
+            const project = await ctx.db.get(sketches.projectId)
+            if (!project) continue
+            const thumbnail = sketchThumbnail(sketches.sketchesData)
+            if (thumbnail !== project.thumbnail) {
+                // lastModified stays: drawing the thumbnail isn't an edit
+                await ctx.db.patch(project._id, { thumbnail })
+                updated++
+            }
+        }
+        if (!batch.isDone) {
+            await ctx.scheduler.runAfter(0, internal.projects.backfillThumbnails, { cursor: batch.continueCursor })
+        }
+        return { updated, done: batch.isDone }
     }
 })
 

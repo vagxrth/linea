@@ -5,6 +5,7 @@ import { InspirationImagesQuery, StyleGuideQuery } from "@/convex/query.config"
 import { prompts } from "@/prompts"
 import type { StyleGuide } from "@/redux/api/style-guide"
 import { chargedGeneration } from "./credits"
+import { repairImageSrcs } from "./image-src-repair"
 
 // The model every generate route asks
 export const model = google('gemini-2.5-flash')
@@ -55,8 +56,9 @@ export const styleGuideSections = (guide: StyleGuide) =>
     (guide.colorSections.length > 0 ? `\n\nStyle Guide Colors:\n${colorsText(guide)}` : '') +
     (guide.typographySections.length > 0 ? `\n\nTypography:\n${typographyText(guide)}` : '')
 
-// Streams an HTML design from the model, charging `cost` credits once output starts
-export const streamDesign = (request: Request, cost: number, content: UserContent) => {
+// Streams an HTML design from the model, charging `cost` credits once output starts. `images` are the
+// project's image addresses the prompt gave it, which get repaired where the model mistyped them.
+export const streamDesign = (request: Request, cost: number, content: UserContent, images: string[] = []) => {
     const generation = chargedGeneration(request, cost)
     const result = streamText({
         model,
@@ -66,7 +68,7 @@ export const streamDesign = (request: Request, cost: number, content: UserConten
         abortSignal: generation.abortSignal,
         onError: generation.onError,
     })
-    return generation.respond(result.textStream)
+    return generation.respond(repairImageSrcs(result.textStream, images))
 }
 
 // Logs a request that threw and returns the 500 response the client shows

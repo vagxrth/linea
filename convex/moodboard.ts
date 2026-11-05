@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { claimFile, deleteFileIfOwned, ownsFile } from "./storage";
+import { BOARD_IMAGE_LIMIT } from "./limits";
 
 export const getMoodboardImages = query({
     args: { projectId: v.id('projects') },
@@ -99,8 +100,8 @@ export const addMoodboardImage = mutation({
         if (project.userId !== userId) throw new Error('Access denied')
 
         const currentImages = project.moodboardImages || []
-        if (currentImages.length >= 5) {
-            throw new Error('You can only add up to 5 images')
+        if (currentImages.length >= BOARD_IMAGE_LIMIT) {
+            throw new Error(`You can only add up to ${BOARD_IMAGE_LIMIT} images`)
         }
 
         await claimFile(ctx, storageId, userId)
