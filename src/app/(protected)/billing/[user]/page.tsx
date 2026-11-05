@@ -2,7 +2,6 @@ import Link from "next/link"
 import { ArrowLeft, Check } from "lucide-react"
 import PlanPrice from "@/components/billing/plan-price"
 import Logo from "@/components/landing/logo"
-import { Button } from "@/components/ui/button"
 import { planProductIds } from "@/lib/plans"
 
 type Props = {
@@ -18,15 +17,19 @@ const Billing = async ({ params }: Props) => {
 
     return (
         <div className="relative">
-            {/* A light header, so the page has a way back to the app */}
-            <header className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between px-6">
-                <Logo href={dashboard} />
-                <Button asChild variant="ghost" size="sm">
-                    <Link href={dashboard}>
-                        <ArrowLeft />
+            {/* A light bar across the top, so the way back to the app reads as app chrome, apart from
+                the dark card. Its colors are the page's, swapped. */}
+            <header className="bg-foreground text-background">
+                <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between px-6">
+                    <Logo href={dashboard} className="focus-visible:ring-background/50" />
+                    <Link
+                        href={dashboard}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium text-background/80 outline-none transition-colors hover:bg-background/10 hover:text-background focus-visible:ring-[3px] focus-visible:ring-background/50 [&_svg]:size-4"
+                    >
+                        <ArrowLeft aria-hidden />
                         Back to dashboard
                     </Link>
-                </Button>
+                </div>
             </header>
             <div className="mx-auto max-w-5xl px-6 pt-10 pb-16 md:pt-20 md:pb-32">
                 <div className="mx-auto max-w-2xl text-center">
