@@ -9,10 +9,11 @@ const ProtectedMatcher = createRouteMatcher(isProtectedRoute);
 
 // Each request gets a fresh random nonce. Next.js reads it from the policy on the request and puts it
 // on the page's scripts, and the browser gets the same policy, so it runs only those and linea's own.
+// The policy also depends on the page: only the pitch page may embed its PDF.
 // The request headers are copied, so cookies refreshed by Convex Auth still reach the page.
 const withScriptPolicy = (req: NextRequest) => {
     const nonce = btoa(crypto.randomUUID());
-    const policy = scriptPolicy(nonce);
+    const policy = scriptPolicy(nonce, { pathname: req.nextUrl.pathname });
     const headers = new Headers(req.headers);
     headers.set("x-nonce", nonce);
     headers.set("Content-Security-Policy", policy);

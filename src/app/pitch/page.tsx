@@ -4,6 +4,7 @@ import Link from "next/link"
 import { ArrowLeft, Download, Maximize2 } from "lucide-react"
 import Logo from "@/components/landing/logo"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = {
   title: "Linea pitch deck",
@@ -12,9 +13,27 @@ export const metadata: Metadata = {
 
 const DECK = "/pitch.pdf"
 
+// The deck's cover (public/pitch-cover.webp, its first slide), opening the whole PDF
+const Cover = ({ className }: { className?: string }) => (
+  <a href={DECK} target="_blank" rel="noopener" className={cn("group relative block outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50", className)}>
+    <Image
+      src="/pitch-cover.webp"
+      alt="The deck's cover: Linea, from napkin doodles to digital masterpieces"
+      width={1600}
+      height={900}
+      priority
+      className="aspect-video w-full object-cover"
+    />
+    <span className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 bg-gradient-to-t from-black/80 to-transparent px-5 pt-10 pb-4 text-sm font-medium text-white">
+      Open all 11 slides
+      <Maximize2 aria-hidden className="size-4 opacity-80 transition-opacity group-hover:opacity-100" />
+    </span>
+  </a>
+)
+
 // The pitch deck in Linea's own chrome: a light bar with the way back to the site, the title in
-// Instrument Serif, and the PDF in a frame. Phones mostly can't show a PDF inside a page, so there the
-// frame shows the deck's cover (public/pitch-cover.webp, its first slide), which opens the PDF.
+// Instrument Serif, and the PDF in a frame. On a phone the frame shows the deck's cover instead,
+// which opens the PDF: most phones can't show a PDF inside a page, and the slides would be too small.
 export default function PitchPage() {
   return (
     <div data-app-chrome className="flex min-h-svh flex-col">
@@ -59,21 +78,12 @@ export default function PitchPage() {
         {/* The slides are 16:9, and so is the frame: the viewer's toolbar is hidden, so a slide fills it
             and scrolling moves to the next one. The cover in its place is the same shape. */}
         <div className="mt-8 overflow-hidden rounded-2xl border bg-card shadow-2xl shadow-black/40">
-          <object data={`${DECK}#toolbar=0&view=FitH`} type="application/pdf" aria-label="Linea pitch deck" className="block aspect-video w-full">
-            <a href={DECK} target="_blank" rel="noopener" className="group relative block outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
-              <Image
-                src="/pitch-cover.webp"
-                alt="The deck's cover: Linea, from napkin doodles to digital masterpieces"
-                width={1600}
-                height={900}
-                priority
-                className="aspect-video w-full object-cover"
-              />
-              <span className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 bg-gradient-to-t from-black/80 to-transparent px-5 pt-10 pb-4 text-sm font-medium text-white">
-                Open all 11 slides
-                <Maximize2 aria-hidden className="size-4 opacity-80 transition-opacity group-hover:opacity-100" />
-              </span>
-            </a>
+          <Cover className="md:hidden" />
+          {/* Hidden on phones, where the browser then never downloads the PDF. A browser that can't
+              show it shows the cover. The page's policy lets only this page embed linea's own files
+              (src/lib/script-policy.ts). */}
+          <object data={`${DECK}#toolbar=0&view=FitH`} type="application/pdf" aria-label="Linea pitch deck" className="hidden aspect-video w-full md:block">
+            <Cover />
           </object>
         </div>
       </main>
