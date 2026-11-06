@@ -219,8 +219,9 @@ const InspirationSidebar = ({ isOpen, onClose }: InspirationSidebarProps) => {
                 </div>
             </div>
             <div className={cn('border-2 border-dashed rounded-lg p-6 text-center transition-all duration-200 cursor-pointer',
+                // Dragging over it lights it the way it lights the moodboard
                 dragActive
-                    ? 'border-blue-400 bg-blue-500/10'
+                    ? 'border-primary bg-primary/5'
                     : images.length < BOARD_IMAGE_LIMIT
                         ? 'border-white/20 hover:border-white/40 hover:bg-white/5'
                         : 'border-white/10 bg-white/5 cursor-not-allowed opacity-50'
@@ -238,7 +239,7 @@ const InspirationSidebar = ({ isOpen, onClose }: InspirationSidebarProps) => {
                         {images.length < BOARD_IMAGE_LIMIT ? (
                             <>
                                 Drop images here or {' '}
-                                <span className='text-blue-400'>browse</span>
+                                <span className='font-medium text-brass'>browse</span>
                                 <br />
                                 <span className='text-xs text-white/60'>
                                     {images.length} of {BOARD_IMAGE_LIMIT} images
