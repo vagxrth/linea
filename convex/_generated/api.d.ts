@@ -18,6 +18,7 @@ import type * as otp from "../otp.js";
 import type * as projects from "../projects.js";
 import type * as storage from "../storage.js";
 import type * as subscription from "../subscription.js";
+import type * as thumbnail from "../thumbnail.js";
 import type * as user from "../user.js";
 
 import type {
@@ -37,6 +38,7 @@ declare const fullApi: ApiFromModules<{
   projects: typeof projects;
   storage: typeof storage;
   subscription: typeof subscription;
+  thumbnail: typeof thumbnail;
   user: typeof user;
 }>;
 

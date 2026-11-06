@@ -9,6 +9,9 @@ export async function POST(request: NextRequest) {
         const formData = await request.formData()
         const imageFile = formData.get('image') as File
         const projectId = formData.get('projectId') as string
+        // The wireframe's boxes and labels, read from the canvas (src/lib/frame-outline.ts). It comes
+        // from the request, so it's capped.
+        const outline = String(formData.get('outline') ?? '').slice(0, 12_000)
 
         if (!imageFile) {
             return NextResponse.json(
@@ -51,13 +54,16 @@ export async function POST(request: NextRequest) {
         inspiration image URLs: ${imageUrls.length > 0 ? imageUrls.map((url, index) => `${index + 1}. ${url}`).join(', ') : 'none'}
         colors: ${colorsText(guide)}
         typography: ${typographyText(guide)}
+        copy: plain and specific, like the business's own site: name what is offered and one concrete detail. Don't use these words: discover, explore, curated, unique, transform, sanctuary, oasis, serene, elevate, unlock, seamless, perfect. No made-up names, quotes or statistics.
+        ${outline ? `wireframe outline (exact, from the canvas shapes; follow it as the system instructions describe):
+${outline}` : ''}
         `;
 
         return streamDesign(request, COST, [
             { type: 'text', text: userPrompt },
             { type: 'image', image: base64Image },
             ...imageParts(imageUrls),
-        ])
+        ], imageUrls)
 
     } catch (error) {
         return generationFailed('Failed to generate design', error)

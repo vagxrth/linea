@@ -10,6 +10,7 @@ import { Id } from '../../../convex/_generated/dataModel'
 import Image from 'next/image'
 import { toast } from 'sonner'
 import { IMAGE_ACCEPT, imageProblem } from '@/lib/image-upload'
+import { BOARD_IMAGE_LIMIT } from '../../../convex/limits'
 
 type InspirationSidebarProps = {
     isOpen: boolean
@@ -79,12 +80,12 @@ const InspirationSidebar = ({ isOpen, onClose }: InspirationSidebarProps) => {
             if (problem) toast.error(`${file.name} ${problem}`)
             return !problem
         })
-        if (usable.length > 6 - images.length) {
-            toast.error('You can only add up to 6 images', { id: 'inspiration-limit' })
+        if (usable.length > BOARD_IMAGE_LIMIT - images.length) {
+            toast.error(`You can only add up to ${BOARD_IMAGE_LIMIT} images`, { id: 'inspiration-limit' })
         }
 
         const newImages: Props[] = usable
-            .slice(0, 6 - images.length)
+            .slice(0, BOARD_IMAGE_LIMIT - images.length)
             .map((file) => ({
                 id: `temp-${Date.now()}-${Math.random()}`,
                 file,
@@ -218,9 +219,10 @@ const InspirationSidebar = ({ isOpen, onClose }: InspirationSidebarProps) => {
                 </div>
             </div>
             <div className={cn('border-2 border-dashed rounded-lg p-6 text-center transition-all duration-200 cursor-pointer',
+                // Dragging over it lights it the way it lights the moodboard
                 dragActive
-                    ? 'border-blue-400 bg-blue-500/10'
-                    : images.length < 6
+                    ? 'border-primary bg-primary/5'
+                    : images.length < BOARD_IMAGE_LIMIT
                         ? 'border-white/20 hover:border-white/40 hover:bg-white/5'
                         : 'border-white/10 bg-white/5 cursor-not-allowed opacity-50'
             )}
@@ -228,23 +230,23 @@ const InspirationSidebar = ({ isOpen, onClose }: InspirationSidebarProps) => {
                 onDragLeave={handleDrag}
                 onDragOver={handleDrag}
                 onDrop={handleDrop}
-                onClick={() => images.length < 6 && fileInputRef.current?.click()}
+                onClick={() => images.length < BOARD_IMAGE_LIMIT && fileInputRef.current?.click()}
             >
                 <input ref={fileInputRef} type='file' multiple className='hidden' onChange={(e) => handleFileSelect(e.target.files)} accept={IMAGE_ACCEPT} />
                 <div className='flex flex-col items-center gap-2'>
                     <Upload className='w-8 h-8 text-white/60' />
                     <p className='text-white/75 text-sm'>
-                        {images.length < 6 ? (
+                        {images.length < BOARD_IMAGE_LIMIT ? (
                             <>
                                 Drop images here or {' '}
-                                <span className='text-blue-400'>browse</span>
+                                <span className='font-medium text-brass'>browse</span>
                                 <br />
                                 <span className='text-xs text-white/60'>
-                                    {images.length}/6 images uploaded
+                                    {images.length} of {BOARD_IMAGE_LIMIT} images
                                 </span>
                             </>
                         ) : (
-                            'Maximum 6 images allowed'
+                            `Full: ${BOARD_IMAGE_LIMIT} of ${BOARD_IMAGE_LIMIT} images`
                         )}
                     </p>
                 </div>
@@ -301,7 +303,7 @@ const InspirationSidebar = ({ isOpen, onClose }: InspirationSidebarProps) => {
                                     )}
                                 </div>
                             ))}
-                            {images.length < 6 && (
+                            {images.length < BOARD_IMAGE_LIMIT && (
                                 <Button
                                     onClick={() => fileInputRef.current?.click()}
                                     className='aspect-square rounded-lg border-2 border-dashed border-white/20 bg-white/5 hover:border-white/40 hover:bg-white/10 transition-all duration-200 flex items-center justify-center group'

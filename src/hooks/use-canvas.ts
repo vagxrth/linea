@@ -10,6 +10,7 @@ import { toast } from "sonner"
 import { pasteOffset, shapesFromClipboard, shapesToClipboard } from '@/lib/clipboard'
 import { resizeBox } from '@/lib/resize-box'
 import { contentBounds, fitToContent, getShapeBounds } from '@/lib/shape-bounds'
+import { frameOutline } from '@/lib/frame-outline'
 import { resizeText } from '@/lib/text-box'
 import { downloadBlob, exportGeneratedUI } from '@/lib/download'
 import { addErrorMessage, addUserMessage, clearChat, finishedStreamingResponse, initializeChat, startStreamingResponse, updateStreamingContent } from '@/redux/slice/chat';
@@ -1278,11 +1279,15 @@ export const useFrame = (shape: FrameShape) => {
     const handleGenerateDesign = async () => {
         try {
             setIsGenerating(true)
-            const snapshot = await generateFrameSnapshot(shape, getAllShapes(store))
+            const allShapes = getAllShapes(store)
+            const snapshot = await generateFrameSnapshot(shape, allShapes)
 
             const formData = new FormData()
             formData.append('image', snapshot, `frame-${shape.frameNumber}.png`)
             formData.append('frameNumber', shape.frameNumber.toString())
+            // The wireframe's boxes and labels as text, read from the shapes, so the model doesn't have
+            // to read them off the picture
+            formData.append('outline', frameOutline(shape, getShapesInsideFrame(allShapes, shape)))
 
             const urlParams = new URLSearchParams(window.location.search)
             const projectId = urlParams.get('project')
