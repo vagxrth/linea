@@ -471,9 +471,13 @@ const shapesSlice = createSlice({
             shapesAdapter.updateMany(state.shapes, updates);
         },
 
-        removeShape(state, action: PayloadAction<string>) {
-            pushHistory(state);
-            const id = action.payload;
+        // Takes the shape's id, or { id, skipHistory } to drop a shape without an undo step (a design
+        // that came back incomplete, removed straight after it was added)
+        removeShape(state, action: PayloadAction<string | { id: string; skipHistory?: boolean }>) {
+            const { id, skipHistory } = typeof action.payload === "string" ? { id: action.payload, skipHistory: false } : action.payload;
+            if (!skipHistory) {
+                pushHistory(state);
+            }
             // frameCounter stays as it is when a frame is removed, so a new frame never repeats a number
             shapesAdapter.removeOne(state.shapes, id);
             delete state.selected[id];

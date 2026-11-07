@@ -11,6 +11,8 @@ import { pasteOffset, shapesFromClipboard, shapesToClipboard } from '@/lib/clipb
 import { resizeBox } from '@/lib/resize-box'
 import { contentBounds, fitToContent, getShapeBounds } from '@/lib/shape-bounds'
 import { frameOutline } from '@/lib/frame-outline'
+import { INCOMPLETE_DESIGN_MESSAGE, INCOMPLETE_REFINE_MESSAGE, readDesignStream } from '@/lib/design-stream'
+import type { FrameOutline } from '@/lib/wireframe-outline'
 import { resizeText } from '@/lib/text-box'
 import { downloadBlob, exportGeneratedUI } from '@/lib/download'
 import { addErrorMessage, addUserMessage, clearChat, finishedStreamingResponse, initializeChat, startStreamingResponse, updateStreamingContent } from '@/redux/slice/chat';
@@ -1285,9 +1287,9 @@ export const useFrame = (shape: FrameShape) => {
             const formData = new FormData()
             formData.append('image', snapshot, `frame-${shape.frameNumber}.png`)
             formData.append('frameNumber', shape.frameNumber.toString())
-            // The wireframe's boxes and labels as text, read from the shapes, so the model doesn't have
+            // The wireframe's boxes, labels and words, read from the shapes, so the model doesn't have
             // to read them off the picture
-            formData.append('outline', frameOutline(shape, getShapesInsideFrame(allShapes, shape)))
+            formData.append('outline', JSON.stringify(frameOutline(shape, getShapesInsideFrame(allShapes, shape))))
 
             const urlParams = new URLSearchParams(window.location.search)
             const projectId = urlParams.get('project')
@@ -1326,53 +1328,25 @@ export const useFrame = (shape: FrameShape) => {
                 })
             )
 
-            const reader = response.body?.getReader()
-            const decoder = new TextDecoder()
-
-            let accumulatedMarkup = ''
             let lastUpdateTime = 0
-
             const UPDATE_THROTTLE_MS = 200
 
-            // Adding the design was its undo step, so the streamed chunks stay out of the history.
-            // stream: true holds back a character split across two chunks until the rest arrives.
-            if (reader) {
-                try {
-                    while (true) {
-                        const { done, value } = await reader.read()
-                        if (done) {
-                            accumulatedMarkup += decoder.decode()
-                            dispatch(
-                                updateShape({
-                                    id: generatedUIId,
-                                    patch: {
-                                        uiSpecData: accumulatedMarkup,
-                                    },
-                                    skipHistory: true
-                                })
-                            )
-                            break
-                        }
-                        const chunk = decoder.decode(value, { stream: true })
-                        accumulatedMarkup += chunk
-
-                        const now = Date.now()
-                        if (now - lastUpdateTime >= UPDATE_THROTTLE_MS) {
-                            dispatch(
-                                updateShape({
-                                    id: generatedUIId,
-                                    patch: {
-                                        uiSpecData: accumulatedMarkup,
-                                    },
-                                    skipHistory: true
-                                })
-                            )
-                            lastUpdateTime = now
-                        }
+            // Adding the design was its undo step, so the streamed chunks stay out of the history
+            const show = (markup: string) =>
+                dispatch(updateShape({ id: generatedUIId, patch: { uiSpecData: markup }, skipHistory: true }))
+            try {
+                const markup = await readDesignStream(response, (markup) => {
+                    const now = Date.now()
+                    if (now - lastUpdateTime >= UPDATE_THROTTLE_MS) {
+                        show(markup)
+                        lastUpdateTime = now
                     }
-                } finally {
-                    reader.releaseLock()
-                }
+                })
+                show(markup)
+            } catch (error) {
+                // A design that stopped partway isn't kept
+                dispatch(removeShape({ id: generatedUIId, skipHistory: true }))
+                throw new Error(INCOMPLETE_DESIGN_MESSAGE, { cause: error })
             }
         } catch (error) {
             toast.error(`Failed to generate design: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -1498,31 +1472,14 @@ export const useWorkflowGeneration = () => {
                     )
                     historyRecorded = true
 
-                    const reader = response.body?.getReader()
-                    const decoder = new TextDecoder()
-
-                    let accumulatedHTML = ''
-
-                    if (reader) {
-                        while(true) {
-                            const { done, value } = await reader.read()
-                            // The last read flushes a character that never completed
-                            const chunk = done ? decoder.decode() : decoder.decode(value, { stream: true })
-                            if (chunk) {
-                                accumulatedHTML += chunk
-
-                                dispatch(
-                                    updateShape({
-                                        id: workflowId,
-                                        patch: {
-                                            uiSpecData: accumulatedHTML,
-                                        },
-                                        skipHistory: true
-                                    })
-                                )
-                            }
-                            if (done) break
-                        }
+                    const show = (markup: string) =>
+                        dispatch(updateShape({ id: workflowId, patch: { uiSpecData: markup }, skipHistory: true }))
+                    try {
+                        show(await readDesignStream(response, show))
+                    } catch (error) {
+                        // A page that stopped partway isn't kept
+                        dispatch(removeShape({ id: workflowId, skipHistory: true }))
+                        throw error
                     }
                     return { pageIndex: index, success: true}
                 } catch (error) {
@@ -1687,14 +1644,17 @@ export const useChatWindow = (generatedUIId: string, isOpen: boolean) => {
 
             let apiEndpoint = '/api/generate/redesign'
             let wireframeSnapshot: string | null = null
+            // The source frame's outline, while the frame still exists, as background for the change
+            let outline: FrameOutline | null = null
 
             if (isWorkflowPage) {
                 apiEndpoint = '/api/generate/workflow-redesign'
             } else {
                 const sourceFrame = getSourceFrame()
                 if (sourceFrame && sourceFrame.type === 'frame') {
+                    const allShapesArray = Object.values(allShapes).filter(Boolean) as Shape[]
+                    outline = frameOutline(sourceFrame, getShapesInsideFrame(allShapesArray, sourceFrame))
                     try {
-                        const allShapesArray = Object.values(allShapes).filter(Boolean) as Shape[]
                         const snapshot = await generateFrameSnapshot(sourceFrame, allShapesArray)
 
                         wireframeSnapshot = await blobToBase64(snapshot)
@@ -1706,7 +1666,7 @@ export const useChatWindow = (generatedUIId: string, isOpen: boolean) => {
                 }
             }
 
-            const requestData = isWorkflowPage ? baseRequestData : {...baseRequestData, wireframeSnapshot}
+            const requestData = isWorkflowPage ? baseRequestData : { ...baseRequestData, wireframeSnapshot, outline }
 
             const response = await fetch(apiEndpoint, {
                 method: 'POST',
@@ -1724,35 +1684,17 @@ export const useChatWindow = (generatedUIId: string, isOpen: boolean) => {
             if (!response.ok) {
                 throw new Error(`API Request Failed: ${response.status}`)
             }
-            const reader = response.body?.getReader()
-            const decoder = new TextDecoder()
 
-            let accumulatedHTML = ''
-            // The first chunk records the current design as one undo step; the rest of the stream doesn't add more
-            let historyRecorded = false
-
-            if (reader) {
-                while(true) {
-                    const { done, value } = await reader.read()
-                    // The last read flushes a character that never completed
-                    const chunk = done ? decoder.decode() : decoder.decode(value, { stream: true })
-                    if (chunk) {
-                        accumulatedHTML += chunk
-
-                        dispatch(updateStreamingContent({ generatedUIId, messageId: responseId, content: 'Regenerating design...' }))
-
-                        dispatch(updateShape({
-                            id: generatedUIId,
-                            patch: {
-                                uiSpecData: accumulatedHTML,
-                            },
-                            skipHistory: historyRecorded
-                        }))
-                        historyRecorded = true
-                    }
-                    if (done) break
-                }
+            // The design stays as it is until the new version has arrived whole, so a change that
+            // stops partway leaves it untouched. Then it's swapped in as one undo step.
+            dispatch(updateStreamingContent({ generatedUIId, messageId: responseId, content: 'Regenerating design...' }))
+            let markup: string
+            try {
+                markup = await readDesignStream(response)
+            } catch (error) {
+                throw new Error(INCOMPLETE_REFINE_MESSAGE, { cause: error })
             }
+            dispatch(updateShape({ id: generatedUIId, patch: { uiSpecData: markup } }))
             dispatch(finishedStreamingResponse({ generatedUIId, messageId: responseId, finalContent: 'Design regenerated successfully' }))
         } catch (error) {
             dispatch(addErrorMessage({ generatedUIId, error: error instanceof Error ? error.message : 'Unknown error' }))

@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "eval:generation": "node scripts/run-ts.mjs scripts/eval-generation.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^2.0.85",

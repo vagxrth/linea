@@ -2,13 +2,15 @@ import { google } from "@ai-sdk/google"
 import { streamText, type UserContent } from "ai"
 import { NextResponse } from "next/server"
 import { InspirationImagesQuery, StyleGuideQuery } from "@/convex/query.config"
-import { prompts } from "@/prompts"
 import type { StyleGuide } from "@/redux/api/style-guide"
 import { chargedGeneration } from "./credits"
-import { repairImageSrcs } from "./image-src-repair"
+import { buildDesignContract, contractCorrections, type DesignContract } from "./design-contract"
+import { DESIGN_MAX_OUTPUT_TOKENS, DESIGN_MODEL_ID, DESIGN_TEMPERATURE, designPrompt, type DesignRequest } from "./design-request"
+import { buildImageManifest, loadImages, resolveDesignImages, type ImageManifest, type LoadedImage } from "./image-manifest"
+import type { OutlineImageSlot } from "./wireframe-outline"
 
 // The model every generate route asks
-export const model = google('gemini-2.5-flash')
+export const model = google(DESIGN_MODEL_ID)
 
 // The project's style guide, or null when it hasn't generated one yet
 export const getStyleGuide = async (projectId: string): Promise<StyleGuide | null> => {
@@ -33,42 +35,86 @@ export const getInspirationImageUrls = async (projectId: string) => {
     return images.map((image) => image.url).filter((url): url is string => Boolean(url))
 }
 
-// Images to attach after the prompt text
-export const imageParts = (images: string[]) => images.map((image) => ({ type: 'image' as const, image }))
-
-// The style guide's swatches and type styles as comma-separated text for a prompt
-export const colorsText = (guide: StyleGuide) =>
-    guide.colorSections
-        .map((section) => section.swatches.map((swatch) => `${swatch.name}: ${swatch.hexColor}, ${swatch.description}`).join(", "))
-        .join(", ")
-
-export const typographyText = (guide: StyleGuide) =>
-    guide.typographySections
-        .map((section) =>
-            section.styles
-                .map((style) => `${style.name}: ${style.description}, ${style.fontFamily}, ${style.fontWeight}, ${style.fontSize}, ${style.lineHeight}`)
-                .join(", ")
+// The project's style guide as a design contract. Text colors it had to correct for contrast are
+// logged, since they mean the guide itself fails WCAG AA there.
+export const designContractFor = (guide: StyleGuide, projectId: string): DesignContract => {
+    const contract = buildDesignContract(guide)
+    for (const check of contractCorrections(contract)) {
+        console.warn(
+            `[design-contract] project ${projectId}: ${check.foreground} ${check.corrected!.original} on ${check.background} ${check.colors[0]} ` +
+            `is ${check.ratio}:1; using ${check.corrected!.foreground} (${check.corrected!.ratio}:1)`
         )
-        .join(", ")
+    }
+    return contract
+}
 
-// The style guide as the sections the redesign and workflow prompts end with
-export const styleGuideSections = (guide: StyleGuide) =>
-    (guide.colorSections.length > 0 ? `\n\nStyle Guide Colors:\n${colorsText(guide)}` : '') +
-    (guide.typographySections.length > 0 ? `\n\nTypography:\n${typographyText(guide)}` : '')
+// What every design request starts from: the contract, and the project's images loaded into a
+// manifest (with the wireframe's image slots, when there's an outline)
+export const prepareDesign = async (projectId: string, guide: StyleGuide, slots: OutlineImageSlot[] = []) => {
+    const contract = designContractFor(guide, projectId)
+    const images = await loadImages(await getInspirationImageUrls(projectId))
+    const manifest = buildImageManifest(images, slots)
+    return { contract, images, manifest }
+}
 
-// Streams an HTML design from the model, charging `cost` credits once output starts. `images` are the
-// project's image addresses the prompt gave it, which get repaired where the model mistyped them.
-export const streamDesign = (request: Request, cost: number, content: UserContent, images: string[] = []) => {
+// The project's images as attachments, in manifest order, from the bytes already loaded
+export const imageParts = (images: LoadedImage[]) =>
+    images.map((image) => ({ type: 'image' as const, image: image.bytes, ...(image.mediaType ? { mediaType: image.mediaType } : {}) }))
+
+// Thrown when the model stopped before the design was finished
+export class IncompleteDesignError extends Error {
+    constructor(readonly finishReason: string) {
+        super(`The model stopped before the design was finished (${finishReason})`)
+        this.name = 'IncompleteDesignError'
+    }
+}
+
+// An attachment that follows the request's text
+export type DesignAttachment = Exclude<UserContent, string>[number]
+
+type StreamDesignOptions = {
+    request: Request
+    // Credits charged once the model's output starts
+    cost: number
+    design: DesignRequest
+    // Images after the request's text: the wireframe first, when there is one, then the manifest's
+    attachments: DesignAttachment[]
+}
+
+// Streams an HTML design from the model with the mode's instructions, charging `cost` credits once
+// output starts. Image ids are swapped for the project's image addresses as it streams. The finish
+// reason and token usage are logged; when the model didn't finish (finishReason other than "stop")
+// the response breaks off, so the client knows not to keep what it got.
+export const streamDesign = ({ request, cost, design, attachments }: StreamDesignOptions) => {
     const generation = chargedGeneration(request, cost)
+    const startedAt = Date.now()
+    const { system, text } = designPrompt(design)
     const result = streamText({
         model,
-        messages: [{ role: 'user', content }],
-        system: prompts.generatedUi.system,
-        temperature: 0.7,
+        system,
+        messages: [{ role: 'user', content: [{ type: 'text', text }, ...attachments] }],
+        temperature: DESIGN_TEMPERATURE,
+        maxOutputTokens: DESIGN_MAX_OUTPUT_TOKENS,
         abortSignal: generation.abortSignal,
         onError: generation.onError,
     })
-    return generation.respond(repairImageSrcs(result.textStream, images))
+    const finished = (async () => {
+        let finishReason: string
+        try {
+            finishReason = await result.finishReason
+        } catch (error) {
+            // No output at all (a refused key, say): logged too, so every request leaves a line
+            console.info(`[design] ${JSON.stringify({ mode: design.mode, finishReason: 'no-output', ms: Date.now() - startedAt })}`)
+            throw error
+        }
+        const usage = await result.totalUsage.catch(() => undefined)
+        console.info(`[design] ${JSON.stringify({ mode: design.mode, finishReason, usage, ms: Date.now() - startedAt })}`)
+        if (finishReason !== 'stop') throw new IncompleteDesignError(finishReason)
+    })()
+    // respond() reports a failure; this only keeps one nobody reads (an aborted request's) quiet
+    finished.catch(() => {})
+    const placeholderColors = { fill: design.contract.colors.muted, ink: design.contract.colors.mutedForeground }
+    return generation.respond(resolveDesignImages(result.textStream, design.manifest, placeholderColors), finished)
 }
 
 // Logs a request that threw and returns the 500 response the client shows
@@ -79,3 +125,5 @@ export const generationFailed = (message: string, error: unknown) => {
         { status: 500 }
     )
 }
+
+export type { DesignRequest, ImageManifest }

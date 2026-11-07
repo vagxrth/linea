@@ -21,13 +21,17 @@ export const checkCredits = async (cost: number): Promise<Response | null> => {
 // Credits are charged only once the model has produced its first chunk, so rejected requests
 // and model failures cost nothing. After output starts the charge stands: refunding a stream the
 // client cancelled would let anyone stop just before the end and keep the design for free.
+//
+// `finished`, when given, settles once the model says how it finished, and rejects when it stopped
+// before the end (out of tokens, say). The response then breaks off instead of ending normally, so
+// the client can tell a half-written design from a whole one and doesn't keep it.
 export const chargedGeneration = (request: Request, cost: number) => {
     const controller = new AbortController()
 
     return {
         abortSignal: AbortSignal.any([request.signal, controller.signal]),
         onError: ({ error }: { error: unknown }) => console.error('Generation failed:', error),
-        respond: async (textStream: AsyncIterable<string>): Promise<Response> => {
+        respond: async (textStream: AsyncIterable<string>, finished?: Promise<void>): Promise<Response> => {
             const chunks = textStream[Symbol.asyncIterator]()
             // Model errors normally end the stream quietly (and reach onError), but an abort is thrown
             let first: IteratorResult<string>
@@ -58,9 +62,14 @@ export const chargedGeneration = (request: Request, cost: number) => {
                 async pull(streamController) {
                     try {
                         const next = await chunks.next()
-                        if (next.done) streamController.close()
-                        else streamController.enqueue(encoder.encode(next.value))
+                        if (!next.done) {
+                            streamController.enqueue(encoder.encode(next.value))
+                            return
+                        }
+                        await finished
+                        streamController.close()
                     } catch (error) {
+                        console.error('Generation ended incomplete:', error)
                         streamController.error(error)
                     }
                 },

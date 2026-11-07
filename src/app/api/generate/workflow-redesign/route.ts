@@ -1,15 +1,19 @@
 import { checkCredits } from "@/lib/credits";
-import { colorsText, generationFailed, getStyleGuide, streamDesign, styleGuideMissing, typographyText } from "@/lib/generation";
+import { generationFailed, getStyleGuide, prepareDesign, streamDesign, styleGuideMissing } from "@/lib/generation";
+import { designHtmlForPrompt } from "@/lib/image-manifest";
 import { NextRequest, NextResponse } from "next/server";
 
 const COST = 1
 
+// A chat request to change a workflow page: refine mode, like any other design. Workflow pages have
+// no wireframe of their own, so there's no outline or wireframe image. The images aren't attached
+// either, but the manifest still lists them, so the page's images keep their ids.
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json()
         const { userMessage, generatedUIId, currentHTML, projectId } = body
 
-        if (!userMessage || !generatedUIId || !currentHTML || !projectId) {
+        if (!userMessage || !generatedUIId || typeof currentHTML !== 'string' || !currentHTML || !projectId) {
             return NextResponse.json(
                 { error: 'Invalid request body' },
                 { status: 400 }
@@ -22,39 +26,23 @@ export async function POST(request: NextRequest) {
         const guide = await getStyleGuide(projectId)
         if (!guide) return styleGuideMissing('redesigning workflow')
 
-        let userPrompt = `CRITICAL: You are redesigning a SPECIFIC WORKFLOW PAGE, not creating a new page from scratch.
-            USER REQUEST: "${userMessage}"
-            CURRENT WORKFLOW PAGE HTML TO REDESIGN: ${currentHTML}
-            WORKFLOW REDESIGN REQUIREMENTS:
-                1. MODIFY THE PROVIDED HTML ABOVE - do not create a completely new page
-                2. Apply the user's requested changes to the existing workflow page design
-                3. Keep the same page type and core functionality (Dashboard, Settings, Profile, or Listing)
-                4. Maintain the existing layout structure and component hierarchy
-                5. Preserve all functional elements while applying visual/content changes
-                6. Keep the same general organization and workflow purpose
-            MODIFICATION GUIDELINES:
-                1. Start with the provided HTML structure as your base
-                2. Apply the requested changes (colors, layout, content, styling, etc.)
-                3. Keep all existing IDs and semantic structure intact
-                4. Keep the page's <style> block and .c-* color classes
-                5. Preserve responsive design and accessibility features
-                6. Update content, styling, or layout as requested but keep core structure
+        const { contract, manifest } = await prepareDesign(projectId, guide)
 
-            IMPORTANT: 
-                1. DO NOT generate a completely different page
-                2. DO NOT revert to any "original" or "main" page design
-                3. DO redesign the specific workflow page shown in the HTML above
-                4. DO apply the user's changes to that specific page
-
-            colors: ${colorsText(guide)}
-
-            typography: ${typographyText(guide)}
-
-            Please generate the modified version of the provided workflow page HTML with the requested changes applied.`
-
-        userPrompt += `\n\nPlease generate a professional redesigned workflow page that incorporates the requested changes while maintaining the core functionality and design consistency.`
-
-        return streamDesign(request, COST, [{ type: 'text', text: userPrompt }])
+        return streamDesign({
+            request,
+            cost: COST,
+            design: {
+                mode: 'refine',
+                contract,
+                manifest,
+                message: String(userMessage).slice(0, 4_000),
+                currentHtml: designHtmlForPrompt(currentHTML, manifest),
+                outline: null,
+                hasWireframe: false,
+                imagesAttached: false,
+            },
+            attachments: [],
+        })
 
     } catch (error) {
         return generationFailed('Failed to process workflow redesign request', error)
