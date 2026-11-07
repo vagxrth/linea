@@ -98,8 +98,10 @@ const HeroAtmosphere = () => {
         <div
             ref={area}
             aria-hidden
-            // Soft edges at the top and bottom, so pages don't stop at a hard line
-            className="pointer-events-none absolute inset-0 -z-10 [mask-image:linear-gradient(to_bottom,transparent,black_14%,black_78%,transparent)]"
+            // The first screen below the nav, whatever the hero holds below that, so pages keep their size
+            // and pass behind the screenshot under the copy. Soft edges at the top and bottom, so pages
+            // don't stop at a hard line.
+            className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[calc(100svh-4rem)] [mask-image:linear-gradient(to_bottom,transparent,black_14%,black_78%,transparent)]"
         >
             {enabled && (
                 <div className={cn("absolute inset-0 transition-opacity duration-1000 ease-out", ready ? "opacity-100" : "opacity-0")}>

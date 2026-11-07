@@ -8,8 +8,8 @@ import { useEffect, useId, useRef, type KeyboardEvent, type PointerEvent } from 
 // pixels, as its coordinates, so the seam and both images line up at any width.
 const WIDTH = 980
 const HEIGHT = 620
-const SKETCH = "/images/proof-sketch.webp"
-const GENERATED = "/images/proof-generated.webp"
+const SKETCH = "/images/landing/proof-sketch.webp"
+const GENERATED = "/images/landing/proof-generated.webp"
 
 // The seam curves the way the one in the logo does: one gentle S from top to bottom
 const seamPath = (x: number) => `M${x},0 C${x + 22},${HEIGHT * 0.25} ${x - 22},${HEIGHT * 0.75} ${x},${HEIGHT}`

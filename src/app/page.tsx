@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import ClosingCta from "@/components/landing/closing-cta"
 import Hero from "@/components/landing/hero"
 import HowItWorks from "@/components/landing/how-it-works"
 import Pricing from "@/components/landing/pricing"
@@ -8,7 +9,7 @@ import SiteFooter from "@/components/landing/site-footer"
 import SiteNav from "@/components/landing/site-nav"
 
 export const metadata: Metadata = {
-  title: "Linea: sketch a wireframe, get a production-ready design",
+  title: "Linea: sketch a wireframe, get a designed page",
 }
 
 export default function Home() {
@@ -42,6 +43,7 @@ export default function Home() {
 
           <HowItWorks />
           <Pricing />
+          <ClosingCta />
         </main>
         <SiteFooter />
       </div>
