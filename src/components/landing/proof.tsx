@@ -28,6 +28,9 @@ const Proof = () => {
     const ids = useId().replace(/[^a-zA-Z0-9-]/g, "")
     const reducedMotion = useReducedMotion()
     const inView = useInView(artboard, { once: true, amount: 0.5 })
+    // The screenshots load once the slider nears the screen, not with the page: they sit well below
+    // the first screen and would only hold up the hero's screenshot
+    const near = useInView(artboard, { once: true, margin: "800px 0px" })
 
     // Where the seam is, in artboard units. It starts at the left edge, all sketch.
     const seam = useMotionValue(0)
@@ -135,15 +138,20 @@ const Proof = () => {
                     </defs>
 
                     <g clipPath={`url(#${ids}-sketch)`}>
-                        <image href={SKETCH} width={WIDTH} height={HEIGHT} preserveAspectRatio="xMidYMid slice" />
+                        <image href={near ? SKETCH : undefined} width={WIDTH} height={HEIGHT} preserveAspectRatio="xMidYMid slice" />
                     </g>
                     <g clipPath={`url(#${ids}-page)`}>
-                        <image href={GENERATED} width={WIDTH} height={HEIGHT} preserveAspectRatio="xMidYMid slice" />
+                        <image href={near ? GENERATED : undefined} width={WIDTH} height={HEIGHT} preserveAspectRatio="xMidYMid slice" />
                     </g>
 
                     <motion.path d={seamD} fill="none" className="stroke-brass" strokeWidth={10} strokeOpacity={0.35} filter={`url(#${ids}-glow)`} />
                     <motion.path d={seamD} fill="none" className="stroke-brass" strokeWidth={2.5} />
                 </svg>
+                {/* Without JavaScript the seam stays at the left edge, so the sketch is all that shows */}
+                <noscript>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={SKETCH} alt="" className="absolute inset-0 size-full object-cover" />
+                </noscript>
 
                 <motion.button
                     ref={handle}
