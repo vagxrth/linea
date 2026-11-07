@@ -78,11 +78,12 @@ const ChatWindow = ({ generatedUIId, isOpen, onClose }: Props) => {
                         ) : (
                             chatState.messages.map((message: ChatMessage) => (
                                 <div key={message.id} className={cn('flex', message.role === 'user' ? 'justify-end' : 'justify-start')}>
-                                    <div className={cn('max-w-[85%] rounded-lg px-3 py-2 text-sm', message.role === 'user' ? 'bg-blue-500 text-white' : 'bg-white/10 text-white/90 border border-white/20')}>
+                                    {/* Your messages on a lighter plain surface, the AI's outlined. No blue: the app's one accent is brass, which the send button carries. */}
+                                    <div className={cn('max-w-[85%] rounded-lg px-3 py-2 text-sm', message.role === 'user' ? 'bg-white/15 text-white' : 'bg-white/10 text-white/90 border border-white/20')}>
                                         <div className='whitespace-pre-wrap'>
                                             {message.content}
                                         </div>
-                                        <div className={cn('text-xs mt-1 opacity-90 flex items-center gap-1', message.role === 'user' ? 'text-blue-100' : 'text-white/75')}>
+                                        <div className={cn('text-xs mt-1 opacity-90 flex items-center gap-1', message.role === 'user' ? 'text-white/80' : 'text-white/75')}>
                                             {message.isStreaming && (
                                                 <Loader2 size={10} className='animate-spin' />
                                             )}
@@ -110,7 +111,8 @@ const ChatWindow = ({ generatedUIId, isOpen, onClose }: Props) => {
                                 onClick={handleSendMessage}
                                 disabled={!inputValue.trim() || chatState?.isStreaming}
                                 size='sm'
-                                className='bg-blue-500 hover:bg-blue-600 text-white'
+                                variant='brass'
+                                aria-label='Send'
                             >
                                 {chatState?.isStreaming ? (
                                     <Loader2 size={16} className='animate-spin' />

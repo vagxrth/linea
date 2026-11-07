@@ -5,8 +5,9 @@ import HeroShot from "./hero-shot"
 import WindowFrame from "./window-frame"
 
 // The promise from the README and the way in, over a screenshot of Linea showing exactly that: a sketch
-// and the page generated from it. The screenshot needs no JavaScript or WebGL, so every screen gets
-// it. On wider screens, more screenshots float up both sides behind it.
+// beside the page generated from it, or on phones that page alone, large enough to read. The
+// screenshot needs no JavaScript or WebGL, so every screen gets it. On wider screens, more
+// screenshots float up both sides behind it.
 const Hero = () => (
     <section className="relative isolate overflow-hidden">
         <HeroAtmosphere />

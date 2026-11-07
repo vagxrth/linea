@@ -25,13 +25,13 @@ const steps = [
         title: "Generate the page",
         text: "Linea turns the frame into a full HTML/CSS page in your style.",
         image: "/images/landing/step-generated.webp",
-        alt: "The page Linea generated from the wireframe: a plant shop's homepage with a navbar, headline, button, hero illustration and cards.",
+        alt: "The wireframe on Linea's canvas beside the page Linea generated from it: a plant shop's homepage with a navbar, headline, button, hero illustration and cards.",
     },
     {
         title: "Refine and export",
         text: "Describe a change and the design updates in place. Download any design or frame as an image.",
         image: "/images/landing/step-chat.webp",
-        alt: "Linea's chat beside the page, asked to move the cards up under the hero and make the main button sage green, after it regenerated the design.",
+        alt: "Linea's chat beside the page, asked to give the hero section a soft sage green background and keep everything else as it is, after it regenerated the design.",
     },
 ]
 
