@@ -1,7 +1,7 @@
-import Image from "next/image"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import HeroAtmosphere from "./hero-atmosphere"
+import HeroShot from "./hero-shot"
 import WindowFrame from "./window-frame"
 
 // The promise from the README and the way in, over a screenshot of Linea showing exactly that: a sketch
@@ -33,18 +33,7 @@ const Hero = () => (
         {/* Close enough under the buttons that its top shows on the first screen, phones included */}
         <div className="mx-auto w-full max-w-6xl px-4 pt-10 pb-16 sm:px-6 md:pt-12 md:pb-20">
             <WindowFrame>
-                <Image
-                    src="/images/landing/generated.webp"
-                    alt="Linea's canvas: a wireframe in a frame, with boxes labelled navbar, headline, button, hero image and card, beside the page Linea generated from it for a plant shop."
-                    width={1920}
-                    height={1200}
-                    // On phones this is the largest thing on the first screen, so it loads before anything else
-                    priority
-                    fetchPriority="high"
-                    // The frame's width: the page's, less its side padding and the frame's own edge
-                    sizes="(min-width: 1200px) 1138px, (min-width: 640px) calc(100vw - 3.875rem), calc(100vw - 2.875rem)"
-                    className="block aspect-[16/10] w-full"
-                />
+                <HeroShot />
             </WindowFrame>
         </div>
     </section>
