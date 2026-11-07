@@ -5,10 +5,12 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Suspense, useEffect, useMemo, useRef, type RefObject } from 'react'
 import * as THREE from 'three'
 
-// Screenshots from a demo project in Linea, floating up both sides of the hero: the canvas, the
-// moodboard and style guide, the generated page and a chat redesign. To change them, replace
-// public/images/1.webp to 8.webp with new 16:10 screenshots.
-const IMAGES = Array.from({ length: 8 }, (_, i) => `/images/${i + 1}.webp`)
+// Screenshots from a demo project in Linea, floating up both sides of the hero: the sketch on the
+// canvas, the moodboard, style guide and inspiration board, the generated page and a chat redesign. To
+// change them, replace public/images/landing/float-*.webp with new 16:10 screenshots.
+const IMAGES = ['canvas', 'moodboard', 'style-guide', 'inspiration', 'sketch', 'generated', 'page', 'chat'].map(
+    (name) => `/images/landing/float-${name}.webp`
+)
 
 const PER_SIDE = 7
 // The depth band, in world units from the camera. Pages stay inside it, so none comes close enough to

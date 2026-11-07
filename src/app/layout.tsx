@@ -31,7 +31,7 @@ const instrumentSerif = Instrument_Serif({
 export const metadata: Metadata = {
   metadataBase: new URL('https://linea.vagarth.in'),
   title: "Linea",
-  description: "Sketch a wireframe. Get a production-ready design. Linea turns hand-drawn wireframes into polished HTML/CSS pages, styled by a design system it builds from your moodboard.",
+  description: "Sketch a wireframe. Get a designed page. Linea turns hand-drawn wireframes into HTML/CSS pages, styled by a design system it builds from your moodboard.",
   openGraph: {
     url: 'https://linea.vagarth.in',
     siteName: 'Linea',
