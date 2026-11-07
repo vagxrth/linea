@@ -1,7 +1,7 @@
-// The model copies the project's image addresses into the designs it writes, and now and then drops or
-// swaps a character of their long ids, which breaks the image: the page then shows its alt text. Each
-// src that isn't one of the project's images, but is only a few characters off one, gets that image's
-// address back.
+// Designs made before the image manifest (src/lib/image-manifest.ts) hold the project's image
+// addresses themselves, copied by the model, which now and then dropped or swapped a character of
+// their long ids. When such a design is refined, each address that's only a few characters off one of
+// the project's images is read as that image, so it keeps its picture.
 
 // How far off a copied address can be and still count as that image
 const MAX_TYPOS = 4
@@ -36,32 +36,4 @@ export const repairImageSrc = (src: string, images: string[]) => {
         }
     }
     return best ?? src
-}
-
-const repairAll = (html: string, images: string[]) =>
-    html.replace(/src="([^"]*)"/g, (_, src: string) => `src="${repairImageSrc(src, images)}"`)
-
-// The streamed design with its image addresses repaired. The last few characters are held back, in
-// case "src=" itself is split across chunks, and so is any src=" whose closing quote isn't in what
-// would be sent, so an address always goes out whole.
-export async function* repairImageSrcs(chunks: AsyncIterable<string>, images: string[]): AsyncGenerator<string> {
-    if (images.length === 0) {
-        yield* chunks
-        return
-    }
-    let pending = ''
-    for await (const chunk of chunks) {
-        pending += chunk
-        let ready = Math.max(0, pending.length - 4)
-        const open = ready > 0 ? pending.lastIndexOf('src="', ready - 1) : -1
-        if (open !== -1) {
-            const close = pending.indexOf('"', open + 5)
-            if (close === -1 || close >= ready) ready = open
-        }
-        if (ready > 0) {
-            yield repairAll(pending.slice(0, ready), images)
-            pending = pending.slice(ready)
-        }
-    }
-    if (pending) yield repairAll(pending, images)
 }
