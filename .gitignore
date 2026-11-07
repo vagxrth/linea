@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Designs from live runs of scripts/eval-generation.ts
+.eval-output/
