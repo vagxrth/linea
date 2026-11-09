@@ -3,8 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ConsumeCreditsQuery, InspirationImagesQuery, StyleGuideQuery } from "@/convex/query.config"
 import { designSystemPrompt } from "@/prompts"
 import type { StyleGuide } from "@/redux/api/style-guide"
+import { EVAL_FIXTURES } from "../../scripts/eval-fixtures"
 import { buildDesignContract } from "./design-contract"
 import { DESIGN_MAX_OUTPUT_TOKENS, designPrompt, type DesignRequest } from "./design-request"
+import { DESIGN_STREAM_HEADERS, finalDesign, readDesignStream, REPLACEMENT_MARK } from "./design-stream"
+import { DASHBOARD_FAILING, DASHBOARD_PASSING } from "./design-validator.fixtures"
 import {
     designContractFor,
     generationFailed,
@@ -47,12 +50,21 @@ const styleGuideIs = (value: unknown) =>
     vi.mocked(StyleGuideQuery).mockResolvedValue({ styleGuide: value } as Awaited<ReturnType<typeof StyleGuideQuery>>)
 
 // What the AI SDK's streamText returns, as far as streamDesign reads it
-const modelReturns = (chunks: string[], finishReason: string) =>
-    vi.mocked(streamText).mockReturnValue({
-        textStream: (async function* () { yield* chunks })(),
-        finishReason: Promise.resolve(finishReason),
-        totalUsage: Promise.resolve({ inputTokens: 1200, outputTokens: 900, totalTokens: 2100, reasoningTokens: 300 }),
-    } as unknown as ReturnType<typeof streamText>)
+const modelResult = (chunks: string[], finishReason: string) => ({
+    textStream: (async function* () { yield* chunks })(),
+    finishReason: Promise.resolve(finishReason),
+    totalUsage: Promise.resolve({ inputTokens: 1200, outputTokens: 900, totalTokens: 2100, reasoningTokens: 300 }),
+}) as unknown as ReturnType<typeof streamText>
+
+const modelReturns = (chunks: string[], finishReason: string) => vi.mocked(streamText).mockReturnValue(modelResult(chunks, finishReason))
+
+// The model's answers to successive calls: the design, then the repair
+const modelAnswers = (...answers: [chunks: string[], finishReason: string][]) => {
+    for (const [chunks, finishReason] of answers) vi.mocked(streamText).mockReturnValueOnce(modelResult(chunks, finishReason))
+}
+
+// A design split into chunks as a model streams it, cut mid-tag
+const inChunks = (html: string, size = 700) => html.match(new RegExp(`[\\s\\S]{1,${size}}`, "g"))!
 
 beforeEach(() => {
     vi.clearAllMocks()
@@ -168,7 +180,7 @@ describe("streamDesign", () => {
         expect(await response.text()).toBe(`<div data-generated-ui><img src="${imageUrl}" alt="Pots"></div>`)
         expect(ConsumeCreditsQuery).toHaveBeenCalledWith({ amount: 1 })
         // How it finished, and the tokens it took, thinking included
-        expect(console.info).toHaveBeenCalledWith(expect.stringMatching(/^\[design\] \{"mode":"refine","finishReason":"stop","usage":\{"inputTokens":1200,"outputTokens":900,"totalTokens":2100,"reasoningTokens":300\},"ms":\d+\}$/))
+        expect(console.info).toHaveBeenCalledWith(expect.stringMatching(/^\[design\] \{"mode":"refine","attempt":1,"finishReason":"stop","usage":\{"inputTokens":1200,"outputTokens":900,"totalTokens":2100,"reasoningTokens":300\},"ms":\d+\}$/))
     })
 
     it("breaks the stream off when the model stopped before finishing, so the client doesn't keep it", async () => {
@@ -187,6 +199,107 @@ describe("streamDesign", () => {
         const response = await streamDesign({ request: request(), cost: 1, design, attachments: [] })
         expect(response.status).toBe(502)
         expect(ConsumeCreditsQuery).not.toHaveBeenCalled()
+    })
+})
+
+describe("the check, and its one repair", () => {
+    const contract = buildDesignContract(EVAL_FIXTURES[1].guide)
+    const manifest = buildImageManifest([])
+    const colors = { fill: contract.colors.muted, ink: contract.colors.mutedForeground }
+    const design: DesignRequest = { mode: "initial", contract, manifest, outline: null, hasWireframe: true }
+    // A tab that reads replacements, as the app's own does
+    const request = (headers: Record<string, string> = DESIGN_STREAM_HEADERS) => new Request("http://localhost/api/generate", { method: "POST", headers })
+    const failing = resolveDesignHtml(DASHBOARD_FAILING, manifest, colors)
+    const passing = resolveDesignHtml(DASHBOARD_PASSING, manifest, colors)
+    const charged = () => vi.mocked(ConsumeCreditsQuery).mockResolvedValue({ ok: true, balance: 3 } as Awaited<ReturnType<typeof ConsumeCreditsQuery>>)
+    const checkLine = () => vi.mocked(console.info).mock.calls.map(([line]) => String(line)).find((line) => line.startsWith("[design-check]"))
+
+    it("repairs a design the check finds errors in with one more call, sends the repair after the first, and charges one credit", async () => {
+        charged()
+        modelAnswers([inChunks(DASHBOARD_FAILING), "stop"], [inChunks(DASHBOARD_PASSING), "stop"])
+
+        const response = await streamDesign({ request: request(), cost: 1, design, attachments: [{ type: "image", image: png, mediaType: "image/png" }] })
+        const text = await response.text()
+
+        // The first design streamed as it came, then the mark, then the repaired one
+        expect(text).toBe(`${failing}${REPLACEMENT_MARK}${passing}`)
+        expect(finalDesign(text)).toBe(passing)
+        expect(streamText).toHaveBeenCalledTimes(2)
+        expect(ConsumeCreditsQuery).toHaveBeenCalledTimes(1)
+        expect(ConsumeCreditsQuery).toHaveBeenCalledWith({ amount: 1 })
+
+        // The repair: the repair instructions, the errors listed, the page with its images as ids, nothing attached
+        const repair = vi.mocked(streamText).mock.calls[1][0]
+        expect(repair.system).toBe(designSystemPrompt("repair"))
+        const [message] = repair.messages!
+        expect(message.content).toEqual([{ type: "text", text: expect.any(String) }])
+        const repairText = (message.content as { text: string }[])[0].text
+        expect(repairText).toContain("Mode: repair. A check of the page below found these problems. Fix only these, and change nothing else:\n- Contrast 1.00:1, under 4.5:1")
+        expect(repairText).toContain("- Placeholder text \"Chart placeholder\"")
+        expect(repairText).toContain("- Made-up people's names: \"Alice Smith\"")
+        expect(repairText).toContain("No images are attached.")
+        expect(repairText).toContain(`Page to fix (complete HTML): fix the problems listed above and keep everything else exactly as it is.\n${failing}`)
+        expect(checkLine()).toBe('[design-check] {"mode":"initial","errors":3,"warnings":0,"kinds":{"contrast":1,"placeholder":1,"name":1},"after":{"errors":0,"warnings":0,"kinds":{}},"repair":"kept"}')
+        expect(console.info).toHaveBeenCalledWith(expect.stringMatching(/^\[design\] \{"mode":"repair","attempt":2,"finishReason":"stop"/))
+    })
+
+    it("keeps the first design when the repair is no better, and never tries a second repair", async () => {
+        charged()
+        vi.mocked(streamText).mockImplementation(() => modelResult(inChunks(DASHBOARD_FAILING), "stop"))
+
+        const text = await (await streamDesign({ request: request(), cost: 1, design, attachments: [] })).text()
+
+        expect(text).toBe(`${failing}${REPLACEMENT_MARK}`)
+        expect(finalDesign(text)).toBe(failing)
+        // The repair still had errors, and that's the end of it: one design, one repair
+        expect(streamText).toHaveBeenCalledTimes(2)
+        expect(ConsumeCreditsQuery).toHaveBeenCalledTimes(1)
+        expect(checkLine()).toContain('"repair":"discarded"')
+    })
+
+    it("keeps the first design when the repair stops before it's finished", async () => {
+        charged()
+        modelAnswers([inChunks(DASHBOARD_FAILING), "stop"], [['<div data-generated-ui><section id="hero">'], "length"])
+
+        const response = await streamDesign({ request: request(), cost: 1, design, attachments: [] })
+
+        expect(await readDesignStream(response)).toBe(failing)
+        expect(streamText).toHaveBeenCalledTimes(2)
+        expect(ConsumeCreditsQuery).toHaveBeenCalledTimes(1)
+        expect(checkLine()).toContain('"repair":"failed"')
+    })
+
+    it("doesn't repair for a tab that can't take a replacement", async () => {
+        charged()
+        modelAnswers([inChunks(DASHBOARD_FAILING), "stop"])
+
+        const text = await (await streamDesign({ request: request({}), cost: 1, design, attachments: [] })).text()
+
+        expect(text).toBe(failing)
+        expect(streamText).toHaveBeenCalledTimes(1)
+        expect(checkLine()).toBe('[design-check] {"mode":"initial","errors":3,"warnings":0,"kinds":{"contrast":1,"placeholder":1,"name":1},"repair":"not-sent"}')
+    })
+
+    it("sends a design without errors as it is, after one call", async () => {
+        charged()
+        modelAnswers([inChunks(DASHBOARD_PASSING), "stop"])
+
+        const text = await (await streamDesign({ request: request(), cost: 1, design, attachments: [] })).text()
+
+        expect(text).toBe(passing)
+        expect(streamText).toHaveBeenCalledTimes(1)
+        expect(checkLine()).toContain('"repair":"not-needed"')
+    })
+
+    it("breaks off a first design that didn't finish, without checking or repairing it", async () => {
+        charged()
+        modelAnswers([inChunks(DASHBOARD_FAILING).slice(0, 2), "length"])
+
+        const response = await streamDesign({ request: request(), cost: 1, design, attachments: [] })
+
+        await expect(response.text()).rejects.toThrow()
+        expect(streamText).toHaveBeenCalledTimes(1)
+        expect(checkLine()).toBeUndefined()
     })
 })
 

@@ -3,9 +3,17 @@
 //
 //   npm run eval:generation                 Dry run, the default: no model calls and no network. Prints
 //                                           each fixture's design contract and its prompt.
-//   npm run eval:generation -- --live       Calls the model with EVAL_GOOGLE_API_KEY, which must be set
-//                                           and must not be the app's key: initial, refine and workflow
-//                                           rounds, at most 9 HTTP calls with every retry counted.
+//   npm run eval:generation -- --live       Runs the fixtures through the app's own generation
+//                                           (src/lib/design-generation.ts: streaming, the incomplete-
+//                                           design check, the validator and its one repair call) with
+//                                           EVAL_GOOGLE_API_KEY, which must be set and must not be the
+//                                           app's key. Initial, refine and workflow rounds; each design
+//                                           takes at most 2 model calls, and the SDK retries nothing,
+//                                           so the cap counts real calls. Every call is logged with its
+//                                           route, fixture, run, attempt and finish reason, and every
+//                                           design with the validator's issues before and after repair.
+//   --repeat <n>                            With --live: the rounds n times over (1-5), to see how much
+//                                           the same fixture varies from run to run.
 //   --out <dir>                             Also writes the snapshots, and a live run's designs, there.
 //
 // It never touches Convex: no projects, no credits, no billing. Live runs send the outline without a
@@ -14,22 +22,25 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { buildDesignContract, contractCorrections, type DesignContract } from "@/lib/design-contract"
+import { generateDesign, IncompleteDesignError, type AttemptReport, type CheckReport } from "@/lib/design-generation"
 import {
     DESIGN_MAX_OUTPUT_TOKENS,
     DESIGN_MODEL_ID,
-    DESIGN_PROVIDER_OPTIONS,
     DESIGN_TEMPERATURE,
     DESIGN_THINKING_BUDGET,
     designPrompt,
     WORKFLOW_PAGE_TYPES,
     type DesignRequest,
 } from "@/lib/design-request"
-import { buildImageManifest, designHtmlForPrompt, resolveDesignHtml, type ImageManifest } from "@/lib/image-manifest"
+import { finalDesign, REPLACEMENT_MARK } from "@/lib/design-stream"
+import { errorCount, issueSummary, type Issue } from "@/lib/design-validator"
+import { buildImageManifest, designHtmlForPrompt, type ImageManifest } from "@/lib/image-manifest"
 import { outlineImageSlots, truncateOutline } from "@/lib/wireframe-outline"
-import { BANNED_COPY_WORDS } from "@/prompts"
 import { EVAL_FIXTURES, type EvalFixture } from "./eval-fixtures"
 
-const MAX_LIVE_CALLS = 9
+// A design is at most two calls: the design, and one repair when the check finds errors
+const CALLS_PER_DESIGN = 2
+const MAX_REPEAT = 5
 
 type InitialRequest = Extract<DesignRequest, { mode: "initial" }>
 
@@ -78,13 +89,12 @@ const appKeys = () => {
     return keys
 }
 
-// Checks a design the way a reviewer would, without judging taste
+// What the validator doesn't check, read off the HTML the way a reviewer would, without judging taste
 const review = (html: string, request: DesignRequest, previous?: string) => {
     const style = /<style[^>]*>([\s\S]*?)<\/style>/i.exec(html)?.[1] ?? ""
     const colorClasses = ["c-bg", "c-fg", "c-card-bg", "c-card-fg", "c-primary-bg", "c-primary-fg", "c-secondary-bg", "c-secondary-fg", "c-muted-bg", "c-muted-fg", "c-accent-bg", "c-accent-fg", "c-border"]
     const typeClasses = ["t-h1", "t-h2", "t-h3", "t-body", "t-small", "t-button", "t-label"]
     const visible = html.replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ")
-    const banned = BANNED_COPY_WORDS.map((word) => word.replace(/ \(.*\)$/, "")).filter((word) => new RegExp(`\\b${word}`, "i").test(visible))
     const ids = (markup: string) => new Set([...markup.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]))
     const nodes = request.mode === "initial" && request.outline ? request.outline.nodes.flatMap(function all(node): string[] { return [node.id, ...(node.children ?? []).flatMap(all)] }) : []
     const marked = new Set([...html.matchAll(/data-node="([^"]+)"/g)].map((match) => match[1]))
@@ -93,19 +103,29 @@ const review = (html: string, request: DesignRequest, previous?: string) => {
         wrapped: /^\s*<div data-generated-ui/.test(html) && /<\/div>\s*$/.test(html),
         missingColorClasses: colorClasses.filter((name) => !style.includes(`.${name}`)),
         missingTypeClasses: typeClasses.filter((name) => !style.includes(`.${name}`)),
-        contractColorsInStyle: Object.values(request.contract.colors).filter((hex) => style.toUpperCase().includes(hex)).length,
-        tailwindColors: (html.match(/\b(?:bg|text|border|ring|from|to|via)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|white|black)(?:-\d{2,3})?\b/g) ?? []).length,
-        arbitraryColors: (html.match(/\[#[0-9a-f]{3,8}\]/gi) ?? []).length,
         viewportUnits: (html.match(/\b(?:min-)?[hw]-screen\b|\d+(?:\.\d+)?v[hw]\b/g) ?? []).length,
-        bannedWords: banned,
         exclamations: (visible.match(/!/g) ?? []).length,
-        placeholders: (html.match(/data-placeholder=/g) ?? []).length,
+        imagePlaceholders: (html.match(/data-placeholder=/g) ?? []).length,
         ...(nodes.length ? { outlineNodesMarked: `${nodes.filter((id) => marked.has(id)).length}/${nodes.length}` } : {}),
         ...(previous ? { idsKept: `${kept}/${ids(previous).size}` } : {}),
     }
 }
 
-const live = async (prepared: Prepared[], out: string | null) => {
+type Outcome = {
+    design: string
+    route: string
+    run: number
+    calls: number
+    // Errors in the first design, and in the one kept; null when the design didn't finish
+    errorsBefore: number | null
+    errorsAfter: number | null
+    repair: CheckReport["repair"] | "incomplete"
+}
+
+const issueLines = (title: string, issues: Issue[]) =>
+    issues.length === 0 ? [`  ${title}: no issues`] : [`  ${title}:`, ...issues.map((issue) => `    [${issue.severity}] ${issue.kind}${issue.count > 1 ? ` ×${issue.count}` : ""}: ${issue.message}`)]
+
+const live = async (prepared: Prepared[], out: string | null, repeat: number) => {
     const key = process.env.EVAL_GOOGLE_API_KEY
     if (!key) {
         console.error("--live needs EVAL_GOOGLE_API_KEY: a Gemini API key of its own, not the app's.")
@@ -117,55 +137,112 @@ const live = async (prepared: Prepared[], out: string | null) => {
     }
     // Loaded here so a dry run doesn't even load the SDK
     const { createGoogleGenerativeAI } = await import("@ai-sdk/google")
-    const { generateText } = await import("ai")
 
-    // Every HTTP request the SDK makes passes through here, retries included
+    // Initial and refine for each fixture, and three workflow pages from the first
+    const designsPerRun = prepared.length * 2 + 3
+    const cap = designsPerRun * repeat * CALLS_PER_DESIGN
+    // Every HTTP request the SDK makes passes through here; it retries nothing, so each is one call
     let calls = 0
     const cappedFetch: typeof fetch = async (input, init) => {
-        if (calls >= MAX_LIVE_CALLS) throw new Error(`The eval's cap of ${MAX_LIVE_CALLS} model calls is reached`)
+        if (calls >= cap) throw new Error(`The eval's cap of ${cap} model calls is reached`)
         calls++
         return fetch(input, init)
     }
     const model = createGoogleGenerativeAI({ apiKey: key, fetch: cappedFetch })(DESIGN_MODEL_ID)
     const directory = out ?? path.join(process.cwd(), ".eval-output", new Date().toISOString().replace(/[:.]/g, "-"))
     mkdirSync(directory, { recursive: true })
+    console.log(rule("Live run"))
+    console.log(`${designsPerRun} designs a run × ${repeat} run${repeat === 1 ? "" : "s"}, each at most ${CALLS_PER_DESIGN} model calls (the design and one repair): ${cap} calls at most.`)
 
-    const run = async (label: string, request: DesignRequest, previous?: string) => {
-        const { system, text } = designPrompt(request)
-        const startedAt = Date.now()
+    const outcomes: Outcome[] = []
+    // One design through the app's generation, as the route named would make it
+    const run = async (number: number, route: string, fixture: string, label: string, request: Exclude<DesignRequest, { mode: "repair" }>, previous?: string) => {
+        const name = `${label}${repeat > 1 ? `-run${number}` : ""}`.replace(/\s+/g, "-")
+        const attempts: AttemptReport[] = []
+        let check: CheckReport | null = null
+        let text = ""
         try {
-            const result = await generateText({ model, system, messages: [{ role: "user", content: text }], temperature: DESIGN_TEMPERATURE, maxOutputTokens: DESIGN_MAX_OUTPUT_TOKENS, providerOptions: DESIGN_PROVIDER_OPTIONS, maxRetries: 2 })
-            const placeholderColors = { fill: request.contract.colors.muted, ink: request.contract.colors.mutedForeground }
-            const html = resolveDesignHtml(result.text.trim(), request.manifest, placeholderColors)
-            writeFileSync(path.join(directory, `${label}.html`), html)
-            const summary = { label, finishReason: result.finishReason, usage: result.totalUsage, ms: Date.now() - startedAt, characters: html.length, ...review(html, request, previous) }
-            console.log(JSON.stringify(summary))
-            return result.finishReason === "stop" ? html : null
+            for await (const chunk of generateDesign({
+                model,
+                design: request,
+                attachments: [],
+                repair: true,
+                maxRetries: 0,
+                onAttempt: (report) => {
+                    attempts.push(report)
+                    console.log(JSON.stringify({ call: calls, route, fixture, run: number, attempt: report.attempt, mode: report.mode, finishReason: report.finishReason, ms: report.ms, usage: report.usage }))
+                },
+                onCheck: (report) => {
+                    check = report
+                },
+            })) {
+                text += chunk
+            }
         } catch (error) {
-            console.log(JSON.stringify({ label, error: error instanceof Error ? error.message : String(error), callsSoFar: calls }))
+            const reason = error instanceof IncompleteDesignError ? `incomplete (${error.finishReason})` : error instanceof Error ? error.message : String(error)
+            console.log(JSON.stringify({ design: name, route, error: reason, calls: attempts.length }))
+            outcomes.push({ design: label, route, run: number, calls: attempts.length, errorsBefore: null, errorsAfter: null, repair: "incomplete" })
             return null
         }
+        const first = text.split(REPLACEMENT_MARK)[0]
+        const html = finalDesign(text)
+        writeFileSync(path.join(directory, `${name}.html`), html)
+        if (html !== first) writeFileSync(path.join(directory, `${name}.first.html`), first)
+        const result = check as CheckReport | null
+        const before = result?.before ?? []
+        const after = result?.repair === "kept" ? result.after ?? [] : before
+        outcomes.push({ design: label, route, run: number, calls: attempts.length, errorsBefore: errorCount(before), errorsAfter: errorCount(after), repair: result?.repair ?? "not-needed" })
+        console.log(JSON.stringify({ design: name, route, calls: attempts.length, characters: html.length, check: issueSummary(before), repair: result?.repair, ...(result?.after ? { afterRepair: issueSummary(result.after) } : {}), ...review(html, request, previous) }))
+        for (const line of issueLines("Issues in the first design", before)) console.log(line)
+        if (result?.after) for (const line of issueLines(`Issues in the repair (${result.repair})`, result.after)) console.log(line)
+        return html
     }
 
-    const initial: (string | null)[] = []
-    for (const item of prepared) {
-        initial.push(await run(`${item.fixture.name}-initial`.replace(/\s+/g, "-"), { ...item.initial, hasWireframe: false, imagesAttached: false }))
+    // The app logs a [design] line for every call; the lines above say which design each was for
+    const appInfo = console.info
+    console.info = () => {}
+    try {
+        for (let number = 1; number <= repeat; number++) {
+            if (repeat > 1) console.log(rule(`Run ${number} of ${repeat}`))
+            const initial: (string | null)[] = []
+            for (const item of prepared) {
+                initial.push(await run(number, "/api/generate", item.fixture.name, `${item.fixture.name}-initial`, { ...item.initial, hasWireframe: false, imagesAttached: false }))
+            }
+            for (const [index, item] of prepared.entries()) {
+                const html = initial[index]
+                if (!html) continue
+                await run(number, "/api/generate/redesign", item.fixture.name, `${item.fixture.name}-refine`, {
+                    mode: "refine", contract: item.contract, manifest: item.manifest, message: item.fixture.refine,
+                    currentHtml: designHtmlForPrompt(html, item.manifest), outline: item.initial.outline, hasWireframe: false, imagesAttached: false,
+                }, html)
+            }
+            const main = prepared[0]
+            if (initial[0]) {
+                for (const pageType of WORKFLOW_PAGE_TYPES.slice(0, 3)) {
+                    await run(number, "/api/generate/workflow", main.fixture.name, `workflow-${pageType.split(":")[0].toLowerCase()}`, { mode: "workflow", contract: main.contract, manifest: main.manifest, pageType, mainHtml: designHtmlForPrompt(initial[0], main.manifest), imagesAttached: false })
+                }
+            }
+        }
+    } finally {
+        console.info = appInfo
     }
-    for (const [index, item] of prepared.entries()) {
-        const html = initial[index]
-        if (!html) continue
-        await run(`${item.fixture.name}-refine`.replace(/\s+/g, "-"), {
-            mode: "refine", contract: item.contract, manifest: item.manifest, message: item.fixture.refine,
-            currentHtml: designHtmlForPrompt(html, item.manifest), outline: item.initial.outline, hasWireframe: false, imagesAttached: false,
-        }, html)
+
+    console.log(rule("Validator issues, by run"))
+    for (let number = 1; number <= repeat; number++) {
+        const ofRun = outcomes.filter((outcome) => outcome.run === number)
+        const finished = ofRun.filter((outcome) => outcome.errorsBefore !== null)
+        const sum = (values: (number | null)[]) => values.reduce<number>((total, value) => total + (value ?? 0), 0)
+        const repairs = ["kept", "discarded", "failed"].map((kind) => `${ofRun.filter((outcome) => outcome.repair === kind).length} ${kind}`).join(", ")
+        console.log(`Run ${number}: ${finished.length}/${ofRun.length} designs finished; errors ${sum(finished.map((outcome) => outcome.errorsBefore))} before repair, ${sum(finished.map((outcome) => outcome.errorsAfter))} after; repairs ${repairs}; ${sum(ofRun.map((outcome) => outcome.calls))} calls`)
     }
-    const main = prepared[0]
-    if (initial[0]) {
-        for (const pageType of WORKFLOW_PAGE_TYPES.slice(0, 3)) {
-            await run(`workflow-${pageType.split(":")[0].toLowerCase()}`, { mode: "workflow", contract: main.contract, manifest: main.manifest, pageType, mainHtml: designHtmlForPrompt(initial[0], main.manifest), imagesAttached: false })
+    if (repeat > 1) {
+        console.log("\nErrors before → after repair, run by run, for each design:")
+        for (const label of [...new Set(outcomes.map((outcome) => outcome.design))]) {
+            const runs = outcomes.filter((outcome) => outcome.design === label).map((outcome) => (outcome.errorsBefore === null ? "incomplete" : `${outcome.errorsBefore}→${outcome.errorsAfter}`))
+            console.log(`  ${label}: ${runs.join(", ")}`)
         }
     }
-    console.log(`\n${calls} model call${calls === 1 ? "" : "s"} made (cap ${MAX_LIVE_CALLS}). Designs are in ${directory}.`)
+    console.log(`\n${calls} model call${calls === 1 ? "" : "s"} made (cap ${cap}). Designs are in ${directory}.`)
     return 0
 }
 
@@ -174,6 +251,12 @@ const live = async (prepared: Prepared[], out: string | null) => {
 export const main = async (args: string[]) => {
     const isLive = args.includes("--live")
     const out = option(args, "--out")
+    const repeatOption = option(args, "--repeat")
+    const repeat = repeatOption === null ? 1 : Number(repeatOption)
+    if (!Number.isInteger(repeat) || repeat < 1 || repeat > MAX_REPEAT) {
+        console.error(`--repeat takes a whole number from 1 to ${MAX_REPEAT}.`)
+        return 2
+    }
     const prepared = EVAL_FIXTURES.map(prepare)
 
     const snapshots = prepared.map(snapshot)
@@ -189,8 +272,8 @@ export const main = async (args: string[]) => {
         console.log(`${fixture.name}: ${corrected.length} contrast correction${corrected.length === 1 ? "" : "s"}${corrected.length ? ` (${corrected.join(", ")})` : ""}; ${contract.notes.length} note${contract.notes.length === 1 ? "" : "s"}`)
     }
     if (!isLive) {
-        console.log("\nDry run: no model calls were made. Add --live (with EVAL_GOOGLE_API_KEY) to run the fixtures against the model.")
+        console.log("\nDry run: no model calls were made. Add --live (with EVAL_GOOGLE_API_KEY) to run the fixtures against the model, and --repeat <n> to run them n times.")
         return 0
     }
-    return live(prepared, out)
+    return live(prepared, out, repeat)
 }

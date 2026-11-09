@@ -1,12 +1,13 @@
 import { google } from "@ai-sdk/google"
-import { streamText, type UserContent } from "ai"
 import { NextResponse } from "next/server"
 import { InspirationImagesQuery, StyleGuideQuery } from "@/convex/query.config"
 import type { StyleGuide } from "@/redux/api/style-guide"
 import { chargedGeneration } from "./credits"
 import { buildDesignContract, contractCorrections, type DesignContract } from "./design-contract"
-import { DESIGN_MAX_OUTPUT_TOKENS, DESIGN_MODEL_ID, DESIGN_PROVIDER_OPTIONS, DESIGN_TEMPERATURE, designPrompt, type DesignRequest } from "./design-request"
-import { buildImageManifest, loadImages, resolveDesignImages, type ImageManifest, type LoadedImage } from "./image-manifest"
+import { generateDesign, type DesignAttachment } from "./design-generation"
+import { DESIGN_MODEL_ID, type DesignRequest } from "./design-request"
+import { acceptsReplacement } from "./design-stream"
+import { buildImageManifest, loadImages, type ImageManifest, type LoadedImage } from "./image-manifest"
 import type { OutlineImageSlot } from "./wireframe-outline"
 
 // The model every generate route asks
@@ -63,61 +64,30 @@ export const prepareDesign = async (projectId: string, guide: StyleGuide, slots:
 export const imageParts = (images: LoadedImage[]) =>
     images.flatMap((image) => (image.bytes ? [{ type: 'image' as const, image: image.bytes, ...(image.mediaType ? { mediaType: image.mediaType } : {}) }] : []))
 
-// Thrown when the model stopped before the design was finished
-export class IncompleteDesignError extends Error {
-    constructor(readonly finishReason: string) {
-        super(`The model stopped before the design was finished (${finishReason})`)
-        this.name = 'IncompleteDesignError'
-    }
-}
-
-// An attachment that follows the request's text
-export type DesignAttachment = Exclude<UserContent, string>[number]
-
 type StreamDesignOptions = {
     request: Request
     // Credits charged once the model's output starts
     cost: number
-    design: DesignRequest
+    design: Exclude<DesignRequest, { mode: "repair" }>
     // Images after the request's text: the wireframe first, when there is one, then the manifest's
     attachments: DesignAttachment[]
 }
 
-// Streams an HTML design from the model with the mode's instructions, charging `cost` credits once
-// output starts. Image ids are swapped for the project's image addresses as it streams. The finish
-// reason and token usage are logged; when the model didn't finish (finishReason other than "stop")
-// the response breaks off, so the client knows not to keep what it got.
+// Streams an HTML design from the model with the mode's instructions (src/lib/design-generation.ts),
+// charging `cost` credits once output starts: once per design, the repair call included. Image ids are
+// swapped for the project's image addresses as it streams, and when the model didn't finish the
+// response breaks off, so the client knows not to keep what it got. A client that reads replacements
+// gets the repaired design after the first when the check found errors and the repair has fewer.
 export const streamDesign = ({ request, cost, design, attachments }: StreamDesignOptions) => {
     const generation = chargedGeneration(request, cost)
-    const startedAt = Date.now()
-    const { system, text } = designPrompt(design)
-    const result = streamText({
+    return generation.respond(generateDesign({
         model,
-        system,
-        messages: [{ role: 'user', content: [{ type: 'text', text }, ...attachments] }],
-        temperature: DESIGN_TEMPERATURE,
-        maxOutputTokens: DESIGN_MAX_OUTPUT_TOKENS,
-        providerOptions: DESIGN_PROVIDER_OPTIONS,
+        design,
+        attachments,
         abortSignal: generation.abortSignal,
         onError: generation.onError,
-    })
-    const finished = (async () => {
-        let finishReason: string
-        try {
-            finishReason = await result.finishReason
-        } catch (error) {
-            // No output at all (a refused key, say): logged too, so every request leaves a line
-            console.info(`[design] ${JSON.stringify({ mode: design.mode, finishReason: 'no-output', ms: Date.now() - startedAt })}`)
-            throw error
-        }
-        const usage = await result.totalUsage.catch(() => undefined)
-        console.info(`[design] ${JSON.stringify({ mode: design.mode, finishReason, usage, ms: Date.now() - startedAt })}`)
-        if (finishReason !== 'stop') throw new IncompleteDesignError(finishReason)
-    })()
-    // respond() reports a failure; this only keeps one nobody reads (an aborted request's) quiet
-    finished.catch(() => {})
-    const placeholderColors = { fill: design.contract.colors.muted, ink: design.contract.colors.mutedForeground }
-    return generation.respond(resolveDesignImages(result.textStream, design.manifest, placeholderColors), finished)
+        repair: acceptsReplacement(request),
+    }))
 }
 
 // Logs a request that threw and returns the 500 response the client shows
@@ -129,4 +99,5 @@ export const generationFailed = (message: string, error: unknown) => {
     )
 }
 
-export type { DesignRequest, ImageManifest }
+export { IncompleteDesignError } from "./design-generation"
+export type { DesignAttachment, DesignRequest, ImageManifest }
