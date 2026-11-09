@@ -1,21 +1,25 @@
 import { streamText } from "ai"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ConsumeCreditsQuery, InspirationImagesQuery, StyleGuideQuery } from "@/convex/query.config"
-import { prompts } from "@/prompts"
+import { designSystemPrompt } from "@/prompts"
 import type { StyleGuide } from "@/redux/api/style-guide"
+import { buildDesignContract } from "./design-contract"
+import { DESIGN_MAX_OUTPUT_TOKENS, designPrompt, type DesignRequest } from "./design-request"
 import {
-    colorsText,
+    designContractFor,
     generationFailed,
     getInspirationImageUrls,
     getStyleGuide,
     imageParts,
+    IncompleteDesignError,
+    prepareDesign,
     streamDesign,
     styleGuideMissing,
-    styleGuideSections,
-    typographyText,
 } from "./generation"
+import { buildImageManifest, designHtmlForPrompt, resolveDesignHtml } from "./image-manifest"
 
-// The real queries call Convex with the signed-in user's token
+// The real queries call Convex with the signed-in user's token. Nothing here reaches the model,
+// Convex or the network.
 vi.mock("@/convex/query.config", () => ({
     ConsumeCreditsQuery: vi.fn(),
     InspirationImagesQuery: vi.fn(),
@@ -28,7 +32,7 @@ const guide = {
     theme: "Calm",
     description: "Soft and clear",
     colorSections: [
-        { title: "Primary Colors", swatches: [{ name: "Background", hexColor: "#ffffff", description: "page" }, { name: "Primary", hexColor: "#1c5dc2", description: "buttons" }] },
+        { title: "Primary Colors", swatches: [{ name: "Background", hexColor: "#ffffff", description: "page" }, { name: "Foreground", hexColor: "#1F2933" }, { name: "Primary", hexColor: "#F2C14E", description: "buttons" }, { name: "Primary Foreground", hexColor: "#FFFFFF" }] },
         { title: "Status & Feedback Colors", swatches: [{ name: "Destructive", hexColor: "#b01f2a", description: "errors" }] },
     ],
     typographySections: [
@@ -36,27 +40,29 @@ const guide = {
     ],
 } as unknown as StyleGuide
 
+const imageUrl = "https://img.test/1.png"
+const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0, 120, 0, 0, 0, 80])
+
 const styleGuideIs = (value: unknown) =>
     vi.mocked(StyleGuideQuery).mockResolvedValue({ styleGuide: value } as Awaited<ReturnType<typeof StyleGuideQuery>>)
+
+// What the AI SDK's streamText returns, as far as streamDesign reads it
+const modelReturns = (chunks: string[], finishReason: string) =>
+    vi.mocked(streamText).mockReturnValue({
+        textStream: (async function* () { yield* chunks })(),
+        finishReason: Promise.resolve(finishReason),
+        totalUsage: Promise.resolve({ inputTokens: 1200, outputTokens: 900, totalTokens: 2100, reasoningTokens: 300 }),
+    } as unknown as ReturnType<typeof streamText>)
 
 beforeEach(() => {
     vi.clearAllMocks()
     vi.spyOn(console, "error").mockImplementation(() => {})
+    vi.spyOn(console, "warn").mockImplementation(() => {})
+    vi.spyOn(console, "info").mockImplementation(() => {})
 })
 
-describe("style guide text", () => {
-    it("lists every swatch and type style", () => {
-        expect(colorsText(guide)).toBe("Background: #ffffff, page, Primary: #1c5dc2, buttons, Destructive: #b01f2a, errors")
-        expect(typographyText(guide)).toBe("H1: page title, Inter, 700, 32px, 40px")
-    })
-
-    it("adds a section for colors and one for typography, and leaves out empty ones", () => {
-        expect(styleGuideSections(guide)).toBe(
-            `\n\nStyle Guide Colors:\n${colorsText(guide)}\n\nTypography:\n${typographyText(guide)}`
-        )
-        const empty = { ...guide, colorSections: [], typographySections: [] } as unknown as StyleGuide
-        expect(styleGuideSections(empty)).toBe("")
-    })
+afterEach(() => {
+    vi.unstubAllGlobals()
 })
 
 describe("getStyleGuide", () => {
@@ -83,40 +89,104 @@ describe("getStyleGuide", () => {
     })
 })
 
-describe("inspiration images", () => {
-    it("keeps the order and drops images without a URL", async () => {
+describe("the design's inputs", () => {
+    it("logs each color the contract had to correct for contrast", () => {
+        const contract = designContractFor(guide, "p1")
+        expect(contract.colors.primaryForeground).not.toBe("#FFFFFF")
+        expect(console.warn).toHaveBeenCalledWith(expect.stringMatching(/^\[design-contract\] project p1: primaryForeground #FFFFFF on primary #F2C14E is 1\.\d+:1; using #[0-9A-F]{6} \(4\.\d+:1\)$/))
+    })
+
+    it("keeps the inspiration images in order and drops images without a URL", async () => {
         vi.mocked(InspirationImagesQuery).mockResolvedValue({
             images: [{ url: "https://img.test/1.png" }, { url: "" }, { url: "https://img.test/2.png" }],
         } as unknown as Awaited<ReturnType<typeof InspirationImagesQuery>>)
+        expect(await getInspirationImageUrls("p1")).toEqual(["https://img.test/1.png", "https://img.test/2.png"])
+    })
 
-        const urls = await getInspirationImageUrls("p1")
+    it("loads the project's images into a manifest, with the outline's slots, and attaches the same bytes", async () => {
+        vi.mocked(InspirationImagesQuery).mockResolvedValue({ images: [{ url: imageUrl }] } as unknown as Awaited<ReturnType<typeof InspirationImagesQuery>>)
+        const fetcher = vi.fn(async () => new Response(png, { headers: { "content-type": "image/png" } }))
+        vi.stubGlobal("fetch", fetcher)
+        const { contract, images, manifest } = await prepareDesign("p1", guide, [{ node: "hero", aspectRatio: 1.5, box: [0, 0, 50, 50] }])
+        expect(fetcher).toHaveBeenCalledWith(imageUrl, expect.anything())
+        expect(contract.version).toBe(1)
+        expect(manifest.images).toEqual([{ id: "img-1", url: imageUrl, width: 120, height: 80, loaded: true }])
+        expect(manifest.slots).toEqual([{ id: "slot-1", node: "hero", aspectRatio: 1.5, image: "img-1" }])
+        expect(imageParts(images)).toEqual([{ type: "image", image: png, mediaType: "image/png" }])
+    })
 
-        expect(urls).toEqual(["https://img.test/1.png", "https://img.test/2.png"])
-        expect(imageParts(urls)).toEqual([
-            { type: "image", image: "https://img.test/1.png" },
-            { type: "image", image: "https://img.test/2.png" },
-        ])
+    it("keeps img-3 as img-3 when image 2 fails to load, in an initial design and in a refine", async () => {
+        const urls = ["https://img.test/1.png", "https://img.test/2.png", "https://img.test/3.png"]
+        vi.mocked(InspirationImagesQuery).mockResolvedValue({ images: urls.map((url) => ({ url })) } as unknown as Awaited<ReturnType<typeof InspirationImagesQuery>>)
+        vi.stubGlobal("fetch", vi.fn(async (url: string) =>
+            url === urls[1] ? new Response("gone", { status: 404 }) : new Response(png, { headers: { "content-type": "image/png" } })))
+        const colors = { fill: "#EEEEEE", ink: "#333333" }
+        const { contract, images, manifest } = await prepareDesign("p1", guide, [{ node: "hero", aspectRatio: 1.5, box: [0, 0, 50, 50] }, { node: "card", aspectRatio: 1, box: [60, 60, 70, 70] }])
+
+        expect(manifest.images.map((image) => [image.id, image.url, image.loaded])).toEqual([["img-1", urls[0], true], ["img-2", urls[1], false], ["img-3", urls[2], true]])
+        // The slots skip the image that's missing
+        expect(manifest.slots.map((slot) => slot.image)).toEqual(["img-1", "img-3"])
+        // Only the two that loaded are attached, and the request names them
+        expect(imageParts(images)).toEqual([{ type: "image", image: png, mediaType: "image/png" }, { type: "image", image: png, mediaType: "image/png" }])
+        const initial = designPrompt({ mode: "initial", contract, manifest, outline: null, hasWireframe: true }).text
+        expect(initial).toContain("Attached images: the wireframe, then img-1, img-3.")
+        expect(resolveDesignHtml('<img src="img-3" alt="c"><img src="img-2" alt="b">', manifest, colors)).toMatch(new RegExp(`^<img src="${urls[2]}" alt="c"><img src="data:image/svg\\+xml,[^"]+" data-placeholder="true" alt="b">$`))
+
+        // A refine of a design saved when all three loaded: the same ids, the same attachments
+        const saved = `<img src="${urls[0]}" alt="a"><img src="${urls[1]}" alt="b"><img src="${urls[2]}" alt="c">`
+        const refine = designPrompt({ mode: "refine", contract, manifest, message: "Make it green", currentHtml: designHtmlForPrompt(saved, manifest), outline: null, hasWireframe: true }).text
+        expect(refine).toContain('<img src="img-1" alt="a"><img src="img-2" alt="b"><img src="img-3" alt="c">')
+        expect(refine).toContain("Attached images: the wireframe this page was first built from, then img-1, img-3.")
+        expect(resolveDesignHtml('<img src="img-3" alt="c">', manifest, colors)).toBe(`<img src="${urls[2]}" alt="c">`)
     })
 })
 
 describe("streamDesign", () => {
-    it("asks the model with the design instructions and streams its output, charging the cost", async () => {
-        vi.mocked(streamText).mockReturnValue({
-            textStream: (async function* () { yield "<div>"; yield "</div>" })(),
-        } as unknown as ReturnType<typeof streamText>)
+    const contract = buildDesignContract(guide)
+    const manifest = buildImageManifest([{ url: imageUrl, width: 120, height: 80 }])
+    const design: DesignRequest = { mode: "refine", contract, manifest, message: "Make the button green", currentHtml: '<div data-generated-ui><img src="img-1"></div>', outline: null, hasWireframe: false }
+    const request = () => new Request("http://localhost/api/generate/redesign", { method: "POST" })
+
+    it("asks the model with the mode's instructions at temperature 0.2 and an output limit, and streams the design with its images resolved", async () => {
+        modelReturns(['<div data-generated-ui><img src="im', 'g-1" alt="Pots"></div>'], "stop")
         vi.mocked(ConsumeCreditsQuery).mockResolvedValue({ ok: true, balance: 3 } as Awaited<ReturnType<typeof ConsumeCreditsQuery>>)
-        const content = [{ type: "text" as const, text: "Make a page" }, ...imageParts(["https://img.test/1.png"])]
 
-        const response = await streamDesign(new Request("http://localhost/api/generate", { method: "POST" }), 4, content)
+        const response = await streamDesign({ request: request(), cost: 1, design, attachments: [{ type: "image", image: png, mediaType: "image/png" }] })
 
-        expect(vi.mocked(streamText).mock.calls[0][0]).toMatchObject({
+        const call = vi.mocked(streamText).mock.calls[0][0]
+        expect(call).toMatchObject({
             model: { modelId: "gemini-2.5-flash" },
-            system: prompts.generatedUi.system,
-            temperature: 0.7,
-            messages: [{ role: "user", content }],
+            system: designSystemPrompt("refine"),
+            temperature: 0.2,
+            maxOutputTokens: DESIGN_MAX_OUTPUT_TOKENS,
+            // Thinking counts against the limit, so it's capped
+            providerOptions: { google: { thinkingConfig: { thinkingBudget: 4096 } } },
         })
-        expect(await response.text()).toBe("<div></div>")
-        expect(ConsumeCreditsQuery).toHaveBeenCalledWith({ amount: 4 })
+        const [message] = call.messages!
+        expect(message.role).toBe("user")
+        expect(message.content).toEqual([{ type: "text", text: expect.stringContaining('The user\'s request: "Make the button green"') }, { type: "image", image: png, mediaType: "image/png" }])
+        expect(await response.text()).toBe(`<div data-generated-ui><img src="${imageUrl}" alt="Pots"></div>`)
+        expect(ConsumeCreditsQuery).toHaveBeenCalledWith({ amount: 1 })
+        // How it finished, and the tokens it took, thinking included
+        expect(console.info).toHaveBeenCalledWith(expect.stringMatching(/^\[design\] \{"mode":"refine","finishReason":"stop","usage":\{"inputTokens":1200,"outputTokens":900,"totalTokens":2100,"reasoningTokens":300\},"ms":\d+\}$/))
+    })
+
+    it("breaks the stream off when the model stopped before finishing, so the client doesn't keep it", async () => {
+        modelReturns(['<div data-generated-ui><section id="hero">', "<h1>Plants"], "length")
+        vi.mocked(ConsumeCreditsQuery).mockResolvedValue({ ok: true, balance: 3 } as Awaited<ReturnType<typeof ConsumeCreditsQuery>>)
+
+        const response = await streamDesign({ request: request(), cost: 1, design, attachments: [] })
+
+        await expect(response.text()).rejects.toThrow()
+        expect(console.info).toHaveBeenCalledWith(expect.stringContaining('"finishReason":"length"'))
+        expect(console.error).toHaveBeenCalledWith("Generation ended incomplete:", expect.any(IncompleteDesignError))
+    })
+
+    it("charges nothing when the model returns no output at all", async () => {
+        modelReturns([], "length")
+        const response = await streamDesign({ request: request(), cost: 1, design, attachments: [] })
+        expect(response.status).toBe(502)
+        expect(ConsumeCreditsQuery).not.toHaveBeenCalled()
     })
 })
 

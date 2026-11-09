@@ -5,6 +5,7 @@ import {
     PayloadAction,
     EntityState,
     current,
+    original,
 } from "@reduxjs/toolkit";
 import type { Point } from "../viewport";
 
@@ -160,6 +161,22 @@ const pushHistory = (state: ShapesState): void => {
     // Any new mutation clears the redo stack
     state.future = [];
 };
+
+// The entry without the shape, or the entry itself when it doesn't have it
+const withoutShape = (entry: HistoryEntry, id: string): HistoryEntry => {
+    if (!(id in entry.shapes.entities)) return entry;
+    const entities = { ...entry.shapes.entities };
+    delete entities[id];
+    const selected = { ...entry.selected };
+    delete selected[id];
+    return { shapes: { ids: entry.shapes.ids.filter((other) => other !== id), entities }, selected, frameCounter: entry.frameCounter };
+};
+
+// Whether going from one to the other would change no shape: only the selection, if anything
+const sameShapes = (a: HistoryEntry, b: HistoryEntry) =>
+    a.frameCounter === b.frameCounter &&
+    a.shapes.ids.length === b.shapes.ids.length &&
+    a.shapes.ids.every((id, index) => id === b.shapes.ids[index] && a.shapes.entities[id] === b.shapes.entities[id]);
 
 const DEFAULTS = { stroke: "#ffff", strokeWidth: 2 as const };
 
@@ -473,10 +490,31 @@ const shapesSlice = createSlice({
 
         removeShape(state, action: PayloadAction<string>) {
             pushHistory(state);
-            const id = action.payload;
             // frameCounter stays as it is when a frame is removed, so a new frame never repeats a number
+            shapesAdapter.removeOne(state.shapes, action.payload);
+            delete state.selected[action.payload];
+        },
+
+        // Takes a shape away as if it had never been added, for a design that came back incomplete:
+        // off the canvas and out of every undo and redo step, and the steps that this leaves changing
+        // nothing go too. The step that added it is one of them, so undo goes straight to what was done
+        // before it, and no step brings the broken design back, whatever was done since it was added.
+        discardShape(state, action: PayloadAction<string>) {
+            const id = action.payload;
+            const before = original(state)!;
             shapesAdapter.removeOne(state.shapes, id);
             delete state.selected[id];
+            const present: HistoryEntry = { shapes: current(state.shapes), selected: { ...state.selected }, frameCounter: state.frameCounter };
+            const presentBefore: HistoryEntry = { shapes: before.shapes, selected: before.selected, frameCounter: before.frameCounter };
+            // Undo walks back from the end of past, redo from the end of future, both from the present.
+            // A step that already changed nothing (a click that started no drag yet) stays.
+            const prune = (entries: HistoryEntry[]) => {
+                const cleaned = entries.map((entry) => withoutShape(entry, id));
+                return cleaned.filter((entry, index) =>
+                    !sameShapes(entry, cleaned[index + 1] ?? present) || sameShapes(entries[index], entries[index + 1] ?? presentBefore));
+            };
+            state.past = prune(before.past);
+            state.future = prune(before.future);
         },
 
         clearAll(state) {
@@ -604,6 +642,7 @@ export const {
     updateShape,
     updateShapes,
     removeShape,
+    discardShape,
     clearAll,
     selectShape,
     deselectShape,

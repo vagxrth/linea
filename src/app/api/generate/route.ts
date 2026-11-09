@@ -1,5 +1,6 @@
 import { checkCredits } from "@/lib/credits";
-import { colorsText, generationFailed, getInspirationImageUrls, getStyleGuide, imageParts, streamDesign, styleGuideMissing, typographyText } from "@/lib/generation";
+import { generationFailed, getStyleGuide, imageParts, prepareDesign, streamDesign, styleGuideMissing } from "@/lib/generation";
+import { outlineImageSlots, parseOutline } from "@/lib/wireframe-outline";
 import { NextRequest, NextResponse } from "next/server";
 
 const COST = 1
@@ -9,9 +10,13 @@ export async function POST(request: NextRequest) {
         const formData = await request.formData()
         const imageFile = formData.get('image') as File
         const projectId = formData.get('projectId') as string
-        // The wireframe's boxes and labels, read from the canvas (src/lib/frame-outline.ts). It comes
-        // from the request, so it's capped.
-        const outline = String(formData.get('outline') ?? '').slice(0, 12_000)
+        // The wireframe's boxes, labels and words, read from the canvas (src/lib/frame-outline.ts) as
+        // JSON. It comes from the request, so it's checked and capped before the prompt uses it. A tab
+        // opened before structured outlines still sends the old text form, which is used as it is.
+        const rawOutline = String(formData.get('outline') ?? '').slice(0, 100_000)
+        const structured = rawOutline.trimStart().startsWith('{')
+        const outline = structured ? parseOutline(rawOutline) : null
+        const legacyOutline = !structured && rawOutline ? rawOutline.slice(0, 12_000) : null
 
         if (!imageFile) {
             return NextResponse.json(
@@ -43,27 +48,14 @@ export async function POST(request: NextRequest) {
         const guide = await getStyleGuide(projectId)
         if (!guide) return styleGuideMissing('generating designs')
 
-        const imageUrls = await getInspirationImageUrls(projectId)
+        const { contract, images, manifest } = await prepareDesign(projectId, guide, outline ? outlineImageSlots(outline) : [])
 
-        const userPrompt = `Use the user-provided styleGuide for all visual decisions: put its hex colors into the .c-* color classes of your <style> block and follow its typography. Enforce WCAG AA contrast (≥4.5:1 body, ≥3:1 large text) through the .c-* pairs you choose, and if any token is missing fall back to neutral light defaults. Never invent new tokens; keep usage consistent across components.
-        The first attached image is the wireframe. Any images after it are the user's inspiration images, in the same order as the inspiration image URLs below.
-        Use the inspiration images to bias choices within the existing styleGuide tokens (e.g., which primary/secondary to emphasize, where accent appears, light vs. dark sections), and place them in the wireframe's image slots by URL, as the system instructions describe.
-        Do not derive new colors or fonts from images; do not create tokens that aren’t in styleGuide.
-        If an inspiration image is unreachable/invalid, leave it out without degrading output quality.
-        On conflicts: the styleGuide always wins over image cues.
-        inspiration image URLs: ${imageUrls.length > 0 ? imageUrls.map((url, index) => `${index + 1}. ${url}`).join(', ') : 'none'}
-        colors: ${colorsText(guide)}
-        typography: ${typographyText(guide)}
-        copy: plain and specific, like the business's own site: name what is offered and one concrete detail. Don't use these words: discover, explore, curated, unique, transform, sanctuary, oasis, serene, elevate, unlock, seamless, perfect. No made-up names, quotes or statistics.
-        ${outline ? `wireframe outline (exact, from the canvas shapes; follow it as the system instructions describe):
-${outline}` : ''}
-        `;
-
-        return streamDesign(request, COST, [
-            { type: 'text', text: userPrompt },
-            { type: 'image', image: base64Image },
-            ...imageParts(imageUrls),
-        ], imageUrls)
+        return streamDesign({
+            request,
+            cost: COST,
+            design: { mode: 'initial', contract, manifest, outline, legacyOutline, hasWireframe: true },
+            attachments: [{ type: 'image', image: base64Image, mediaType: 'image/png' }, ...imageParts(images)],
+        })
 
     } catch (error) {
         return generationFailed('Failed to generate design', error)

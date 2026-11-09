@@ -90,7 +90,11 @@ export async function POST(request: NextRequest) {
         4. "Utility & Form Colors": Border, Input, Ring
         5. "Status & Feedback Colors": Destructive, Destructive Foreground
 
-        And exactly 3 typography sections with appropriate titles (e.g., "Headings", "Body", "UI Elements").`;
+        And exactly 3 typography sections, with styles named after their role, since generated designs look them up by name:
+        1. "Headings": H1, H2, H3
+        2. "Body": Body, Small
+        3. "UI Elements": Button, Label
+        Give every style a letterSpacing (for example "-0.02em", "0.01em" or "normal").`;
 
         const result = await generateObject({
             model,

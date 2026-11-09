@@ -8,6 +8,7 @@ import reducer, {
     addRect,
     clearSelection,
     deleteSelected,
+    discardShape,
     duplicateSelected,
     loadProject,
     pasteShapes,
@@ -122,6 +123,60 @@ describe("undo and redo", () => {
         expect(state.past).toHaveLength(100)
         const undoneAll = run(Array.from({ length: 105 }, () => undo()), state)
         expect(ids(undoneAll)).toHaveLength(5)
+    })
+})
+
+describe("a design that came back incomplete", () => {
+    // A design added beside its frame, then streamed in without history, the way generating one goes
+    const design = (id: string, extra: { isWorkflowPage?: boolean; skipHistory?: boolean } = {}) =>
+        addGeneratedUI({ x: 200, y: 0, w: 400, h: 300, id, uiSpecData: null, sourceFrameId: "frame", ...extra })
+    const streamed = (id: string) => updateShape({ id, patch: { uiSpecData: "<div data-generated-ui><section>" }, skipHistory: true })
+    const framed = run([addFrame(frame)])
+    const frameOnly = ids(framed)
+
+    it("takes its undo step with it, so undo goes straight to what was done before it", () => {
+        const failed = run([design("d"), streamed("d"), discardShape("d")], framed)
+        expect(ids(failed)).toEqual(frameOnly)
+        expect(failed.past).toEqual(framed.past)
+        // The first undo takes the frame away, as it would have if the design had never been asked for
+        expect(ids(run([undo()], failed))).toEqual([])
+    })
+
+    it("comes out of the steps made while it streamed, so neither undo nor redo brings it back", () => {
+        const busy = run([design("d"), streamed("d"), addRect(rect)], framed)
+        const rectId = ids(busy).at(-1)!
+        const failed = run([discardShape("d")], busy)
+        expect(ids(failed)).toEqual([...frameOnly, rectId])
+        // Undo takes away the rect, then the frame, and never shows the design
+        expect(ids(run([undo()], failed))).toEqual(frameOnly)
+        const undone = run([undo(), undo()], failed)
+        expect(ids(undone)).toEqual([])
+        for (const entry of [...failed.past, ...undone.future]) expect(entry.shapes.ids).not.toContain("d")
+        expect(ids(run([redo(), redo()], undone))).toEqual(ids(failed))
+        // An undo made while it streamed leaves it in the redo steps, and it comes out of those too
+        const undoneWhileStreaming = run([design("d"), streamed("d"), undo(), discardShape("d")], framed)
+        expect(undoneWhileStreaming.future).toEqual([])
+    })
+
+    it("keeps a workflow's one undo step while any of its pages arrived", () => {
+        const main = run([design("main"), streamed("main")], framed)
+        const pages = run([design("p1", { isWorkflowPage: true }), design("p2", { isWorkflowPage: true, skipHistory: true })], main)
+        const oneFailed = run([discardShape("p1")], pages)
+        expect(ids(oneFailed)).toEqual([...ids(main), "p2"])
+        expect(ids(run([undo()], oneFailed))).toEqual(ids(main))
+        // Once every page has failed, the step goes too
+        const allFailed = run([discardShape("p2")], oneFailed)
+        expect(allFailed.past).toEqual(main.past)
+    })
+
+    it("leaves alone a step that already changed nothing, like a drag that has only just started", () => {
+        const frameId = frameOnly[0]
+        const failed = run([design("d"), streamed("d"), recordHistory(), discardShape("d")], framed)
+        const dragged = run([updateShapes({ updates: [{ id: frameId, changes: { x: 40 } }], skipHistory: true })], failed)
+        // The drag undoes on its own, then the frame
+        const once = run([undo()], dragged)
+        expect(once.shapes.entities[frameId]).toMatchObject({ x: 0 })
+        expect(ids(run([undo()], once))).toEqual([])
     })
 })
 

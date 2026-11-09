@@ -56,6 +56,27 @@ describe("checkCredits", () => {
 })
 
 describe("chargedGeneration", () => {
+    it("breaks the stream off when the model says it didn't finish, after sending what it had", async () => {
+        consumeReturns({ ok: true, balance: 0 })
+        const finished = Promise.reject(new Error("The model stopped before the design was finished (length)"))
+        // As streamDesign does: respond() reads it later
+        finished.catch(() => {})
+        const response = await chargedGeneration(request(), 1).respond(textStream("<div>", "<p>Half"), finished)
+
+        const reader = response.body!.getReader()
+        const decoder = new TextDecoder()
+        expect(decoder.decode((await reader.read()).value)).toBe("<div>")
+        expect(decoder.decode((await reader.read()).value)).toBe("<p>Half")
+        await expect(reader.read()).rejects.toThrow("(length)")
+        expect(ConsumeCreditsQuery).toHaveBeenCalledWith({ amount: 1 })
+    })
+
+    it("ends normally when the model says it finished", async () => {
+        consumeReturns({ ok: true, balance: 0 })
+        const response = await chargedGeneration(request(), 1).respond(textStream("<div>", "</div>"), Promise.resolve())
+        expect(await response.text()).toBe("<div></div>")
+    })
+
     it("streams the whole design and charges the cost once", async () => {
         consumeReturns({ ok: true, balance: 0 })
         const generation = chargedGeneration(request(), 4)
