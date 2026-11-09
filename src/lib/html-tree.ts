@@ -167,14 +167,19 @@ export const parseHtml = (html: string): HtmlElement => {
 
 export const isElement = (node: HtmlNode): node is HtmlElement => node.kind === "element"
 
-// Every element in document order, the root first
+// Every element in document order, the root first. The walks here use a list rather than recursion,
+// so a page nested thousands deep (4,000 <span>s never closed) can't overflow the call stack.
 export const elementsOf = (root: HtmlElement): HtmlElement[] => {
     const found: HtmlElement[] = []
-    const visit = (node: HtmlElement) => {
+    const pending: HtmlElement[] = [root]
+    while (pending.length > 0) {
+        const node = pending.pop()!
         found.push(node)
-        for (const child of node.children) if (isElement(child)) visit(child)
+        for (let index = node.children.length - 1; index >= 0; index--) {
+            const child = node.children[index]
+            if (isElement(child)) pending.push(child)
+        }
     }
-    visit(root)
     return found
 }
 
@@ -184,8 +189,16 @@ export const elementChildren = (node: HtmlElement) => node.children.filter(isEle
 export const ownText = (node: HtmlElement) =>
     node.children.map((child) => (child.kind === "text" ? child.text : "")).join("").replace(/\s+/g, " ").trim()
 
-export const textContent = (node: HtmlElement): string =>
-    node.children.map((child) => (child.kind === "text" ? child.text : textContent(child))).join("").replace(/\s+/g, " ").trim()
+export const textContent = (node: HtmlElement): string => {
+    const parts: string[] = []
+    const pending: HtmlNode[] = [...node.children].reverse()
+    while (pending.length > 0) {
+        const current = pending.pop()!
+        if (current.kind === "text") parts.push(current.text)
+        else for (let index = current.children.length - 1; index >= 0; index--) pending.push(current.children[index])
+    }
+    return parts.join("").replace(/\s+/g, " ").trim()
+}
 
 // Whether the element sits inside (or is) one named in `tags`
 export const isWithin = (node: HtmlElement | null, tags: Set<string>) => {
@@ -197,7 +210,7 @@ const clip = (value: string, length: number) => (value.length > length ? `${valu
 
 // An element as it appears in the HTML, for a person or a model to find it: <span class="pill t-small">
 export const describeElement = (node: HtmlElement) => {
-    const shown = ["id", "class", ...(node.tag === "img" ? ["alt", "data-slot"] : [])]
+    const shown = ["id", "class", "data-node", ...(node.tag === "img" ? ["alt", "data-slot"] : [])]
     const attributes = shown
         .filter((name) => node.attributes.get(name))
         .map((name) => ` ${name}="${clip(node.attributes.get(name)!, name === "class" ? 80 : 50)}"`)
@@ -210,6 +223,18 @@ export const nearestId = (node: HtmlElement | null) => {
     for (let at = node; at; at = at.parent) {
         const id = at.attributes.get("id")
         if (id) return `#${id}`
+    }
+    return null
+}
+
+// The nearest landmark around an element, for finding it: an id, or the wireframe node it was built
+// for ([data-node="row-2"]), whichever is closer. Designs often have data-node and no ids.
+export const nearestLandmark = (node: HtmlElement | null) => {
+    for (let at = node; at; at = at.parent) {
+        const id = at.attributes.get("id")
+        if (id) return `#${id}`
+        const built = at.attributes.get("data-node")
+        if (built) return `[data-node="${built}"]`
     }
     return null
 }

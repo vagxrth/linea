@@ -3,57 +3,104 @@ import { EVAL_FIXTURES } from "../../scripts/eval-fixtures"
 import { BANNED_COPY_WORDS } from "../prompts/design"
 import { buildDesignContract } from "./design-contract"
 import { BANNED_PATTERNS, errorCount, issueSummary, REPAIR_LIST_LIMIT, repairProblems, validate, type Issue, type ValidationContext } from "./design-validator"
-import { DASHBOARD_FAILING, DASHBOARD_PASSING, DASHBOARD_REFINE_FAILING, DASHBOARD_STYLE, LANDING_FAILING } from "./design-validator.fixtures"
+import { DASHBOARD_INITIAL, DASHBOARD_REFINE, DASHBOARD_REPAIRED, LANDING_INITIAL, LANDING_REFINE, SETTINGS_INITIAL } from "./design-validator.fixtures"
 
-const [landing, dashboard] = EVAL_FIXTURES.map((fixture) => buildDesignContract(fixture.guide))
+const [landingFixture, dashboardFixture, settingsFixture] = EVAL_FIXTURES
+const [landing, dashboard, settings] = EVAL_FIXTURES.map((fixture) => buildDesignContract(fixture.guide))
 
 const ofKind = (issues: Issue[], kind: Issue["kind"]) => issues.filter((issue) => issue.kind === kind)
+const errors = (issues: Issue[]) => issues.filter((issue) => issue.severity === "error")
+// The quoted texts a message names: "Processing" in <td …>
+const quoted = (issue: Issue) => [...issue.message.matchAll(/"([^"]+)" in </g)].map((match) => match[1])
 
-// A dashboard page with `body` inside its card, in the dashboard's contract
+// The real dashboard's own <style> block, for small pages in its contract
+const DASHBOARD_STYLE = /<style>[\s\S]*?<\/style>/.exec(DASHBOARD_INITIAL)![0]
+
+// A dashboard page with `body` inside its white card
 const card = (body: string) => `<div data-generated-ui>${DASHBOARD_STYLE}<div class="c-bg c-fg"><section id="panel" class="c-card-bg c-card-fg p-4">${body}</section></div></div>`
 
 const check = (html: string, context: ValidationContext = { mode: "initial" }) => validate(html, dashboard, context)
 
-describe("validate, on the designs the live eval flagged", () => {
-    it("finds the white-on-white status text, at 1.00:1, wherever it repeats", () => {
-        const [issue, ...others] = ofKind(check(DASHBOARD_FAILING), "contrast")
+describe("the real designs from the live eval on 2026-11-09", () => {
+    it("dashboard: the white-on-white status text, at 1.00:1 in 3 places, as one finding", () => {
+        const [issue, ...others] = ofKind(check(DASHBOARD_INITIAL), "contrast")
         expect(others).toEqual([])
-        expect(issue).toMatchObject({ severity: "error", count: 3 })
+        expect(issue).toMatchObject({ severity: "error", count: 3, key: "contrast|#FFFFFF|#FFFFFF|4.5" })
         expect(issue.message).toBe(
-            'Contrast 1.00:1, under 4.5:1: text "Completed" in <span class="inline-flex rounded-full px-2 py-0.5 t-label c-primary-fg"> in #orders-table (3 places) is #FFFFFF on #FFFFFF. ' +
+            'Contrast 1.00:1, under 4.5:1: #FFFFFF text on #FFFFFF (3 places): "Processing" in <td class="px-3 py-2 t-body c-primary-fg"> in [data-node="row-2"]; ' +
+            '"Cancelled" in <td class="px-3 py-2 t-body c-destructive-fg"> in [data-node="row-3"]; "Processing" in <td class="px-3 py-2 t-body c-primary-fg"> in [data-node="row-5"]. ' +
             "Use c-card-fg on this c-card-bg, or give the text its own matching pair (c-primary-bg with c-primary-fg)."
         )
     })
 
-    it("finds the made-up customers and the chart placeholder in the same dashboard", () => {
-        const issues = check(DASHBOARD_FAILING)
-        expect(ofKind(issues, "name")).toEqual([expect.objectContaining({ severity: "error", count: 3, message: expect.stringContaining('"Alice Smith", "Bob Johnson", "Carol Davis" (in #orders-table)') })])
-        expect(ofKind(issues, "placeholder")).toEqual([expect.objectContaining({ severity: "error", message: expect.stringContaining('Placeholder text "Chart placeholder" in <p class="t-body c-muted-fg"> in #revenue-chart') })])
-        expect(errorCount(issues)).toBe(3)
+    it("dashboard: all five made-up customers, Charlie Brown and Eve Adams included", () => {
+        const [issue] = ofKind(check(DASHBOARD_INITIAL), "name")
+        expect(issue).toMatchObject({ severity: "error", count: 5 })
+        expect(issue.message).toContain('"Alice Smith", "Bob Johnson", "Charlie Brown", "Diana Prince", "Eve Adams"')
     })
 
-    it("finds every banned word on the landing page, the hero image that collapses, and the inline SVG icons", () => {
-        const issues = validate(LANDING_FAILING, landing, { mode: "initial", width: 940 })
-        expect(ofKind(issues, "copy").map((issue) => issue.message.match(/^Banned word "([^"]+)"/)![1])).toEqual(["Discover", "Explore", "curated", "unique", "perfect"])
-        expect(ofKind(issues, "image-size")).toEqual([expect.objectContaining({ severity: "error", message: expect.stringContaining('<img class="w-full rounded-2xl object-cover" alt="A pothos trailing from a hanging pot" data-slot="slot-1"> in #hero-section has no height or aspect ratio') })])
-        expect(ofKind(issues, "inline-svg")).toEqual([expect.objectContaining({ severity: "error", count: 3, message: expect.stringMatching(/^3 inline <svg>s \(in #features\): the design's frame removes inline SVG/) })])
-        expect(ofKind(issues, "contrast")).toEqual([])
+    it("dashboard: the chart placeholder and the search icon's SVG too, and nothing else", () => {
+        const issues = check(DASHBOARD_INITIAL)
+        expect(ofKind(issues, "placeholder").map((issue) => issue.message)).toEqual([
+            'Placeholder text "Placeholder for a detailed sales chart." in <p class="t-body c-muted-fg"> in [data-node="chrt01"]. Draw the chart instead: bars built from divs, each a share of the largest, with labels.',
+        ])
+        expect(ofKind(issues, "inline-svg")).toEqual([expect.objectContaining({ severity: "error", count: 1 })])
+        expect(issues.map((issue) => issue.kind)).toEqual(["contrast", "name", "placeholder", "inline-svg"])
     })
 
-    it("finds the refine's second Status column and its off-contract green, and leaves what the page already had as warnings", () => {
-        const issues = check(DASHBOARD_REFINE_FAILING, { mode: "refine", previousHtml: DASHBOARD_FAILING })
-        const errors = issues.filter((issue) => issue.severity === "error")
-        expect(errors.map((issue) => issue.key).sort()).toEqual(["color|#166534", "color|#DCFCE7", "duplicate-column|status"])
-        expect(errors.find((issue) => issue.kind === "duplicate-column")!.message).toBe('Table #orders-table has the column "Status" twice. Keep one, and drop the others from the header and every row.')
-        expect(errors.find((issue) => issue.key === "color|#DCFCE7")!.message).toBe("Color #DCFCE7 isn't in the design contract: [data-generated-ui] .status-paid { background-color }. Use the contract's colors, through the .c-* classes.")
-        // The white-on-white pills, the names and the placeholder were in the page before the refine
-        const warnings = issues.filter((issue) => issue.severity === "warning")
-        expect(warnings.map((issue) => issue.kind).sort()).toEqual(["contrast", "name", "placeholder"])
-        for (const warning of warnings) expect(warning.message).toMatch(/\(It was already there\.\)$/)
+    it("dashboard refine: the Delivery Status column beside Status is the one new error", () => {
+        const issues = check(DASHBOARD_REFINE, { mode: "refine", previousHtml: DASHBOARD_INITIAL, suppliedText: dashboardFixture.refine })
+        expect(errors(issues).map((issue) => issue.message)).toEqual([
+            'Table [data-node="tabl01"] has the columns "Status" and "Delivery Status", which say the same thing. Keep one, and drop the other from the header and every row.',
+        ])
+        // What the page already had stays, as warnings
+        expect(issues.filter((issue) => issue.severity === "warning").map((issue) => issue.kind)).toEqual(["contrast", "name", "placeholder", "inline-svg"])
     })
 
-    it("passes the same dashboard done right: matching pairs, a chart from divs, customers by role", () => {
-        expect(check(DASHBOARD_PASSING)).toEqual([])
+    it("landing: the banned words in its sentences are errors, and one only in a link is a warning", () => {
+        const copy = ofKind(validate(LANDING_INITIAL, landing, { mode: "initial", width: 940 }), "copy")
+        expect(copy.map((issue) => [issue.key, issue.severity, issue.count])).toEqual([
+            ["copy|discover", "warning", 1],
+            ["copy|explore", "error", 2],
+            ["copy|unique", "error", 1],
+            ["copy|perfect", "error", 1],
+        ])
+        // The error quotes the sentence, where a repair should change it
+        expect(copy[1].message).toMatch(/^Banned word "Explore" \(2 places\): "Explore our selection of thoughtfully designed items/)
+    })
+
+    it("landing refine: the sage green the request asked for, #E0EAE3, is a warning", () => {
+        const issues = validate(LANDING_REFINE, landing, { mode: "refine", previousHtml: LANDING_INITIAL, suppliedText: landingFixture.refine, colorRequested: true, width: 940 })
+        expect(ofKind(issues, "color")).toEqual([expect.objectContaining({ key: "color|#E0EAE3", severity: "warning" })])
+        expect(errorCount(issues)).toBe(0)
+    })
+
+    it("settings: no errors", () => {
+        expect(settingsFixture.name).toBe("settings form")
+        expect(validate(SETTINGS_INITIAL, settings, { mode: "initial", width: 1200 })).toEqual([])
+    })
+
+    it("the dashboard as a good repair leaves it: no issues at all", () => {
+        expect(check(DASHBOARD_REPAIRED)).toEqual([])
+    })
+})
+
+describe("pages that would overflow a recursive walk", () => {
+    it("finishes 4,000 <span>s never closed", () => {
+        const page = `<div data-generated-ui>${DASHBOARD_STYLE}${'<span class="c-fg">x'.repeat(4000)}</div>`
+        expect(() => check(page)).not.toThrow()
+    })
+
+    it("finishes nesting 3,000 deep, and still styles the text at the bottom", () => {
+        const page = `<div data-generated-ui>${"<div>".repeat(3000)}<p class="bg-white text-white">Deep</p>${"</div>".repeat(3000)}</div>`
+        expect(ofKind(check(page), "contrast")).toEqual([expect.objectContaining({ key: "contrast|#FFFFFF|#FFFFFF|4.5" })])
+    })
+
+    it("keeps a selector that walks up the page several times fast on a deep one", () => {
+        const page = `<div data-generated-ui><style>.a .b .c .d { color: #FFFFFF }</style>${'<div class="a b c d">'.repeat(2000)}<p>Text</p>${"</div>".repeat(2000)}</div>`
+        const started = performance.now()
+        check(page)
+        expect(performance.now() - started).toBeLessThan(5000)
     })
 })
 
@@ -62,13 +109,13 @@ describe("contrast", () => {
         // #8A8A8A on white is about 3.45:1
         const page = card('<p style="color: #8A8A8A">Small print</p><p style="color: #8A8A8A; font-size: 24px">Big heading</p><p style="color: #8A8A8A; font-size: 19px; font-weight: 700">Bold line</p>')
         const failing = ofKind(check(page), "contrast")
-        expect(failing.map((issue) => issue.message.match(/text "([^"]+)"/)![1])).toEqual(["Small print"])
-        expect(failing[0].message).toMatch(/^Contrast 3\.\d\d:1, under 4\.5:1/)
+        expect(failing.map(quoted)).toEqual([["Small print"]])
+        expect(failing[0].message).toMatch(/^Contrast 3\.\d\d:1, under 4\.5:1: #8A8A8A text on #FFFFFF: /)
     })
 
     it("reads Tailwind color classes, inline styles and see-through colors", () => {
         const issues = ofKind(check(card('<span class="text-white">One</span><span style="color: rgba(15, 23, 42, 0.2)">Two</span><span class="bg-slate-900 text-white">Three</span>')), "contrast")
-        expect(issues.map((issue) => issue.message.match(/text "([^"]+)"/)![1])).toEqual(["One", "Two"])
+        expect(issues.map(quoted)).toEqual([["One"], ["Two"]])
     })
 
     it("leaves out text it can't see behind, and text that isn't shown or is disabled", () => {
@@ -99,6 +146,16 @@ describe("colors outside the contract", () => {
         expect(ofKind(check(card('<style>.cta:hover { color: #0B5F58 }</style><p style="color: #0B5F58">A</p>')), "color")[0].severity).toBe("error")
     })
 
+    it("are only warnings for a Tailwind neutral on a border or a divider", () => {
+        // (slate-100 would be the contract's own muted color, so stone-100)
+        const page = card('<ul class="divide-y divide-stone-100 border border-gray-200"><li class="border-b-zinc-300 md:border-stone-200">A</li></ul>')
+        const issues = ofKind(check(page), "color")
+        expect(issues).toHaveLength(4)
+        expect(issues.every((issue) => issue.severity === "warning")).toBe(true)
+        // A neutral that fills a surface isn't a hairline
+        expect(ofKind(check(card('<p class="bg-gray-200 border-gray-200">A</p>')), "color")[0].severity).toBe("error")
+    })
+
     it("are only warnings on a refine that asks for a color, and colors the page had before aren't new", () => {
         const page = card('<section style="background-color: #D8E6DC"><p>A</p></section>')
         expect(ofKind(check(page, { mode: "refine", colorRequested: true }), "color")[0].severity).toBe("warning")
@@ -120,6 +177,16 @@ describe("copy", () => {
         expect(found("Elevation 1,200 m, a perfectionist's discovery")).toEqual([])
     })
 
+    it("are warnings in a table's headers, a figure's label and a link, and errors in a sentence", () => {
+        const severities = (body: string) => ofKind(check(card(body)), "copy").map((issue) => issue.severity)
+        expect(severities("<table><thead><tr><th>Unique visitors</th><th>Visits</th></tr></thead></table>")).toEqual(["warning"])
+        expect(severities('<article class="p-4"><h3 class="t-label">Unique visitors</h3><p class="t-h1">12,480</p></article>')).toEqual(["warning"])
+        expect(severities('<a href="#">Explore the map</a>')).toEqual(["warning"])
+        expect(severities("<p>Explore the map to find a shop near you.</p>")).toEqual(["error"])
+        // A label beside nothing that's a figure is just a sentence
+        expect(severities('<div><h3 class="t-label">Unique visitors</h3><p>Every day</p></div>')).toEqual(["error"])
+    })
+
     it("leaves the words the user wrote themselves, on the wireframe or in their request", () => {
         const page = card("<h1>Explore the menu</h1>")
         expect(ofKind(check(page, { mode: "initial", suppliedText: "Explore the menu" }), "copy")).toEqual([])
@@ -131,24 +198,47 @@ describe("copy", () => {
     })
 })
 
-describe("made-up names and placeholders", () => {
-    it("finds people's names, initials included, and not places, products or plain words", () => {
-        const names = (text: string) => ofKind(check(card(`<p>${text}</p>`)), "name")[0]?.message ?? null
-        expect(names("— Sarah K., plant parent")).toContain('"Sarah K."')
-        expect(names("Reviewed by María García-López")).toContain('"María García-López"')
-        expect(names("Grant Access, Will Smith, Paris Office, Alice Springs Library, Max Users")).toBeNull()
-        expect(names('Signed in as <input value="Priya Raman">')).toContain('"Priya Raman"')
+describe("made-up names", () => {
+    const named = (text: string) => ofKind(check(card(`<p>${text}</p>`)), "name")[0]?.message ?? null
+
+    it("finds people's names, initials included, and a given name that's also a word when a surname follows", () => {
+        expect(named("— Sarah K., plant parent")).toContain('"Sarah K."')
+        expect(named("Reviewed by María García-López")).toContain('"María García-López"')
+        expect(named('Signed in as <input value="Priya Raman">')).toContain('"Priya Raman"')
+        expect(named("Charlie Brown, Eve Adams and Will Smith")).toContain('"Charlie Brown", "Eve Adams", "Will Smith"')
+    })
+
+    it("leaves those words alone before an ordinary word, and colors, places and businesses", () => {
+        expect(named("Grant Access, Mark Complete, Max Users, May Sale")).toBeNull()
+        expect(named("Olive Green, Sage Green, Rose Gold and Ruby Red planters")).toBeNull()
+        expect(named("Paris Office, Alice Springs Library, Logan Square, Sarah Lawrence College")).toBeNull()
+    })
+
+    it("are warnings in a testimonial or a quote, and errors anywhere else", () => {
+        const issues = ofKind(check(card('<blockquote>Lovely pots. <cite>Emma Wilson</cite></blockquote><div class="testimonial-card"><p>Noah Clark</p></div><p>Ordered by Liam Murphy</p>')), "name")
+        expect(issues.map((issue) => [issue.key, issue.severity, issue.count])).toEqual([["name", "error", 1], ["name|testimonial", "warning", 2]])
+        expect(issues[1].message).toContain('in a testimonial: "Emma Wilson", "Noah Clark"')
     })
 
     it("leaves a name the user supplied", () => {
         expect(ofKind(check(card("<p>Dr. Maria Lopez</p>"), { mode: "initial", suppliedText: "Dr. Maria Lopez, dentist" }), "name")).toEqual([])
     })
+})
 
+describe("placeholders", () => {
     it("finds lorem ipsum, 'goes here' text, example emails, empty chart boxes and canvases", () => {
         const page = card('<p>Lorem ipsum dolor sit amet</p><p>Your logo goes here</p><p>user@example.com</p><div id="sales-chart" class="h-64 c-muted-bg"></div><canvas id="trend"></canvas>')
         expect(ofKind(check(page), "placeholder").map((issue) => issue.key)).toEqual([
             "placeholder|lorem", "placeholder|goes here", "placeholder|user@example.com", 'placeholder|empty|<div id="sales-chart" class="h-64 c-muted-bg">', "placeholder|canvas",
         ])
+    })
+
+    it("fixes each the way it fits: copy, a chart or a picture", () => {
+        const fix = (body: string) => ofKind(check(card(body)), "placeholder")[0].message.split(". ").slice(1).join(". ")
+        expect(fix("<p>Your text goes here</p>")).toBe("Write the real copy, as the copy policy asks.")
+        expect(fix("<p>Chart placeholder</p>")).toBe("Draw the chart instead: bars built from divs, each a share of the largest, with labels.")
+        expect(fix('<div id="revenue-chart"><p>Coming here: the placeholder</p></div>')).toBe("Draw the chart instead: bars built from divs, each a share of the largest, with labels.")
+        expect(fix("<p>Hero image placeholder</p>")).toBe('Show the picture instead: an <img src="placeholder"> in a box with a fixed shape.')
     })
 
     it("doesn't take a chart's own bars, an input's hint or a slot's neutral text for placeholders", () => {
@@ -188,6 +278,8 @@ describe("images", () => {
         expect(image('<div class="aspect-video c-muted-bg"><img src="x" alt="a" class="h-full w-full object-cover"></div>')).toEqual([])
         expect(image('<div class="relative h-72"><img src="x" alt="a" class="absolute inset-0 h-full w-full object-cover"></div>')).toEqual([])
         expect(image('<style>.hero-photo { aspect-ratio: 16 / 9 }</style><img src="x" alt="a" class="hero-photo w-full">')).toEqual([])
+        // The landing's real hero, in an aspect-[2.09] box
+        expect(ofKind(validate(LANDING_INITIAL, landing, { mode: "initial" }), "image-size")).toEqual([])
     })
 
     it("flags one that collapses when its picture doesn't load", () => {
@@ -205,13 +297,12 @@ describe("inline SVG", () => {
 
 describe("the repair request's list, and the logs", () => {
     it("lists the errors only, the most visible first, one line each", () => {
-        const issues = validate(LANDING_FAILING, landing, { mode: "initial", width: 940 })
+        const issues = check(DASHBOARD_INITIAL)
         const problems = repairProblems(issues)
         expect(problems).toHaveLength(errorCount(issues))
-        expect(problems[0]).toMatch(/has no height or aspect ratio/)
-        expect(problems[1]).toMatch(/^3 inline <svg>s/)
-        expect(problems.slice(2).every((line) => line.startsWith("Banned word"))).toBe(true)
-        expect(repairProblems(check(DASHBOARD_REFINE_FAILING, { mode: "refine", previousHtml: DASHBOARD_FAILING })).some((line) => line.includes("Alice Smith"))).toBe(false)
+        expect(problems.map((line) => line.split(" ")[0])).toEqual(["Contrast", "1", "Placeholder", "Made-up"])
+        // A refine's list leaves out what the page already had
+        expect(repairProblems(check(DASHBOARD_REFINE, { mode: "refine", previousHtml: DASHBOARD_INITIAL })).some((line) => line.includes("Alice Smith"))).toBe(false)
     })
 
     it("stops at its limit and says how many more there were", () => {
@@ -222,8 +313,8 @@ describe("the repair request's list, and the logs", () => {
     })
 
     it("summarizes by kind for a log line, with none of the page's words in it", () => {
-        const summary = issueSummary(check(DASHBOARD_FAILING))
-        expect(summary).toEqual({ errors: 3, warnings: 0, kinds: { contrast: 1, placeholder: 1, name: 1 } })
-        expect(JSON.stringify(summary)).not.toMatch(/Alice|Completed|Chart/)
+        const summary = issueSummary(check(DASHBOARD_INITIAL))
+        expect(summary).toEqual({ errors: 4, warnings: 0, kinds: { contrast: 1, "inline-svg": 1, placeholder: 1, name: 1 } })
+        expect(JSON.stringify(summary)).not.toMatch(/Alice|Processing|Placeholder for/)
     })
 })

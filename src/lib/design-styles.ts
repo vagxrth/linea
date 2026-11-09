@@ -247,8 +247,14 @@ const matchesSimple = (node: HtmlElement, simple: Simple): boolean => {
     }
 }
 
+// Each descendant combinator walks up the ancestors, so on a page nested thousands deep a selector
+// with several of them could take very long. A match gets this many steps, and is no match past them.
+const MATCH_BUDGET = 2_000
+
 export const matchesSelector = (node: HtmlElement, selector: Selector): boolean => {
+    let steps = 0
     const at = (candidate: HtmlElement, index: number): boolean => {
+        if (++steps > MATCH_BUDGET) return false
         if (!selector.compounds[index].every((simple) => matchesSimple(candidate, simple))) return false
         if (index === 0) return true
         const combinator = selector.combinators[index - 1]
@@ -548,79 +554,91 @@ const DEFAULT_WEIGHT: Record<string, string> = { th: "bold", b: "bolder", strong
 
 export type StyleSheet = ReturnType<typeof parseStylesheet>
 
+const ROOT_STYLE: ComputedStyle = { values: new Map(), color: FRAME_TEXT, surface: FRAME_BACKDROP, opacity: 1, fontSize: REM, fontWeight: 400, hidden: false, variables: new Map() }
+
+// One element's computed style, from its parent's
+const styleOf = (node: HtmlElement, parent: ComputedStyle, sheet: StyleSheet, width: number): ComputedStyle => {
+    const matched = sheet.rules
+        .filter((rule) => matchesSelector(node, rule.selector))
+        .sort((a, b) => a.specificity - b.specificity || a.order - b.order)
+    const inline = parseDeclarations(node.attributes.get("style") ?? "")
+    // Variables first, since the classes and rules below may read them. An element's own variables
+    // can refer to each other (--paper: var(--sand)), so they're all set before any is resolved. An
+    // element that sets none shares its parent's.
+    const own = new Map<string, string>()
+    for (const declaration of [...matched.flatMap((rule) => rule.declarations), ...inline]) {
+        if (declaration.property.startsWith("--")) own.set(declaration.property, declaration.value)
+    }
+    const variables = own.size === 0 ? parent.variables : new Map(parent.variables)
+    for (const [name, value] of own) variables.set(name, value)
+    for (const [name, value] of own) variables.set(name, resolveVariables(value, variables))
+    const variable = (name: string) => variables.get(name) ?? null
+    const utilities = node.classes.map((name) => utility(name, width, variable)).filter((item) => item.applies)
+    utilities.sort((a, b) => a.rank - b.rank)
+
+    // Weakest first; a later declaration of a property wins
+    const ordered: Declaration[] = [
+        ...(DEFAULT_WEIGHT[node.tag] ? [{ property: "font-weight", value: DEFAULT_WEIGHT[node.tag], important: false }] : []),
+        ...(node.attributes.has("hidden") ? [{ property: "display", value: "none", important: false }] : []),
+        ...utilities.flatMap((item) => item.declarations.filter((declaration) => !declaration.important)),
+        ...matched.flatMap((rule) => rule.declarations.filter((declaration) => !declaration.important)),
+        ...inline.filter((declaration) => !declaration.important),
+        ...matched.flatMap((rule) => rule.declarations.filter((declaration) => declaration.important)),
+        ...inline.filter((declaration) => declaration.important),
+        ...utilities.flatMap((item) => item.declarations.filter((declaration) => declaration.important)),
+    ]
+    const values = new Map<string, string>()
+    for (const declaration of ordered) {
+        if (declaration.property.startsWith("--") && declaration.property !== "--linea-sr-only") continue
+        const value = resolveVariables(declaration.value, variables)
+        // The shorthand sets both, so whichever declaration comes later in the cascade wins
+        if (declaration.property === "background") {
+            const isImage = IMAGE_VALUE.test(value)
+            values.set("background-image", isImage ? value : "none")
+            values.set("background-color", isImage ? "transparent" : parseColor(value) ? value : colorsIn(value)[0]?.text ?? (/^\s*none\s*$/i.test(value) ? "transparent" : value))
+            continue
+        }
+        values.set(declaration.property, value)
+    }
+
+    const colorValue = values.get("color")?.trim().toLowerCase()
+    const color = !colorValue || colorValue === "inherit" || colorValue === "currentcolor" || colorValue === "unset" ? parent.color : parseColor(colorValue)
+    const background = backgroundOf(values)
+    const surface = background === "image" ? null
+        : background === null ? parent.surface
+            : background.a >= 1 ? background
+                : parent.surface ? over(background, parent.surface) : null
+    const opacityValue = values.get("opacity")
+    const opacity = opacityValue === undefined ? 1 : Math.min(1, Math.max(0, opacityValue.trim().endsWith("%") ? parseFloat(opacityValue) / 100 : parseFloat(opacityValue)))
+    const display = values.get("display")?.trim().toLowerCase()
+    const visibility = values.get("visibility")?.trim().toLowerCase()
+    return {
+        values,
+        color,
+        surface,
+        opacity: Number.isFinite(opacity) ? opacity : 1,
+        fontSize: values.has("font-size") ? fontSizeOf(values.get("font-size")!, parent.fontSize) ?? parent.fontSize : parent.fontSize,
+        fontWeight: values.has("font-weight") ? fontWeightOf(values.get("font-weight")!, parent.fontWeight) ?? parent.fontWeight : parent.fontWeight,
+        hidden: parent.hidden || display === "none" || visibility === "hidden" || values.get("--linea-sr-only") === "1",
+        variables,
+    }
+}
+
 // Every element's computed style. `width` is the frame's, for media queries and sm:/md: classes.
+// Each element comes after its parent, walked with a list rather than recursion, so a page nested
+// thousands deep can't overflow the call stack.
 export const computeStyles = (root: HtmlElement, sheet: StyleSheet, width: number) => {
     const styles = new Map<HtmlElement, ComputedStyle>()
-    const rootStyle: ComputedStyle = { values: new Map(), color: FRAME_TEXT, surface: FRAME_BACKDROP, opacity: 1, fontSize: REM, fontWeight: 400, hidden: false, variables: new Map() }
-
-    const visit = (node: HtmlElement, parent: ComputedStyle) => {
-        const matched = sheet.rules
-            .filter((rule) => matchesSelector(node, rule.selector))
-            .sort((a, b) => a.specificity - b.specificity || a.order - b.order)
-        const inline = parseDeclarations(node.attributes.get("style") ?? "")
-        // Variables first, since the classes and rules below may read them. An element's own variables
-        // can refer to each other (--paper: var(--sand)), so they're all set before any is resolved.
-        const variables = new Map(parent.variables)
-        const own = new Map<string, string>()
-        for (const declaration of [...matched.flatMap((rule) => rule.declarations), ...inline]) {
-            if (declaration.property.startsWith("--")) own.set(declaration.property, declaration.value)
-        }
-        for (const [name, value] of own) variables.set(name, value)
-        for (const [name, value] of own) variables.set(name, resolveVariables(value, variables))
-        const variable = (name: string) => variables.get(name) ?? null
-        const utilities = node.classes.map((name) => utility(name, width, variable)).filter((item) => item.applies)
-        utilities.sort((a, b) => a.rank - b.rank)
-
-        // Weakest first; a later declaration of a property wins
-        const ordered: Declaration[] = [
-            ...(DEFAULT_WEIGHT[node.tag] ? [{ property: "font-weight", value: DEFAULT_WEIGHT[node.tag], important: false }] : []),
-            ...(node.attributes.has("hidden") ? [{ property: "display", value: "none", important: false }] : []),
-            ...utilities.flatMap((item) => item.declarations.filter((declaration) => !declaration.important)),
-            ...matched.flatMap((rule) => rule.declarations.filter((declaration) => !declaration.important)),
-            ...inline.filter((declaration) => !declaration.important),
-            ...matched.flatMap((rule) => rule.declarations.filter((declaration) => declaration.important)),
-            ...inline.filter((declaration) => declaration.important),
-            ...utilities.flatMap((item) => item.declarations.filter((declaration) => declaration.important)),
-        ]
-        const values = new Map<string, string>()
-        for (const declaration of ordered) {
-            if (declaration.property.startsWith("--") && declaration.property !== "--linea-sr-only") continue
-            const value = resolveVariables(declaration.value, variables)
-            // The shorthand sets both, so whichever declaration comes later in the cascade wins
-            if (declaration.property === "background") {
-                const isImage = IMAGE_VALUE.test(value)
-                values.set("background-image", isImage ? value : "none")
-                values.set("background-color", isImage ? "transparent" : parseColor(value) ? value : colorsIn(value)[0]?.text ?? (/^\s*none\s*$/i.test(value) ? "transparent" : value))
-                continue
-            }
-            values.set(declaration.property, value)
-        }
-
-        const colorValue = values.get("color")?.trim().toLowerCase()
-        const color = !colorValue || colorValue === "inherit" || colorValue === "currentcolor" || colorValue === "unset" ? parent.color : parseColor(colorValue)
-        const background = backgroundOf(values)
-        const surface = background === "image" ? null
-            : background === null ? parent.surface
-                : background.a >= 1 ? background
-                    : parent.surface ? over(background, parent.surface) : null
-        const opacityValue = values.get("opacity")
-        const opacity = opacityValue === undefined ? 1 : Math.min(1, Math.max(0, opacityValue.trim().endsWith("%") ? parseFloat(opacityValue) / 100 : parseFloat(opacityValue)))
-        const display = values.get("display")?.trim().toLowerCase()
-        const visibility = values.get("visibility")?.trim().toLowerCase()
-        const style: ComputedStyle = {
-            values,
-            color,
-            surface,
-            opacity: Number.isFinite(opacity) ? opacity : 1,
-            fontSize: values.has("font-size") ? fontSizeOf(values.get("font-size")!, parent.fontSize) ?? parent.fontSize : parent.fontSize,
-            fontWeight: values.has("font-weight") ? fontWeightOf(values.get("font-weight")!, parent.fontWeight) ?? parent.fontWeight : parent.fontWeight,
-            hidden: parent.hidden || display === "none" || visibility === "hidden" || values.get("--linea-sr-only") === "1",
-            variables,
-        }
+    const pending: [HtmlElement, ComputedStyle][] = [[root, ROOT_STYLE]]
+    while (pending.length > 0) {
+        const [node, parent] = pending.pop()!
+        const style = styleOf(node, parent, sheet, width)
         styles.set(node, style)
-        for (const child of node.children) if (child.kind === "element") visit(child, style)
+        for (let index = node.children.length - 1; index >= 0; index--) {
+            const child = node.children[index]
+            if (child.kind === "element") pending.push([child, style])
+        }
     }
-    visit(root, rootStyle)
     return styles
 }
 

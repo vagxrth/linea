@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { buildDesignContract } from "./design-contract"
-import { validationContextFor } from "./design-generation"
+import { keepsContent, MIN_REPAIR_LENGTH, validationContextFor } from "./design-generation"
+import { DASHBOARD_INITIAL, DASHBOARD_REPAIRED } from "./design-validator.fixtures"
 import { buildImageManifest } from "./image-manifest"
 import { OUTLINE_VERSION, type FrameOutline } from "./wireframe-outline"
 import type { StyleGuide } from "@/redux/api/style-guide"
@@ -30,5 +31,30 @@ describe("validationContextFor", () => {
 
     it("gives a workflow page its main page, whose problems are its own to keep", () => {
         expect(validationContextFor({ mode: "workflow", contract, manifest, pageType: "Settings", mainHtml: "<div data-generated-ui>main</div>" })).toEqual({ mode: "workflow", previousHtml: "<div data-generated-ui>main</div>" })
+    })
+})
+
+describe("keepsContent: a repair may fix things, never drop them", () => {
+    it("keeps a repair as long as the first design or longer, with every data-node", () => {
+        expect(keepsContent(DASHBOARD_REPAIRED, DASHBOARD_INITIAL)).toBe(true)
+    })
+
+    it("drops one that lost a section, however long it still is", () => {
+        const withoutStats = DASHBOARD_REPAIRED.replace(/<!-- Stats Row -->[\s\S]*?<\/section>/, "")
+        expect(withoutStats.length / DASHBOARD_INITIAL.length).toBeGreaterThan(MIN_REPAIR_LENGTH)
+        expect(keepsContent(withoutStats, DASHBOARD_INITIAL)).toBe(false)
+    })
+
+    it("drops one under 85% of the first design's length, even with every data-node", () => {
+        // The first design without its <style> block: 72% as long
+        const withoutStyles = DASHBOARD_INITIAL.replace(/<style>[\s\S]*?<\/style>/, "")
+        expect(keepsContent(withoutStyles, DASHBOARD_INITIAL)).toBe(false)
+    })
+
+    it("doesn't count re-indenting as dropping, and needs every id too", () => {
+        const flattened = DASHBOARD_REPAIRED.replace(/\n\s*/g, "")
+        expect(keepsContent(flattened, DASHBOARD_INITIAL)).toBe(true)
+        expect(keepsContent(DASHBOARD_REPAIRED.replace('id="search-input"', 'id="search"'), DASHBOARD_INITIAL)).toBe(false)
+        expect(keepsContent("<p>Fixed</p>", DASHBOARD_INITIAL)).toBe(false)
     })
 })

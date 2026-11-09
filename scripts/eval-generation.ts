@@ -7,13 +7,17 @@
 //                                           (src/lib/design-generation.ts: streaming, the incomplete-
 //                                           design check, the validator and its one repair call) with
 //                                           EVAL_GOOGLE_API_KEY, which must be set and must not be the
-//                                           app's key. Initial, refine and workflow rounds; each design
-//                                           takes at most 2 model calls, and the SDK retries nothing,
-//                                           so the cap counts real calls. Every call is logged with its
-//                                           route, fixture, run, attempt and finish reason, and every
-//                                           design with the validator's issues before and after repair.
-//   --repeat <n>                            With --live: the rounds n times over (1-5), to see how much
-//                                           the same fixture varies from run to run.
+//                                           app's key. Initial, refine and workflow rounds: a design is
+//                                           one model call, or two with its repair, and the SDK retries
+//                                           nothing, so the cap counts real calls. Every call is logged
+//                                           with its route, fixture, run, attempt and finish reason, and
+//                                           every design with the validator's issues before and after.
+//   --cap <n>                               With --live: the most model calls it makes, 9 unless set, at
+//                                           most 30. The planned count is printed before any call. A
+//                                           design that wouldn't fit is skipped, and one whose repair
+//                                           wouldn't fit is checked without a repair.
+//   --repeat <n>                            With --live: the rounds n times over (1-5), within the same
+//                                           cap, to see how much the same fixture varies run to run.
 //   --out <dir>                             Also writes the snapshots, and a live run's designs, there.
 //
 // It never touches Convex: no projects, no credits, no billing. Live runs send the outline without a
@@ -41,6 +45,9 @@ import { EVAL_FIXTURES, type EvalFixture } from "./eval-fixtures"
 // A design is at most two calls: the design, and one repair when the check finds errors
 const CALLS_PER_DESIGN = 2
 const MAX_REPEAT = 5
+// The most model calls a live run makes, unless --cap says otherwise, and the most --cap allows
+const DEFAULT_CAP = 9
+const MAX_CAP = 30
 
 type InitialRequest = Extract<DesignRequest, { mode: "initial" }>
 
@@ -119,13 +126,13 @@ type Outcome = {
     // Errors in the first design, and in the one kept; null when the design didn't finish
     errorsBefore: number | null
     errorsAfter: number | null
-    repair: CheckReport["repair"] | "incomplete"
+    repair: CheckReport["repair"] | "incomplete" | "skipped"
 }
 
 const issueLines = (title: string, issues: Issue[]) =>
     issues.length === 0 ? [`  ${title}: no issues`] : [`  ${title}:`, ...issues.map((issue) => `    [${issue.severity}] ${issue.kind}${issue.count > 1 ? ` ×${issue.count}` : ""}: ${issue.message}`)]
 
-const live = async (prepared: Prepared[], out: string | null, repeat: number) => {
+const live = async (prepared: Prepared[], out: string | null, repeat: number, cap: number) => {
     const key = process.env.EVAL_GOOGLE_API_KEY
     if (!key) {
         console.error("--live needs EVAL_GOOGLE_API_KEY: a Gemini API key of its own, not the app's.")
@@ -135,13 +142,21 @@ const live = async (prepared: Prepared[], out: string | null, repeat: number) =>
         console.error("EVAL_GOOGLE_API_KEY is the app's GOOGLE_GENERATIVE_AI_API_KEY. Use a separate key for evals.")
         return 2
     }
-    // Loaded here so a dry run doesn't even load the SDK
+    // Initial and refine for each fixture, and three workflow pages from the first, before any call
+    const designsPerRun = prepared.length * 2 + 3
+    const designs = designsPerRun * repeat
+    console.log(rule("Live run"))
+    console.log(
+        `Planned: ${designs} designs (${designsPerRun} a run × ${repeat} run${repeat === 1 ? "" : "s"}), one model call each or ${CALLS_PER_DESIGN} with a repair: ` +
+        `${designs} to ${designs * CALLS_PER_DESIGN} calls. Cap: ${cap}, so at most ${Math.min(cap, designs * CALLS_PER_DESIGN)} calls are made` +
+        `${designs * CALLS_PER_DESIGN > cap ? "; designs past the cap are skipped, and a repair that wouldn't fit isn't made" : ""}.`
+    )
+
+    // Only a live run loads the Google provider. A dry run loads the app's generation code too, and calls nothing.
     const { createGoogleGenerativeAI } = await import("@ai-sdk/google")
 
-    // Initial and refine for each fixture, and three workflow pages from the first
-    const designsPerRun = prepared.length * 2 + 3
-    const cap = designsPerRun * repeat * CALLS_PER_DESIGN
-    // Every HTTP request the SDK makes passes through here; it retries nothing, so each is one call
+    // Every HTTP request the SDK makes passes through here; it retries nothing, so each is one call,
+    // across every run, and none goes past the cap
     let calls = 0
     const cappedFetch: typeof fetch = async (input, init) => {
         if (calls >= cap) throw new Error(`The eval's cap of ${cap} model calls is reached`)
@@ -151,13 +166,18 @@ const live = async (prepared: Prepared[], out: string | null, repeat: number) =>
     const model = createGoogleGenerativeAI({ apiKey: key, fetch: cappedFetch })(DESIGN_MODEL_ID)
     const directory = out ?? path.join(process.cwd(), ".eval-output", new Date().toISOString().replace(/[:.]/g, "-"))
     mkdirSync(directory, { recursive: true })
-    console.log(rule("Live run"))
-    console.log(`${designsPerRun} designs a run × ${repeat} run${repeat === 1 ? "" : "s"}, each at most ${CALLS_PER_DESIGN} model calls (the design and one repair): ${cap} calls at most.`)
 
     const outcomes: Outcome[] = []
     // One design through the app's generation, as the route named would make it
     const run = async (number: number, route: string, fixture: string, label: string, request: Exclude<DesignRequest, { mode: "repair" }>, previous?: string) => {
         const name = `${label}${repeat > 1 ? `-run${number}` : ""}`.replace(/\s+/g, "-")
+        // Within the cap: no design that can't have its first call, no repair that can't have its own
+        if (calls >= cap) {
+            console.log(JSON.stringify({ design: name, route, skipped: `the cap of ${cap} calls is reached` }))
+            outcomes.push({ design: label, route, run: number, calls: 0, errorsBefore: null, errorsAfter: null, repair: "skipped" })
+            return null
+        }
+        const repairFits = calls + CALLS_PER_DESIGN <= cap
         const attempts: AttemptReport[] = []
         let check: CheckReport | null = null
         let text = ""
@@ -166,7 +186,7 @@ const live = async (prepared: Prepared[], out: string | null, repeat: number) =>
                 model,
                 design: request,
                 attachments: [],
-                repair: true,
+                repair: repairFits,
                 maxRetries: 0,
                 onAttempt: (report) => {
                     attempts.push(report)
@@ -192,7 +212,8 @@ const live = async (prepared: Prepared[], out: string | null, repeat: number) =>
         const before = result?.before ?? []
         const after = result?.repair === "kept" ? result.after ?? [] : before
         outcomes.push({ design: label, route, run: number, calls: attempts.length, errorsBefore: errorCount(before), errorsAfter: errorCount(after), repair: result?.repair ?? "not-needed" })
-        console.log(JSON.stringify({ design: name, route, calls: attempts.length, characters: html.length, check: issueSummary(before), repair: result?.repair, ...(result?.after ? { afterRepair: issueSummary(result.after) } : {}), ...review(html, request, previous) }))
+        const repair = result?.repair === "not-sent" && !repairFits ? "not-made (cap)" : result?.repair
+        console.log(JSON.stringify({ design: name, route, calls: attempts.length, characters: html.length, check: issueSummary(before), repair, ...(result?.discarded ? { discarded: result.discarded } : {}), ...(result?.after ? { afterRepair: issueSummary(result.after) } : {}), ...review(html, request, previous) }))
         for (const line of issueLines("Issues in the first design", before)) console.log(line)
         if (result?.after) for (const line of issueLines(`Issues in the repair (${result.repair})`, result.after)) console.log(line)
         return html
@@ -231,14 +252,15 @@ const live = async (prepared: Prepared[], out: string | null, repeat: number) =>
     for (let number = 1; number <= repeat; number++) {
         const ofRun = outcomes.filter((outcome) => outcome.run === number)
         const finished = ofRun.filter((outcome) => outcome.errorsBefore !== null)
+        const skipped = ofRun.filter((outcome) => outcome.repair === "skipped").length
         const sum = (values: (number | null)[]) => values.reduce<number>((total, value) => total + (value ?? 0), 0)
         const repairs = ["kept", "discarded", "failed"].map((kind) => `${ofRun.filter((outcome) => outcome.repair === kind).length} ${kind}`).join(", ")
-        console.log(`Run ${number}: ${finished.length}/${ofRun.length} designs finished; errors ${sum(finished.map((outcome) => outcome.errorsBefore))} before repair, ${sum(finished.map((outcome) => outcome.errorsAfter))} after; repairs ${repairs}; ${sum(ofRun.map((outcome) => outcome.calls))} calls`)
+        console.log(`Run ${number}: ${finished.length}/${ofRun.length} designs finished${skipped ? ` (${skipped} skipped at the cap)` : ""}; errors ${sum(finished.map((outcome) => outcome.errorsBefore))} before repair, ${sum(finished.map((outcome) => outcome.errorsAfter))} after; repairs ${repairs}; ${sum(ofRun.map((outcome) => outcome.calls))} calls`)
     }
     if (repeat > 1) {
         console.log("\nErrors before → after repair, run by run, for each design:")
         for (const label of [...new Set(outcomes.map((outcome) => outcome.design))]) {
-            const runs = outcomes.filter((outcome) => outcome.design === label).map((outcome) => (outcome.errorsBefore === null ? "incomplete" : `${outcome.errorsBefore}→${outcome.errorsAfter}`))
+            const runs = outcomes.filter((outcome) => outcome.design === label).map((outcome) => (outcome.errorsBefore === null ? outcome.repair : `${outcome.errorsBefore}→${outcome.errorsAfter}`))
             console.log(`  ${label}: ${runs.join(", ")}`)
         }
     }
@@ -257,6 +279,12 @@ export const main = async (args: string[]) => {
         console.error(`--repeat takes a whole number from 1 to ${MAX_REPEAT}.`)
         return 2
     }
+    const capOption = option(args, "--cap")
+    const cap = capOption === null ? DEFAULT_CAP : Number(capOption)
+    if (!Number.isInteger(cap) || cap < 1 || cap > MAX_CAP) {
+        console.error(`--cap takes a whole number of model calls from 1 to ${MAX_CAP}.`)
+        return 2
+    }
     const prepared = EVAL_FIXTURES.map(prepare)
 
     const snapshots = prepared.map(snapshot)
@@ -272,8 +300,8 @@ export const main = async (args: string[]) => {
         console.log(`${fixture.name}: ${corrected.length} contrast correction${corrected.length === 1 ? "" : "s"}${corrected.length ? ` (${corrected.join(", ")})` : ""}; ${contract.notes.length} note${contract.notes.length === 1 ? "" : "s"}`)
     }
     if (!isLive) {
-        console.log("\nDry run: no model calls were made. Add --live (with EVAL_GOOGLE_API_KEY) to run the fixtures against the model, and --repeat <n> to run them n times.")
+        console.log(`\nDry run: no model calls were made. Add --live (with EVAL_GOOGLE_API_KEY) to run the fixtures against the model: at most ${DEFAULT_CAP} calls, or --cap <n> up to ${MAX_CAP}, and --repeat <n> to run them n times.`)
         return 0
     }
-    return live(prepared, out, repeat)
+    return live(prepared, out, repeat, cap)
 }

@@ -2,6 +2,7 @@ import { streamText, type LanguageModel, type UserContent } from "ai"
 import { DESIGN_MAX_OUTPUT_TOKENS, DESIGN_PROVIDER_OPTIONS, DESIGN_TEMPERATURE, designPrompt, type DesignRequest } from "./design-request"
 import { REPLACEMENT_MARK } from "./design-stream"
 import { errorCount, issueSummary, repairProblems, validate, type Issue, type ValidationContext } from "./design-validator"
+import { elementsOf, parseHtml } from "./html-tree"
 import { designHtmlForPrompt, resolveDesignImages } from "./image-manifest"
 import type { OutlineNode } from "./wireframe-outline"
 
@@ -26,13 +27,16 @@ export type DesignAttachment = Exclude<UserContent, string>[number]
 // One model call, as it finished
 export type AttemptReport = { mode: DesignRequest["mode"]; attempt: 1 | 2; finishReason: string; usage?: unknown; ms: number }
 
-// What the check found, and what came of the repair: not needed (no errors), not sent (the client
-// can't take a replacement), kept, discarded (it wasn't better) or failed (it stopped, or the user left)
+// What the check found, and what came of the repair: not checked (the check threw on the first
+// design), not needed (no errors), not sent (the client can't take a replacement), kept, discarded (it
+// wasn't better, or it dropped part of the page) or failed (it stopped, the user left, or checking it threw)
 export type CheckReport = {
     mode: DesignRequest["mode"]
     before: Issue[]
     after: Issue[] | null
-    repair: "not-needed" | "not-sent" | "kept" | "discarded" | "failed"
+    repair: "not-checked" | "not-needed" | "not-sent" | "kept" | "discarded" | "failed"
+    // Why a repair was discarded
+    discarded?: "no fewer errors" | "dropped content"
 }
 
 export type GenerateDesignOptions = {
@@ -122,12 +126,41 @@ const callModel = (options: GenerateDesignOptions, request: DesignRequest, attac
     return { chunks: resolveDesignImages(result.textStream, request.manifest, placeholderColors), finished }
 }
 
-// A repaired design that's still a whole page: wrapped like the first, and not cut down to a fraction
-// of it, so fewer errors can't mean a page with half its sections gone
-const stillWhole = (repaired: string, first: string) => {
-    const [after, before] = [repaired.trim(), first.trim()]
+// A repair keeps at least this share of the first design's length
+export const MIN_REPAIR_LENGTH = 0.85
+
+// Every id and data-node a design has: what the page is built of, which a repair has no reason to drop
+const landmarks = (html: string) => {
+    const found = new Set<string>()
+    for (const node of elementsOf(parseHtml(html))) {
+        const id = node.attributes.get("id")
+        const built = node.attributes.get("data-node")
+        if (id) found.add(`id=${id}`)
+        if (built) found.add(`data-node=${built}`)
+    }
+    return found
+}
+
+// Whether a repair kept the whole page: wrapped like the first, at least 85% of its length, and with
+// every id and data-node it had. A repair only fixes things, so fewer errors can't come from dropping
+// a section. Lengths are compared with runs of whitespace as one space, so re-indenting isn't dropping.
+export const keepsContent = (repaired: string, first: string) => {
+    const [after, before] = [repaired, first].map((html) => html.replace(/\s+/g, " ").trim())
     const wrapped = (html: string) => /^<div\b[^>]*\bdata-generated-ui\b/i.test(html)
-    return after.startsWith("<") && after.endsWith(">") && after.length >= before.length * 0.6 && (!wrapped(before) || wrapped(after))
+    if (!after.startsWith("<") || !after.endsWith(">") || (wrapped(before) && !wrapped(after))) return false
+    if (after.length < before.length * MIN_REPAIR_LENGTH) return false
+    const kept = landmarks(after)
+    return [...landmarks(before)].every((landmark) => kept.has(landmark))
+}
+
+// The check's issues, or null when it threw: then there's no repair and the first design stands
+const checked = (html: string, design: GenerateDesignOptions["design"], context: ValidationContext): Issue[] | null => {
+    try {
+        return validate(html, design.contract, context)
+    } catch (error) {
+        console.warn('[design-check] The check failed, so the design goes out as it is:', error)
+        return null
+    }
 }
 
 // --- Generating a design -----------------------------------------------------------------------
@@ -147,11 +180,16 @@ export async function* generateDesign(options: GenerateDesignOptions): AsyncGene
     if (!html.trim()) return
 
     const context = validationContextFor(design)
-    const before = validate(html, design.contract, context)
+    const before = checked(html, design, context)
+    if (!before) {
+        console.info(`[design-check] ${JSON.stringify({ mode: design.mode, repair: 'not-checked' })}`)
+        options.onCheck?.({ mode: design.mode, before: [], after: null, repair: 'not-checked' })
+        return
+    }
     // Counts only: the log holds none of the page's words
-    const report = (after: Issue[] | null, repair: CheckReport["repair"]) => {
-        console.info(`[design-check] ${JSON.stringify({ mode: design.mode, ...issueSummary(before), ...(after ? { after: issueSummary(after) } : {}), repair })}`)
-        options.onCheck?.({ mode: design.mode, before, after, repair })
+    const report = (after: Issue[] | null, repair: CheckReport["repair"], discarded?: CheckReport["discarded"]) => {
+        console.info(`[design-check] ${JSON.stringify({ mode: design.mode, ...issueSummary(before), ...(after ? { after: issueSummary(after) } : {}), repair, ...(discarded ? { discarded } : {}) })}`)
+        options.onCheck?.({ mode: design.mode, before, after, repair, ...(discarded ? { discarded } : {}) })
     }
     if (errorCount(before) === 0) return report(null, 'not-needed')
     if (!options.repair) return report(null, 'not-sent')
@@ -170,13 +208,12 @@ export async function* generateDesign(options: GenerateDesignOptions): AsyncGene
         for await (const chunk of repair.chunks) repaired += chunk
         await repair.finished
         if (options.abortSignal?.aborted) return report(null, 'failed')
-        const after = validate(repaired, design.contract, context)
-        if (stillWhole(repaired, html) && errorCount(after) < errorCount(before)) {
-            report(after, 'kept')
-            yield repaired
-            return
-        }
-        report(after, 'discarded')
+        const after = checked(repaired, design, context)
+        if (!after) return report(null, 'failed')
+        if (errorCount(after) >= errorCount(before)) return report(after, 'discarded', 'no fewer errors')
+        if (!keepsContent(repaired, html)) return report(after, 'discarded', 'dropped content')
+        report(after, 'kept')
+        yield repaired
     } catch (error) {
         if (!options.abortSignal?.aborted) console.warn('[design-check] The repair call failed:', error)
         report(null, 'failed')

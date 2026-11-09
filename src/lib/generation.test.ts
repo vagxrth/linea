@@ -7,7 +7,8 @@ import { EVAL_FIXTURES } from "../../scripts/eval-fixtures"
 import { buildDesignContract } from "./design-contract"
 import { DESIGN_MAX_OUTPUT_TOKENS, designPrompt, type DesignRequest } from "./design-request"
 import { DESIGN_STREAM_HEADERS, finalDesign, readDesignStream, REPLACEMENT_MARK } from "./design-stream"
-import { DASHBOARD_FAILING, DASHBOARD_PASSING } from "./design-validator.fixtures"
+import { DASHBOARD_INITIAL, DASHBOARD_REPAIRED } from "./design-validator.fixtures"
+import { validate } from "./design-validator"
 import {
     designContractFor,
     generationFailed,
@@ -30,6 +31,12 @@ vi.mock("@/convex/query.config", () => ({
 }))
 vi.mock("@ai-sdk/google", () => ({ google: (modelId: string) => ({ modelId }) }))
 vi.mock("ai", () => ({ streamText: vi.fn() }))
+// The real check, which a test can make throw
+vi.mock("./design-validator", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("./design-validator")>()
+    return { ...actual, validate: vi.fn(actual.validate) }
+})
+const { validate: validateFor } = await vi.importActual<typeof import("./design-validator")>("./design-validator")
 
 const guide = {
     theme: "Calm",
@@ -209,14 +216,14 @@ describe("the check, and its one repair", () => {
     const design: DesignRequest = { mode: "initial", contract, manifest, outline: null, hasWireframe: true }
     // A tab that reads replacements, as the app's own does
     const request = (headers: Record<string, string> = DESIGN_STREAM_HEADERS) => new Request("http://localhost/api/generate", { method: "POST", headers })
-    const failing = resolveDesignHtml(DASHBOARD_FAILING, manifest, colors)
-    const passing = resolveDesignHtml(DASHBOARD_PASSING, manifest, colors)
+    const failing = resolveDesignHtml(DASHBOARD_INITIAL, manifest, colors)
+    const passing = resolveDesignHtml(DASHBOARD_REPAIRED, manifest, colors)
     const charged = () => vi.mocked(ConsumeCreditsQuery).mockResolvedValue({ ok: true, balance: 3 } as Awaited<ReturnType<typeof ConsumeCreditsQuery>>)
     const checkLine = () => vi.mocked(console.info).mock.calls.map(([line]) => String(line)).find((line) => line.startsWith("[design-check]"))
 
     it("repairs a design the check finds errors in with one more call, sends the repair after the first, and charges one credit", async () => {
         charged()
-        modelAnswers([inChunks(DASHBOARD_FAILING), "stop"], [inChunks(DASHBOARD_PASSING), "stop"])
+        modelAnswers([inChunks(DASHBOARD_INITIAL), "stop"], [inChunks(DASHBOARD_REPAIRED), "stop"])
 
         const response = await streamDesign({ request: request(), cost: 1, design, attachments: [{ type: "image", image: png, mediaType: "image/png" }] })
         const text = await response.text()
@@ -235,17 +242,18 @@ describe("the check, and its one repair", () => {
         expect(message.content).toEqual([{ type: "text", text: expect.any(String) }])
         const repairText = (message.content as { text: string }[])[0].text
         expect(repairText).toContain("Mode: repair. A check of the page below found these problems. Fix only these, and change nothing else:\n- Contrast 1.00:1, under 4.5:1")
-        expect(repairText).toContain("- Placeholder text \"Chart placeholder\"")
+        expect(repairText).toContain("- Placeholder text \"Placeholder for a detailed sales chart.\"")
+        expect(repairText).toContain("- 1 inline <svg> (in [data-node=\"srch01\"])")
         expect(repairText).toContain("- Made-up people's names: \"Alice Smith\"")
         expect(repairText).toContain("No images are attached.")
         expect(repairText).toContain(`Page to fix (complete HTML): fix the problems listed above and keep everything else exactly as it is.\n${failing}`)
-        expect(checkLine()).toBe('[design-check] {"mode":"initial","errors":3,"warnings":0,"kinds":{"contrast":1,"placeholder":1,"name":1},"after":{"errors":0,"warnings":0,"kinds":{}},"repair":"kept"}')
+        expect(checkLine()).toBe('[design-check] {"mode":"initial","errors":4,"warnings":0,"kinds":{"contrast":1,"inline-svg":1,"placeholder":1,"name":1},"after":{"errors":0,"warnings":0,"kinds":{}},"repair":"kept"}')
         expect(console.info).toHaveBeenCalledWith(expect.stringMatching(/^\[design\] \{"mode":"repair","attempt":2,"finishReason":"stop"/))
     })
 
     it("keeps the first design when the repair is no better, and never tries a second repair", async () => {
         charged()
-        vi.mocked(streamText).mockImplementation(() => modelResult(inChunks(DASHBOARD_FAILING), "stop"))
+        vi.mocked(streamText).mockImplementation(() => modelResult(inChunks(DASHBOARD_INITIAL), "stop"))
 
         const text = await (await streamDesign({ request: request(), cost: 1, design, attachments: [] })).text()
 
@@ -254,12 +262,12 @@ describe("the check, and its one repair", () => {
         // The repair still had errors, and that's the end of it: one design, one repair
         expect(streamText).toHaveBeenCalledTimes(2)
         expect(ConsumeCreditsQuery).toHaveBeenCalledTimes(1)
-        expect(checkLine()).toContain('"repair":"discarded"')
+        expect(checkLine()).toContain('"repair":"discarded","discarded":"no fewer errors"')
     })
 
     it("keeps the first design when the repair stops before it's finished", async () => {
         charged()
-        modelAnswers([inChunks(DASHBOARD_FAILING), "stop"], [['<div data-generated-ui><section id="hero">'], "length"])
+        modelAnswers([inChunks(DASHBOARD_INITIAL), "stop"], [['<div data-generated-ui><section id="hero">'], "length"])
 
         const response = await streamDesign({ request: request(), cost: 1, design, attachments: [] })
 
@@ -271,18 +279,18 @@ describe("the check, and its one repair", () => {
 
     it("doesn't repair for a tab that can't take a replacement", async () => {
         charged()
-        modelAnswers([inChunks(DASHBOARD_FAILING), "stop"])
+        modelAnswers([inChunks(DASHBOARD_INITIAL), "stop"])
 
         const text = await (await streamDesign({ request: request({}), cost: 1, design, attachments: [] })).text()
 
         expect(text).toBe(failing)
         expect(streamText).toHaveBeenCalledTimes(1)
-        expect(checkLine()).toBe('[design-check] {"mode":"initial","errors":3,"warnings":0,"kinds":{"contrast":1,"placeholder":1,"name":1},"repair":"not-sent"}')
+        expect(checkLine()).toBe('[design-check] {"mode":"initial","errors":4,"warnings":0,"kinds":{"contrast":1,"inline-svg":1,"placeholder":1,"name":1},"repair":"not-sent"}')
     })
 
     it("sends a design without errors as it is, after one call", async () => {
         charged()
-        modelAnswers([inChunks(DASHBOARD_PASSING), "stop"])
+        modelAnswers([inChunks(DASHBOARD_REPAIRED), "stop"])
 
         const text = await (await streamDesign({ request: request(), cost: 1, design, attachments: [] })).text()
 
@@ -291,9 +299,62 @@ describe("the check, and its one repair", () => {
         expect(checkLine()).toContain('"repair":"not-needed"')
     })
 
+    it("sends the first design, charged once, when the check throws on it", async () => {
+        charged()
+        modelAnswers([inChunks(DASHBOARD_INITIAL), "stop"])
+        vi.mocked(validate).mockImplementationOnce(() => {
+            throw new Error("The check broke")
+        })
+
+        const response = await streamDesign({ request: request(), cost: 1, design, attachments: [] })
+        const text = await response.text()
+
+        expect(text).toBe(failing)
+        expect(await readDesignStream(new Response(text))).toBe(failing)
+        expect(streamText).toHaveBeenCalledTimes(1)
+        expect(ConsumeCreditsQuery).toHaveBeenCalledTimes(1)
+        expect(console.warn).toHaveBeenCalledWith("[design-check] The check failed, so the design goes out as it is:", expect.objectContaining({ message: "The check broke" }))
+        expect(checkLine()).toBe('[design-check] {"mode":"initial","repair":"not-checked"}')
+    })
+
+    it("keeps the first design when the check throws on the repair", async () => {
+        charged()
+        modelAnswers([inChunks(DASHBOARD_INITIAL), "stop"], [inChunks(DASHBOARD_REPAIRED), "stop"])
+        // The first design's check runs as it is; the repair's throws
+        vi.mocked(validate).mockImplementationOnce(validateFor).mockImplementationOnce(() => {
+            throw new Error("The check broke")
+        })
+
+        const text = await (await streamDesign({ request: request(), cost: 1, design, attachments: [] })).text()
+
+        expect(finalDesign(text)).toBe(failing)
+        expect(streamText).toHaveBeenCalledTimes(2)
+        expect(ConsumeCreditsQuery).toHaveBeenCalledTimes(1)
+        expect(checkLine()).toContain('"repair":"failed"')
+    })
+
+    it("keeps the first design over a repair at 62% of its length, with sections gone, even with no errors", async () => {
+        charged()
+        const cut = (html: string, from: string, to: string) => html.slice(0, html.indexOf(from)) + html.slice(html.indexOf(to, html.indexOf(from)) + to.length)
+        const dropped = ["Sidebar -->|</aside>", "Header -->|</header>", "Stats Row -->|</section>", "Chart -->|</section>"].reduce((page, cutting) => {
+            const [from, to] = cutting.split("|")
+            return cut(page, `<!-- ${from}`, to)
+        }, DASHBOARD_REPAIRED)
+        const share = (html: string) => html.replace(/\s+/g, " ").trim().length / DASHBOARD_INITIAL.replace(/\s+/g, " ").trim().length
+        expect(share(dropped)).toBeCloseTo(0.62, 1)
+        expect(validateFor(dropped, contract, { mode: "initial" }).filter((issue) => issue.severity === "error")).toEqual([])
+        modelAnswers([inChunks(DASHBOARD_INITIAL), "stop"], [inChunks(dropped), "stop"])
+
+        const text = await (await streamDesign({ request: request(), cost: 1, design, attachments: [] })).text()
+
+        expect(text).toBe(`${failing}${REPLACEMENT_MARK}`)
+        expect(finalDesign(text)).toBe(failing)
+        expect(checkLine()).toContain('"repair":"discarded","discarded":"dropped content"')
+    })
+
     it("breaks off a first design that didn't finish, without checking or repairing it", async () => {
         charged()
-        modelAnswers([inChunks(DASHBOARD_FAILING).slice(0, 2), "length"])
+        modelAnswers([inChunks(DASHBOARD_INITIAL).slice(0, 2), "length"])
 
         const response = await streamDesign({ request: request(), cost: 1, design, attachments: [] })
 
