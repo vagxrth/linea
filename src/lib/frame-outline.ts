@@ -1,6 +1,6 @@
 import type { FrameShape, Shape } from '@/redux/slice/shapes'
 import { getShapeBounds } from './shape-bounds'
-import { isComponentLabel, MAX_OUTLINE_NODES, OUTLINE_VERSION, readingRows, truncateOutline, type FrameOutline, type OutlineNode } from './wireframe-outline'
+import { clampPercent, isComponentLabel, MAX_OUTLINE_NODES, OUTLINE_VERSION, readingRows, truncateOutline, type FrameOutline, type OutlineNode } from './wireframe-outline'
 
 // A frame's wireframe read off the canvas shapes, sent with its picture when a design is generated
 // (see src/lib/wireframe-outline.ts): every box with its label, which boxes are crossed out (image
@@ -48,11 +48,14 @@ const ordered = (nodes: OutlineNode[]): OutlineNode[] =>
 // MAX_OUTLINE_NODES a whole row at a time
 export const frameOutline = (frame: FrameShape, shapes: Shape[]): FrameOutline => {
     const round = (value: number) => Math.round(value * 10) / 10
+    // A percent of the frame, to a tenth, and no further out than just past its edges: a shape that
+    // hangs over the frame is still part of it, and the server would clamp it to the same range
+    const pct = (value: number) => round(clampPercent(value))
     const toFrame = (bounds: { x: number; y: number; w: number; h: number }): OutlineNode['box'] => [
-        round(((bounds.x - frame.x) / frame.w) * 100),
-        round(((bounds.y - frame.y) / frame.h) * 100),
-        round(((bounds.x + bounds.w - frame.x) / frame.w) * 100),
-        round(((bounds.y + bounds.h - frame.y) / frame.h) * 100),
+        pct(((bounds.x - frame.x) / frame.w) * 100),
+        pct(((bounds.y - frame.y) / frame.h) * 100),
+        pct(((bounds.x + bounds.w - frame.x) / frame.w) * 100),
+        pct(((bounds.y + bounds.h - frame.y) / frame.h) * 100),
     ]
 
     // A box with lines corner to corner both ways is the usual sketch of an image

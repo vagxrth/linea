@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { FrameShape, Shape } from "@/redux/slice/shapes"
 import { frameOutline } from "./frame-outline"
-import { MAX_OUTLINE_NODES, countNodes, outlineImageSlots, outlineText } from "./wireframe-outline"
+import { MAX_OUTLINE_NODES, countNodes, outlineImageSlots, outlineText, parseOutline } from "./wireframe-outline"
 
 const base = { stroke: "#ffffff", strokeWidth: 2, fill: null }
 const frame = { ...base, id: "f", type: "frame", x: 0, y: 0, w: 1000, h: 800, frameNumber: 1 } as FrameShape
@@ -50,6 +50,14 @@ describe("frame outline", () => {
             '  - box "card" [card-2], x 35–65%, y 63–94%',
             '  - box "card" [card-3], x 67–97%, y 63–94%',
         ])
+    })
+
+    it("still produces an outline when a navbar is drawn past both sides of the frame", () => {
+        // From x -80 to 1080 in the 1000px frame: -8% to 108%, clamped to just outside the frame
+        const wide = frameOutline(frame, [rect("nav", -80, 20, 1160, 60), text("nav-label", 80, 35, "navbar"), rect("card", 30, 500, 300, 250)])
+        expect(wide.nodes[0]).toEqual({ id: "nav", kind: "box", label: "navbar", box: [-5, 2.5, 105, 10] })
+        // And the server takes it as it is
+        expect(parseOutline(JSON.stringify(wide))).toEqual(wide)
     })
 
     it("gives the crossed box to the image slots, with its shape", () => {

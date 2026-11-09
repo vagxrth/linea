@@ -170,7 +170,13 @@ export const truncateOutline = (outline: FrameOutline, budget = MAX_OUTLINE_NODE
 
 // --- Checking an outline from a request -------------------------------------------------------
 
-const percent = z.number().finite().min(-5).max(105)
+// A box may hang a little over its frame (a navbar drawn edge to edge, past both sides); positions
+// further out are clamped to this range, here and on the canvas, rather than the outline refused
+export const OUTLINE_PERCENT_RANGE = [-5, 105] as const
+
+export const clampPercent = (value: number) => Math.min(OUTLINE_PERCENT_RANGE[1], Math.max(OUTLINE_PERCENT_RANGE[0], value))
+
+const percent = z.number().finite().transform(clampPercent)
 
 const NodeSchema: z.ZodType<OutlineNode> = z.lazy(() =>
     z.object({
@@ -199,18 +205,30 @@ const OutlineSchema = z.object({
 const depth = (nodes: OutlineNode[]): number => nodes.reduce((deepest, node) => Math.max(deepest, 1 + depth(node.children ?? [])), 0)
 
 // Requests cap their body, but the outline is the canvas's word, so it's checked before the prompt
-// uses it: the shape, at most 400 nodes, 8 levels deep. Too long, it's cut to MAX_OUTLINE_NODES.
+// uses it: the shape, at most 400 nodes, 8 levels deep. Too long, it's cut to MAX_OUTLINE_NODES. One
+// that fails the check is left out, and the server log says why (never what it held).
 export const parseOutline = (raw: string): FrameOutline | null => {
+    const ignored = (reason: string) => {
+        console.warn(`[outline] Ignored the request's outline: ${reason}`)
+        return null
+    }
     let value: unknown
     try {
         value = JSON.parse(raw)
     } catch {
-        return null
+        return ignored(`not valid JSON (${raw.length} characters)`)
     }
     const parsed = OutlineSchema.safeParse(value)
-    if (!parsed.success) return null
+    if (!parsed.success) {
+        const { issues } = parsed.error
+        const listed = issues.slice(0, 3).map((issue) => `${issue.path.map(String).join(".") || "(top level)"}: ${issue.message}`)
+        return ignored(`${listed.join("; ")}${issues.length > 3 ? `; and ${issues.length - 3} more` : ""}`)
+    }
     const outline = parsed.data as FrameOutline
-    if (countNodes(outline.nodes) > 400 || depth(outline.nodes) > 8) return null
+    const nodes = countNodes(outline.nodes)
+    if (nodes > 400) return ignored(`${nodes} items, over the limit of 400`)
+    const levels = depth(outline.nodes)
+    if (levels > 8) return ignored(`${levels} levels deep, over the limit of 8`)
     return truncateOutline(outline)
 }
 
@@ -289,8 +307,10 @@ const write = (nodes: OutlineNode[], depthOf: number, frame: FrameOutline["frame
     }
 }
 
-// The outline as the prompt lists it, ending with what it leaves out when it was cut short
-export const outlineText = (outline: FrameOutline) => {
+// The outline as the prompt lists it, ending with what it leaves out when it was cut short. An outline
+// to build from says how to build those parts (from the wireframe's picture, when it's attached); one
+// that's only background, as a refine's is, just says what's missing.
+export const outlineText = (outline: FrameOutline, { purpose = "build", hasWireframe = true }: { purpose?: "build" | "background"; hasWireframe?: boolean } = {}) => {
     const { frame } = outline
     const shape = frame.width >= frame.height ? "landscape" : "portrait"
     const lines = [
@@ -301,9 +321,8 @@ export const outlineText = (outline: FrameOutline) => {
     if (cut) {
         const rows = cut.omittedRows > 0 ? `${cut.omittedRows} top-level row${cut.omittedRows === 1 ? "" : "s"}${cut.fromY !== null ? ` from y ${clamp(cut.fromY)}% down` : ""}` : ""
         const partial = cut.partialRow ? "some items nested inside the listed boxes" : ""
-        lines.push(
-            `OUTLINE INCOMPLETE: it lists ${cut.listedNodes} of ${cut.totalNodes} items. Not listed: ${[rows, partial].filter(Boolean).join(", and ")}. Build those parts from the wireframe image, in the same style.`
-        )
+        const build = purpose === "background" ? "" : hasWireframe ? " Build those parts from the wireframe image, in the same style." : " Build those parts in the same style as the rest of the page."
+        lines.push(`OUTLINE INCOMPLETE: it lists ${cut.listedNodes} of ${cut.totalNodes} items. Not listed: ${[rows, partial].filter(Boolean).join(", and ")}.${build}`)
     }
     return lines.join("\n")
 }

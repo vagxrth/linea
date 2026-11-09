@@ -6,6 +6,7 @@ import {
     contractCorrections,
     contrastRatio,
     correctedForeground,
+    correctedForegroundOn,
     DESIGN_CONTRACT_VERSION,
     LARGE_TEXT_CONTRAST,
     NORMAL_TEXT_CONTRAST,
@@ -108,7 +109,8 @@ describe("buildDesignContract", () => {
     it("checks every surface and its text, and leaves the pairs that pass alone", () => {
         expect(contract.contrast.map((check) => `${check.background}/${check.foreground}`)).toEqual([
             "background/foreground", "card/cardForeground", "popover/popoverForeground", "primary/primaryForeground",
-            "secondary/secondaryForeground", "muted/mutedForeground", "accent/accentForeground", "destructive/destructiveForeground",
+            "secondary/secondaryForeground", "muted/mutedForeground", "background/mutedForeground", "card/mutedForeground",
+            "accent/accentForeground", "destructive/destructiveForeground",
         ])
         const body = contract.contrast[0]
         expect(body.normalText).toBe(true)
@@ -129,6 +131,42 @@ describe("buildDesignContract", () => {
         expect(contract.colors.secondary).toBe("#5F9873")
         expect(contractCorrections(contract)).toContain(sage)
         expect(contract.notes.some((note) => note.startsWith("secondaryForeground #FFFFFF on secondary #5F9873"))).toBe(true)
+    })
+
+    it("checks muted text on the page and on cards too, and corrects it once, against the worst of the three", () => {
+        // Zinc-500 passes on the white page and the white muted surface, but not on the darker card
+        const zinc = buildDesignContract({
+            ...guide,
+            colorSections: [
+                { title: "Primary Colors", swatches: [swatch("Background", "#FFFFFF"), swatch("Foreground", "#18181B"), swatch("Primary", "#18181B"), swatch("Primary Foreground", "#FAFAFA")] },
+                { title: "UI Component Colors", swatches: [swatch("Card", "#D4D4D8"), swatch("Card Foreground", "#18181B"), swatch("Popover", "#FFFFFF"), swatch("Popover Foreground", "#18181B"), swatch("Muted", "#FFFFFF"), swatch("Muted Foreground", "#71717A")] },
+            ],
+        } as unknown as StyleGuide)
+        const muted = zinc.contrast.filter((check) => check.foreground === "mutedForeground")
+        expect(muted.map((check) => [check.background, check.normalText])).toEqual([["muted", true], ["background", true], ["card", false]])
+        // One color for all three pairs, enough on each, and only as dark as the card needs
+        const corrected = zinc.colors.mutedForeground
+        expect(new Set(muted.map((check) => check.corrected?.foreground))).toEqual(new Set([corrected]))
+        for (const surface of ["muted", "background", "card"] as const) {
+            expect(contrastRatio(zinc.colors[surface], corrected)).toBeGreaterThanOrEqual(NORMAL_TEXT_CONTRAST)
+        }
+        expect(contrastRatio(zinc.colors.card, corrected)).toBeLessThan(4.8)
+        // The log names the pair the guide fails, once
+        expect(contractCorrections(zinc).map((check) => `${check.background}/${check.foreground}`)).toEqual(["card/mutedForeground"])
+        expect(zinc.notes).toContain(
+            `mutedForeground #71717A on card #D4D4D8 is ${muted[2].ratio}:1, under 4.5:1 for normal text (enough for large text); ` +
+            `corrected to ${corrected} (${muted.map((check) => `${check.corrected!.ratio}:1 on ${check.background}`).join(", ")}).`
+        )
+    })
+
+    it("gives text between a light and a dark surface the color whose worst pair is best", () => {
+        // No color reaches 4.5:1 on both white and slate-800
+        const color = correctedForegroundOn(["#FFFFFF", "#1E293B"], "#94A3B8")
+        const worst = (value: string) => Math.min(contrastRatio("#FFFFFF", value), contrastRatio("#1E293B", value))
+        expect(worst(color)).toBeGreaterThan(worst("#94A3B8"))
+        expect(worst(color)).toBeGreaterThan(worst(correctedForeground("#FFFFFF", "#94A3B8")))
+        // Where one color can pass on all of them, it does, at the smallest change
+        expect(correctedForegroundOn(["#FFFFFF", "#F1F5F9", "#E2E8F0"], "#94A3B8")).toBe(correctedForeground("#E2E8F0", "#94A3B8"))
     })
 
     it("corrects a pair that fails even large text the same way", () => {

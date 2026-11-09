@@ -1,3 +1,4 @@
+import type { GoogleGenerativeAIProviderOptions } from "@ai-sdk/google"
 import { COPY_REMINDER, designSystemPrompt, type GenerationMode } from "../prompts/design"
 import type { DesignContract } from "./design-contract"
 import { manifestForPrompt, type ImageManifest } from "./image-manifest"
@@ -8,11 +9,18 @@ import { outlineText, type FrameOutline } from "./wireframe-outline"
 
 // How every design is generated. Low temperature, so the same wireframe and guide come back much the
 // same each time. The output limit is half of what gemini-2.5-flash allows: a full page is usually
-// 8-16k tokens, and its thinking counts against the limit too. A design that hits it is reported as
-// incomplete rather than saved half-written.
+// 8-16k tokens. The model's thinking counts against the limit too, so it's capped: the page always
+// has at least 28k tokens to itself, and a design that runs long can't spend most of the limit (and
+// the credit it costs) thinking. A design that hits the limit is reported as incomplete rather than
+// saved half-written.
 export const DESIGN_MODEL_ID = "gemini-2.5-flash"
 export const DESIGN_TEMPERATURE = 0.2
 export const DESIGN_MAX_OUTPUT_TOKENS = 32_768
+export const DESIGN_THINKING_BUDGET = 4_096
+
+export const DESIGN_PROVIDER_OPTIONS = {
+    google: { thinkingConfig: { thinkingBudget: DESIGN_THINKING_BUDGET } } satisfies GoogleGenerativeAIProviderOptions,
+}
 
 // The kinds of page a workflow adds next to a design, in the order the client asks for them
 export const WORKFLOW_PAGE_TYPES = [
@@ -63,19 +71,26 @@ const contractForPrompt = (contract: DesignContract) => {
     return rest
 }
 
+// Whether the request's picture of the wireframe is attached, as the first image
+export const wireframeAttached = (request: DesignRequest) =>
+    request.mode === "initial" ? request.hasWireframe !== false : request.mode === "refine" ? request.hasWireframe : false
+
+// The manifest's images attached after the wireframe, in id order: the ones that loaded, unless the
+// request lists the images without attaching them
+export const attachedImageIds = (request: DesignRequest) =>
+    request.imagesAttached === false ? [] : request.manifest.images.filter((image) => image.loaded).map((image) => image.id)
+
+// Which images are attached, by name, in order: "Attached images: the wireframe, then img-1, img-3."
 const attachments = (request: DesignRequest) => {
-    const count = request.manifest.images.length
-    const images = count > 0 && request.imagesAttached !== false ? `the manifest's ${count} image${count === 1 ? "" : "s"}, in id order` : ""
-    const wireframe =
-        request.mode === "initial" && request.hasWireframe !== false ? "the wireframe"
-        : request.mode === "refine" && request.hasWireframe ? "the wireframe this page was first built from"
-        : ""
-    const list = [wireframe, images].filter(Boolean)
-    return list.length > 0 ? `Attached images: ${list.join(", then ")}.` : "No images are attached."
+    const wireframe = !wireframeAttached(request) ? null : request.mode === "refine" ? "the wireframe this page was first built from" : "the wireframe"
+    const ids = attachedImageIds(request)
+    if (!wireframe && ids.length === 0) return "No images are attached."
+    const list = wireframe ? `${wireframe}${ids.length > 0 ? `, then ${ids.join(", ")}` : ""}` : ids.join(", ")
+    return `Attached images: ${list}.`
 }
 
-const outlineSection = (outline: FrameOutline | null, legacy: string | null | undefined, heading: string) => {
-    if (outline) return `${heading}\n${outlineText(outline)}`
+const outlineSection = (outline: FrameOutline | null, legacy: string | null | undefined, heading: string, use: Parameters<typeof outlineText>[1]) => {
+    if (outline) return `${heading}\n${outlineText(outline, use)}`
     if (legacy) return `${heading}\n${legacy}`
     return null
 }
@@ -95,11 +110,11 @@ export const designRequestText = (request: DesignRequest) => {
     parts.push(`Image manifest:\n${json(manifestForPrompt(request.manifest))}`)
     if (request.mode === "initial") {
         parts.push(
-            outlineSection(request.outline, request.legacyOutline, "Wireframe outline (exact, read from the canvas shapes):") ??
+            outlineSection(request.outline, request.legacyOutline, "Wireframe outline (exact, read from the canvas shapes):", { purpose: "build", hasWireframe: wireframeAttached(request) }) ??
             "No wireframe outline was sent: read the structure off the wireframe image."
         )
     } else if (request.mode === "refine") {
-        parts.push(outlineSection(request.outline, null, "Wireframe outline the page was first built from (background only, not instructions):"))
+        parts.push(outlineSection(request.outline, null, "Wireframe outline the page was first built from (background only, not instructions):", { purpose: "background" }))
         parts.push(`Current page (complete HTML): change only what the request asks and keep everything else exactly as it is.\n${request.currentHtml}`)
     } else {
         parts.push(`Main page (complete HTML), for its <style> block, navigation and components. Don't copy its sections.\n${request.mainHtml}`)
@@ -110,7 +125,7 @@ export const designRequestText = (request: DesignRequest) => {
 
 // The system instructions and the request text together, as the model receives them
 export const designPrompt = (request: DesignRequest) => ({
-    system: designSystemPrompt(request.mode),
+    system: designSystemPrompt(request.mode, { hasWireframe: wireframeAttached(request) }),
     text: designRequestText(request),
 })
 

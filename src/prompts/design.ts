@@ -43,7 +43,7 @@ Return only the HTML for one page: a single <div data-generated-ui> holding a <s
 
 ## Safety
 - No <script>, no inline event handlers (onclick and the like), and no <iframe>, <object>, <embed>, <link>, <base> or <meta>.
-- No addresses of your own: links point to "#", and images use only the image manifest's ids. Never write an http(s) address, a CSS url(), @import or a web font link; Linea loads the contract's fonts itself.
+- No addresses of your own: links point to "#", and images use only the image manifest's ids, in an <img src> or a CSS url(img-1). Never write an http(s) address, any other url(), @import or a web font link; Linea loads the contract's fonts itself.
 - No viewport units (vh, vw, h-screen, min-h-screen): the page is measured inside a frame that grows to fit it.
 
 ## Design contract
@@ -72,12 +72,13 @@ Spacing, by what each part of the page is (contract.spacing):
 Radius and width: contract.radius for controls and cards; the page's content sits in contract.container.className.
 
 ## Images
-The request includes an image manifest: the images a design may show, by id (img-1, img-2…) with their aspect ratio, and the wireframe's image slots, each with its shape and the image chosen for it. The images attached after the wireframe are the manifest's images, in id order.
+The request includes an image manifest: the images a design may show, by id (img-1, img-2…) with their aspect ratio, and the wireframe's image slots, each with its shape and the image chosen for it. The request's "Attached images" line names the images attached, in order. An image the manifest marks "loaded": false couldn't be loaded this time and shows as a placeholder: put it nowhere new.
 - An image is an <img> whose src is an image id, exactly: <img src="img-1" data-slot="slot-1" alt="..." class="h-full w-full object-cover">. Linea puts the real file in.
 - A slot shows the image the manifest chose for it, and its <img> carries data-slot with the slot's id. A slot with no image gets src="placeholder": Linea draws a still placeholder in the slot's shape.
 - Each image's box keeps its slot's aspect ratio (an aspect-[w/h] class or a fixed height) and the image covers it.
+- A CSS background image takes an image id the same way: background-image: url(img-2); url(placeholder) draws the placeholder.
 - Alt text says what the picture shows.
-- Never any other src, srcset, <picture>, <source> or background-image.
+- Never any other src, srcset, url(), <picture> or <source>.
 
 ## Components
 - Semantic HTML: header, nav, main, section, article, aside, footer, form, ul/ol, and table with thead and tbody.
@@ -85,19 +86,36 @@ The request includes an image manifest: the images a design may show, by id (img
 - Every major component has a descriptive kebab-case id (main-nav, hero-section, product-card-1).
 - No animate-pulse skeletons or loading states.`
 
-const MODES: Record<GenerationMode, string> = {
-    initial: `## Mode: initial design, built from the wireframe
-The first attached image is the wireframe the user drew. The request's outline is read from the same canvas shapes, so it is exact where the image is rough.
-- The black background is the canvas, not the page. Freehand arrows, lines and circles are notes about the page.
+// What the initial mode says about the wireframe, by whether its picture is attached (the eval sends
+// only the outline)
+const WIREFRAME_PICTURE = {
+    attached: {
+        opening: `The first attached image is the wireframe the user drew. The request's outline is read from the same canvas shapes, so it is exact where the image is rough.
+- The black background is the canvas, not the page. Freehand arrows, lines and circles are notes about the page.`,
+        incomplete: "If the outline says it is incomplete, build the parts it doesn't list from the wireframe image. Without an outline, read everything off the image.",
+    },
+    outlineOnly: {
+        opening: `No picture of the wireframe is attached: the request's outline, read from the canvas shapes the user drew, is the whole wireframe.
+- Freehand arrows and lines in it are notes about the page.`,
+        incomplete: "If the outline says it is incomplete, build the parts it doesn't list in the same style as the rest of the page.",
+    },
+}
+
+const MODES: Record<GenerationMode, (hasWireframe: boolean) => string> = {
+    initial: (hasWireframe) => {
+        const picture = WIREFRAME_PICTURE[hasWireframe ? "attached" : "outlineOnly"]
+        return `## Mode: initial design, built from the wireframe
+${picture.opening}
 - A label ("navbar", "card", "hero image") names the component to build and never appears as text. Outline items marked copy are the user's own words: show them exactly as written.
 - The wireframe defines the structure: build every box once, at its position and in its order, and add no sections it doesn't show.
 - "row of N side by side": exactly N items in one row on wide screens, stacking only on narrow ones. "N columns side by side": N columns next to each other, each holding its items top to bottom (a hero's text beside its image), stacking only on narrow ones.
 - Text outside any box is a heading or copy at that spot; scribbles and short lines stand for lines of text. Positions place things but don't size text: a "headline" is the section's main heading at the contract's h1 or h2 size, however small it was drawn.
 - The element built for each outline item carries data-node with the item's id (the [id] in the outline), so later changes can find it.
-- If the outline says it is incomplete, build the parts it doesn't list from the wireframe image. Without an outline, read everything off the image.
-- What labels mean: "navbar" or "nav" → a <nav> with links; "hero" → the page's opening section; "image", or a crossed box → an image slot; "button" or "cta" → a button; "card" → an article with what's drawn inside it; "sidebar" → side navigation or a panel; "form" or "input" → form controls; numbers written in a box → a figure display showing those numbers.`,
+- ${picture.incomplete}
+- What labels mean: "navbar" or "nav" → a <nav> with links; "hero" → the page's opening section; "image", or a crossed box → an image slot; "button" or "cta" → a button; "card" → an article with what's drawn inside it; "sidebar" → side navigation or a panel; "form" or "input" → form controls; numbers written in a box → a figure display showing those numbers.`
+    },
 
-    refine: `## Mode: refine an existing page
+    refine: () => `## Mode: refine an existing page
 The request includes the current page's complete HTML and what the user wants changed.
 - Change only what the request asks for, only where it asks. Everything else stays exactly as it is: the text, the order of elements, ids, data-node and data-slot attributes, classes and image ids.
 - Return the whole page with the change applied. Keep the <style> block; change one of its rules only when the request asks for a different color or type.
@@ -105,7 +123,7 @@ The request includes the current page's complete HTML and what the user wants ch
 - Don't reflow, rewrite or tidy the parts the request doesn't mention.
 - When a wireframe image or outline is included, it shows how the page was first laid out. It's background for understanding the page, not an instruction: the current page and the request decide.`,
 
-    workflow: `## Mode: workflow page, a new page for the same product
+    workflow: () => `## Mode: workflow page, a new page for the same product
 The request includes the main page's complete HTML and the kind of page to write.
 - Write a complete page of that kind for the same product, as the main page's own team would: the same <style> block (the same .c-* and .t-* rules), the same navigation, component styles and image ids.
 - Add the structure the page needs that the main page doesn't have (tables, filters, forms, tabs, side navigation), and don't copy the main page's sections.
@@ -118,17 +136,18 @@ const CHECKS: Record<GenerationMode, string> = {
     workflow: "- The page is the requested kind, with the main page's <style> block, navigation and components.",
 }
 
-// The system instructions for a mode
-export const designSystemPrompt = (mode: GenerationMode) => [
+// The system instructions for a mode. An initial design says what the first attached image is only
+// when the wireframe's picture is attached.
+export const designSystemPrompt = (mode: GenerationMode, { hasWireframe = true }: { hasWireframe?: boolean } = {}) => [
     ROLE[mode],
     SHARED,
     COPY_POLICY,
-    MODES[mode],
+    MODES[mode](hasWireframe),
     `## Before answering, check
 - The <style> block has every .c-* and .t-* rule, with the contract's exact values.
 - Color only through matching .c-* pairs; text styled only through .t-* classes.
 - Spacing fits each part's density.
-- Every <img> src is an image id or "placeholder".
+- Every <img> src is an image id or "placeholder", and so is every url().
 - The copy follows the copy policy.
 ${CHECKS[mode]}`,
 ].join("\n\n")

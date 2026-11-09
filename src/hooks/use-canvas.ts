@@ -1,6 +1,6 @@
 'use client'
 
-import { addArrow, addEllipse, addFrame, addFreeDrawShape, addGeneratedUI, addLine, addRect, addText, clearSelection, deleteSelected, duplicateSelected, FrameShape, pasteShapes, removeShape, selectAll, selectShape, setSelection, setTool, Shape, ShapeUpdate, Tool, updateShape, updateShapes, undo, redo, recordHistory } from "@/redux/slice/shapes"
+import { addArrow, addEllipse, addFrame, addFreeDrawShape, addGeneratedUI, addLine, addRect, addText, clearSelection, deleteSelected, discardShape, duplicateSelected, FrameShape, pasteShapes, removeShape, selectAll, selectShape, setSelection, setTool, Shape, ShapeUpdate, Tool, updateShape, updateShapes, undo, redo, recordHistory } from "@/redux/slice/shapes"
 import { handToolDisable, handToolEnable, panEnd, panMove, panStart, pinchMove, Point, screenToWorld, wheelPan, wheelZoom } from "@/redux/slice/viewport"
 import { AppDispatch, AppStore, useAppDispatch, useAppSelector, useAppStore } from "@/redux/store"
 import { nanoid } from "@reduxjs/toolkit"
@@ -1344,8 +1344,8 @@ export const useFrame = (shape: FrameShape) => {
                 })
                 show(markup)
             } catch (error) {
-                // A design that stopped partway isn't kept
-                dispatch(removeShape({ id: generatedUIId, skipHistory: true }))
+                // A design that stopped partway isn't kept, and neither is the undo step that added it
+                dispatch(discardShape(generatedUIId))
                 throw new Error(INCOMPLETE_DESIGN_MESSAGE, { cause: error })
             }
         } catch (error) {
@@ -1477,8 +1477,8 @@ export const useWorkflowGeneration = () => {
                     try {
                         show(await readDesignStream(response, show))
                     } catch (error) {
-                        // A page that stopped partway isn't kept
-                        dispatch(removeShape({ id: workflowId, skipHistory: true }))
+                        // A page that stopped partway isn't kept, nor any undo step only it made
+                        dispatch(discardShape(workflowId))
                         throw error
                     }
                     return { pageIndex: index, success: true}

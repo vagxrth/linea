@@ -4,7 +4,7 @@ import { ConsumeCreditsQuery, InspirationImagesQuery, StyleGuideQuery } from "@/
 import { designSystemPrompt } from "@/prompts"
 import type { StyleGuide } from "@/redux/api/style-guide"
 import { buildDesignContract } from "./design-contract"
-import { DESIGN_MAX_OUTPUT_TOKENS, type DesignRequest } from "./design-request"
+import { DESIGN_MAX_OUTPUT_TOKENS, designPrompt, type DesignRequest } from "./design-request"
 import {
     designContractFor,
     generationFailed,
@@ -16,7 +16,7 @@ import {
     streamDesign,
     styleGuideMissing,
 } from "./generation"
-import { buildImageManifest } from "./image-manifest"
+import { buildImageManifest, designHtmlForPrompt, resolveDesignHtml } from "./image-manifest"
 
 // The real queries call Convex with the signed-in user's token. Nothing here reaches the model,
 // Convex or the network.
@@ -110,9 +110,34 @@ describe("the design's inputs", () => {
         const { contract, images, manifest } = await prepareDesign("p1", guide, [{ node: "hero", aspectRatio: 1.5, box: [0, 0, 50, 50] }])
         expect(fetcher).toHaveBeenCalledWith(imageUrl, expect.anything())
         expect(contract.version).toBe(1)
-        expect(manifest.images).toEqual([{ id: "img-1", url: imageUrl, width: 120, height: 80 }])
+        expect(manifest.images).toEqual([{ id: "img-1", url: imageUrl, width: 120, height: 80, loaded: true }])
         expect(manifest.slots).toEqual([{ id: "slot-1", node: "hero", aspectRatio: 1.5, image: "img-1" }])
         expect(imageParts(images)).toEqual([{ type: "image", image: png, mediaType: "image/png" }])
+    })
+
+    it("keeps img-3 as img-3 when image 2 fails to load, in an initial design and in a refine", async () => {
+        const urls = ["https://img.test/1.png", "https://img.test/2.png", "https://img.test/3.png"]
+        vi.mocked(InspirationImagesQuery).mockResolvedValue({ images: urls.map((url) => ({ url })) } as unknown as Awaited<ReturnType<typeof InspirationImagesQuery>>)
+        vi.stubGlobal("fetch", vi.fn(async (url: string) =>
+            url === urls[1] ? new Response("gone", { status: 404 }) : new Response(png, { headers: { "content-type": "image/png" } })))
+        const colors = { fill: "#EEEEEE", ink: "#333333" }
+        const { contract, images, manifest } = await prepareDesign("p1", guide, [{ node: "hero", aspectRatio: 1.5, box: [0, 0, 50, 50] }, { node: "card", aspectRatio: 1, box: [60, 60, 70, 70] }])
+
+        expect(manifest.images.map((image) => [image.id, image.url, image.loaded])).toEqual([["img-1", urls[0], true], ["img-2", urls[1], false], ["img-3", urls[2], true]])
+        // The slots skip the image that's missing
+        expect(manifest.slots.map((slot) => slot.image)).toEqual(["img-1", "img-3"])
+        // Only the two that loaded are attached, and the request names them
+        expect(imageParts(images)).toEqual([{ type: "image", image: png, mediaType: "image/png" }, { type: "image", image: png, mediaType: "image/png" }])
+        const initial = designPrompt({ mode: "initial", contract, manifest, outline: null, hasWireframe: true }).text
+        expect(initial).toContain("Attached images: the wireframe, then img-1, img-3.")
+        expect(resolveDesignHtml('<img src="img-3" alt="c"><img src="img-2" alt="b">', manifest, colors)).toMatch(new RegExp(`^<img src="${urls[2]}" alt="c"><img src="data:image/svg\\+xml,[^"]+" data-placeholder="true" alt="b">$`))
+
+        // A refine of a design saved when all three loaded: the same ids, the same attachments
+        const saved = `<img src="${urls[0]}" alt="a"><img src="${urls[1]}" alt="b"><img src="${urls[2]}" alt="c">`
+        const refine = designPrompt({ mode: "refine", contract, manifest, message: "Make it green", currentHtml: designHtmlForPrompt(saved, manifest), outline: null, hasWireframe: true }).text
+        expect(refine).toContain('<img src="img-1" alt="a"><img src="img-2" alt="b"><img src="img-3" alt="c">')
+        expect(refine).toContain("Attached images: the wireframe this page was first built from, then img-1, img-3.")
+        expect(resolveDesignHtml('<img src="img-3" alt="c">', manifest, colors)).toBe(`<img src="${urls[2]}" alt="c">`)
     })
 })
 
@@ -129,7 +154,14 @@ describe("streamDesign", () => {
         const response = await streamDesign({ request: request(), cost: 1, design, attachments: [{ type: "image", image: png, mediaType: "image/png" }] })
 
         const call = vi.mocked(streamText).mock.calls[0][0]
-        expect(call).toMatchObject({ model: { modelId: "gemini-2.5-flash" }, system: designSystemPrompt("refine"), temperature: 0.2, maxOutputTokens: DESIGN_MAX_OUTPUT_TOKENS })
+        expect(call).toMatchObject({
+            model: { modelId: "gemini-2.5-flash" },
+            system: designSystemPrompt("refine"),
+            temperature: 0.2,
+            maxOutputTokens: DESIGN_MAX_OUTPUT_TOKENS,
+            // Thinking counts against the limit, so it's capped
+            providerOptions: { google: { thinkingConfig: { thinkingBudget: 4096 } } },
+        })
         const [message] = call.messages!
         expect(message.role).toBe("user")
         expect(message.content).toEqual([{ type: "text", text: expect.stringContaining('The user\'s request: "Make the button green"') }, { type: "image", image: png, mediaType: "image/png" }])

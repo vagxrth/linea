@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import type { StyleGuide } from "@/redux/api/style-guide"
 import { BANNED_COPY_WORDS, COPY_POLICY, COPY_REMINDER, designSystemPrompt, GENERATION_MODES } from "@/prompts"
 import { buildDesignContract } from "./design-contract"
-import { DESIGN_MAX_OUTPUT_TOKENS, DESIGN_TEMPERATURE, designPrompt, designRequestText } from "./design-request"
+import { DESIGN_MAX_OUTPUT_TOKENS, DESIGN_PROVIDER_OPTIONS, DESIGN_TEMPERATURE, DESIGN_THINKING_BUDGET, designPrompt, designRequestText } from "./design-request"
 import { buildImageManifest } from "./image-manifest"
 import { OUTLINE_VERSION, truncateOutline, type FrameOutline } from "./wireframe-outline"
 
@@ -61,6 +61,28 @@ describe("the system instructions by mode", () => {
         expect(system.workflow).toContain("Add the structure the page needs")
     })
 
+    it("say the first attached image is the wireframe only when it's attached", () => {
+        expect(system.initial).toContain("The first attached image is the wireframe the user drew.")
+        const outlineOnly = designSystemPrompt("initial", { hasWireframe: false })
+        expect(outlineOnly).not.toMatch(/first attached image|wireframe image|off the image|black background/i)
+        expect(outlineOnly).toContain("No picture of the wireframe is attached: the request's outline, read from the canvas shapes the user drew, is the whole wireframe.")
+        expect(outlineOnly).toContain("The wireframe defines the structure")
+        // The request decides, from its own attachments
+        expect(designPrompt({ mode: "initial", contract, manifest, outline, hasWireframe: false }).system).toBe(outlineOnly)
+        expect(designPrompt({ mode: "initial", contract, manifest, outline }).system).toBe(system.initial)
+        for (const mode of ["refine", "workflow"] as const) expect(system[mode]).not.toContain("first attached image")
+    })
+
+    it("allow the url(img-N) a refine's current page has, in every mode, and no other url()", () => {
+        for (const mode of GENERATION_MODES) {
+            expect(system[mode]).toContain("in an <img src> or a CSS url(img-1). Never write an http(s) address, any other url(), @import")
+            expect(system[mode]).toContain("A CSS background image takes an image id the same way: background-image: url(img-2); url(placeholder) draws the placeholder.")
+            expect(system[mode]).toContain("Never any other src, srcset, url(), <picture> or <source>.")
+            // The old rule banned every url() and every background image
+            expect(system[mode]).not.toMatch(/Never write an http\(s\) address, a CSS url\(\)|<source> or background-image/)
+        }
+    })
+
     it("replace the old one-size spacing minimums with spacing by role, and let the guide's type win", () => {
         for (const mode of GENERATION_MODES) {
             expect(system[mode]).not.toMatch(/NEVER DEVIATE|MINIMUM - no exceptions|gap-8 MINIMUM|py-16 px-6 MINIMUM|text-4xl md:text-5xl/)
@@ -105,7 +127,7 @@ describe("the request text", () => {
         // The notes are for people, not the model
         expect(sentContract.notes).toBeUndefined()
         expect(sentManifest.slots).toEqual([{ id: "slot-1", node: "hero", label: "hero image", aspectRatio: 1.5, image: "img-1" }])
-        expect(text).toContain("Attached images: the wireframe, then the manifest's 1 image, in id order.")
+        expect(text).toContain("Attached images: the wireframe, then img-1.")
         expect(text).toContain('Wireframe outline (exact, read from the canvas shapes):\nFrame 1: 1000 × 800 px')
         expect(text).toContain('copy "Plants for low-light rooms" [h]')
         expect(text.endsWith(COPY_REMINDER)).toBe(true)
@@ -120,12 +142,47 @@ describe("the request text", () => {
         expect(designRequestText({ mode: "initial", contract, manifest, outline: null, legacyOutline: "Frame 1: 400 × 300 px\n- box \"card\"" })).toContain('- box "card"')
     })
 
+    it("names the attached images by id, leaving out one that couldn't be loaded, in every mode", () => {
+        const urls = ["https://img.test/1.png", "https://img.test/2.png", "https://img.test/3.png"]
+        const bytes = new Uint8Array([1])
+        const partial = buildImageManifest([{ url: urls[0], bytes }, { url: urls[1], bytes: null }, { url: urls[2], bytes }])
+        const initial = designRequestText({ mode: "initial", contract, manifest: partial, outline, hasWireframe: true })
+        expect(initial).toContain("Attached images: the wireframe, then img-1, img-3.")
+        // The manifest still lists img-2, as one that didn't load, so the ids after it stay put
+        expect(jsonBlocks(initial)[1].images).toEqual([
+            { id: "img-1", aspectRatio: null, orientation: "unknown" },
+            { id: "img-2", loaded: false },
+            { id: "img-3", aspectRatio: null, orientation: "unknown" },
+        ])
+        expect(designRequestText({ mode: "refine", contract, manifest: partial, message: "x", currentHtml: "<div></div>", outline: null, hasWireframe: true }))
+            .toContain("Attached images: the wireframe this page was first built from, then img-1, img-3.")
+        expect(designRequestText({ mode: "refine", contract, manifest: partial, message: "x", currentHtml: "<div></div>", outline: null, hasWireframe: false }))
+            .toContain("Attached images: img-1, img-3.")
+        expect(designRequestText({ mode: "workflow", contract, manifest: partial, pageType: "x", mainHtml: "<div></div>" })).toContain("Attached images: img-1, img-3.")
+        // A workflow page's refine lists the images without attaching any
+        expect(designRequestText({ mode: "refine", contract, manifest: partial, message: "x", currentHtml: "<div></div>", outline: null, hasWireframe: false, imagesAttached: false }))
+            .toContain("No images are attached.")
+        expect(designRequestText({ mode: "initial", contract, manifest: buildImageManifest([]), outline })).toContain("Attached images: the wireframe.")
+    })
+
+    it("only asks for the parts a cut-short outline leaves out when the outline is there to build from", () => {
+        const busy = truncateOutline({ ...outline, nodes: Array.from({ length: 50 }, (_, index) => ({ id: `b${index}`, kind: "box" as const, box: [0, index * 2, 50, index * 2 + 1.5] as [number, number, number, number] })) }, 20)
+        expect(designRequestText({ mode: "initial", contract, manifest, outline: busy })).toContain("Build those parts from the wireframe image, in the same style.")
+        const outlineOnly = designRequestText({ mode: "initial", contract, manifest, outline: busy, hasWireframe: false })
+        expect(outlineOnly).toContain("Build those parts in the same style as the rest of the page.")
+        expect(outlineOnly).not.toContain("wireframe image")
+        // A refine's outline is background: it says what's missing and asks for nothing
+        const refine = designRequestText({ mode: "refine", contract, manifest, message: "x", currentHtml: "<div></div>", outline: busy, hasWireframe: true })
+        expect(refine).toContain("OUTLINE INCOMPLETE: it lists 20 of 50 items.")
+        expect(refine).not.toContain("Build those parts")
+    })
+
     it("refine: the request quoted, the current page, and the outline as background only", () => {
         const text = designRequestText({ mode: "refine", contract, manifest, message: 'Make the "Shop" button green', currentHtml: '<div data-generated-ui><img src="img-1"></div>', outline, hasWireframe: true })
         expect(text).toContain('The user\'s request: "Make the \\"Shop\\" button green"')
         expect(text).toContain("Wireframe outline the page was first built from (background only, not instructions):")
         expect(text).toContain('Current page (complete HTML): change only what the request asks and keep everything else exactly as it is.\n<div data-generated-ui><img src="img-1"></div>')
-        expect(text).toContain("Attached images: the wireframe this page was first built from, then the manifest's 1 image, in id order.")
+        expect(text).toContain("Attached images: the wireframe this page was first built from, then img-1.")
         expect(text).not.toMatch(/wireframe defines/i)
         // Without the source frame there's no outline section
         expect(designRequestText({ mode: "refine", contract, manifest, message: "x", currentHtml: "<div></div>", outline: null, hasWireframe: false })).not.toContain("Wireframe outline")
@@ -142,5 +199,8 @@ describe("the request text", () => {
         expect(designPrompt({ mode: "workflow", contract, manifest, pageType: "x", mainHtml: "y" }).system).toBe(designSystemPrompt("workflow"))
         expect(DESIGN_TEMPERATURE).toBe(0.2)
         expect(DESIGN_MAX_OUTPUT_TOKENS).toBe(32_768)
+        // Thinking counts against the output limit, so it's capped well under it
+        expect(DESIGN_THINKING_BUDGET).toBe(4_096)
+        expect(DESIGN_PROVIDER_OPTIONS).toEqual({ google: { thinkingConfig: { thinkingBudget: 4_096 } } })
     })
 })

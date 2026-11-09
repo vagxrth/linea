@@ -14,8 +14,9 @@ export async function POST(request: NextRequest) {
         // JSON. It comes from the request, so it's checked and capped before the prompt uses it. A tab
         // opened before structured outlines still sends the old text form, which is used as it is.
         const rawOutline = String(formData.get('outline') ?? '').slice(0, 100_000)
-        const outline = rawOutline ? parseOutline(rawOutline) : null
-        const legacyOutline = !outline && rawOutline && !rawOutline.trimStart().startsWith('{') ? rawOutline.slice(0, 12_000) : null
+        const structured = rawOutline.trimStart().startsWith('{')
+        const outline = structured ? parseOutline(rawOutline) : null
+        const legacyOutline = !structured && rawOutline ? rawOutline.slice(0, 12_000) : null
 
         if (!imageFile) {
             return NextResponse.json(

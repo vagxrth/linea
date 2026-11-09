@@ -13,11 +13,13 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { buildDesignContract, type DesignContract } from "@/lib/design-contract"
+import { buildDesignContract, contractCorrections, type DesignContract } from "@/lib/design-contract"
 import {
     DESIGN_MAX_OUTPUT_TOKENS,
     DESIGN_MODEL_ID,
+    DESIGN_PROVIDER_OPTIONS,
     DESIGN_TEMPERATURE,
+    DESIGN_THINKING_BUDGET,
     designPrompt,
     WORKFLOW_PAGE_TYPES,
     type DesignRequest,
@@ -46,6 +48,7 @@ const snapshot = ({ fixture, contract, initial }: Prepared, index: number) => {
     const { system, text } = designPrompt(initial)
     return [
         rule(`Fixture ${index + 1}/${EVAL_FIXTURES.length}: ${fixture.name} (initial design)`),
+        `Settings: ${DESIGN_MODEL_ID}, temperature ${DESIGN_TEMPERATURE}, at most ${DESIGN_MAX_OUTPUT_TOKENS} output tokens with thinking capped at ${DESIGN_THINKING_BUDGET}`,
         `--- Design contract (version ${contract.version}) ---`,
         JSON.stringify(contract, null, 2),
         `\n--- System instructions (${system.length} characters) ---`,
@@ -131,7 +134,7 @@ const live = async (prepared: Prepared[], out: string | null) => {
         const { system, text } = designPrompt(request)
         const startedAt = Date.now()
         try {
-            const result = await generateText({ model, system, messages: [{ role: "user", content: text }], temperature: DESIGN_TEMPERATURE, maxOutputTokens: DESIGN_MAX_OUTPUT_TOKENS, maxRetries: 2 })
+            const result = await generateText({ model, system, messages: [{ role: "user", content: text }], temperature: DESIGN_TEMPERATURE, maxOutputTokens: DESIGN_MAX_OUTPUT_TOKENS, providerOptions: DESIGN_PROVIDER_OPTIONS, maxRetries: 2 })
             const placeholderColors = { fill: request.contract.colors.muted, ink: request.contract.colors.mutedForeground }
             const html = resolveDesignHtml(result.text.trim(), request.manifest, placeholderColors)
             writeFileSync(path.join(directory, `${label}.html`), html)
@@ -181,7 +184,8 @@ export const main = async (args: string[]) => {
     }
     console.log(rule("Summary"))
     for (const { fixture, contract } of prepared) {
-        const corrected = contract.contrast.filter((check) => check.corrected).map((check) => `${check.foreground} ${check.corrected!.original}→${check.corrected!.foreground}`)
+        // Once per text color, however many of its pairs failed
+        const corrected = [...new Set(contractCorrections(contract).map((check) => `${check.foreground} ${check.corrected!.original}→${check.corrected!.foreground}`))]
         console.log(`${fixture.name}: ${corrected.length} contrast correction${corrected.length === 1 ? "" : "s"}${corrected.length ? ` (${corrected.join(", ")})` : ""}; ${contract.notes.length} note${contract.notes.length === 1 ? "" : "s"}`)
     }
     if (!isLive) {

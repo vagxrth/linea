@@ -5,7 +5,7 @@ import { InspirationImagesQuery, StyleGuideQuery } from "@/convex/query.config"
 import type { StyleGuide } from "@/redux/api/style-guide"
 import { chargedGeneration } from "./credits"
 import { buildDesignContract, contractCorrections, type DesignContract } from "./design-contract"
-import { DESIGN_MAX_OUTPUT_TOKENS, DESIGN_MODEL_ID, DESIGN_TEMPERATURE, designPrompt, type DesignRequest } from "./design-request"
+import { DESIGN_MAX_OUTPUT_TOKENS, DESIGN_MODEL_ID, DESIGN_PROVIDER_OPTIONS, DESIGN_TEMPERATURE, designPrompt, type DesignRequest } from "./design-request"
 import { buildImageManifest, loadImages, resolveDesignImages, type ImageManifest, type LoadedImage } from "./image-manifest"
 import type { OutlineImageSlot } from "./wireframe-outline"
 
@@ -57,9 +57,11 @@ export const prepareDesign = async (projectId: string, guide: StyleGuide, slots:
     return { contract, images, manifest }
 }
 
-// The project's images as attachments, in manifest order, from the bytes already loaded
+// The project's images that loaded, as attachments in manifest order, from the bytes already
+// loaded. The request text names them ("then img-1, img-3"), so one that failed is skipped without
+// the ones after it changing places.
 export const imageParts = (images: LoadedImage[]) =>
-    images.map((image) => ({ type: 'image' as const, image: image.bytes, ...(image.mediaType ? { mediaType: image.mediaType } : {}) }))
+    images.flatMap((image) => (image.bytes ? [{ type: 'image' as const, image: image.bytes, ...(image.mediaType ? { mediaType: image.mediaType } : {}) }] : []))
 
 // Thrown when the model stopped before the design was finished
 export class IncompleteDesignError extends Error {
@@ -95,6 +97,7 @@ export const streamDesign = ({ request, cost, design, attachments }: StreamDesig
         messages: [{ role: 'user', content: [{ type: 'text', text }, ...attachments] }],
         temperature: DESIGN_TEMPERATURE,
         maxOutputTokens: DESIGN_MAX_OUTPUT_TOKENS,
+        providerOptions: DESIGN_PROVIDER_OPTIONS,
         abortSignal: generation.abortSignal,
         onError: generation.onError,
     })

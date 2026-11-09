@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import {
+    clampPercent,
     countNodes,
     isComponentLabel,
     MAX_OUTLINE_NODES,
@@ -79,24 +80,51 @@ describe("truncation", () => {
 
 describe("parseOutline", () => {
     const valid = outlineOf([card("a", 0, 0), { id: "t", kind: "text", text: "Fresh plants", box: [0, 20, 30, 24] }])
+    const warnings = () => vi.mocked(console.warn).mock.calls.map((call) => String(call[0]))
+
+    afterEach(() => {
+        vi.restoreAllMocks()
+    })
 
     it("accepts the canvas's outline", () => {
         expect(parseOutline(JSON.stringify(valid))).toEqual(valid)
     })
 
-    it("refuses anything that isn't one", () => {
+    it("clamps a position past the frame's edges to just outside them, rather than refusing the outline", () => {
+        expect(clampPercent(-8)).toBe(-5)
+        expect(clampPercent(108)).toBe(105)
+        expect(clampPercent(42.5)).toBe(42.5)
+        // A navbar drawn wider than the frame, on both sides, and a note dragged far below it
+        const overhanging = outlineOf([{ id: "nav", kind: "box", label: "navbar", box: [-8, 2, 108, 10] }, { id: "n", kind: "text", text: "Note", box: [10, 140, 30, 150] }])
+        expect(parseOutline(JSON.stringify(overhanging))!.nodes.map((node) => node.box)).toEqual([[-5, 2, 105, 10], [10, 105, 30, 105]])
+    })
+
+    it("refuses anything that isn't one, and logs why without what it held", () => {
+        vi.spyOn(console, "warn").mockImplementation(() => {})
         expect(parseOutline("box \"navbar\", x 2–98%")).toBeNull()
-        expect(parseOutline(JSON.stringify({ ...valid, nodes: [{ id: "x", kind: "button", box: [0, 0, 1, 1] }] }))).toBeNull()
+        expect(parseOutline(JSON.stringify({ ...valid, nodes: [{ id: "x", kind: "button", text: "Secret plans", box: [0, 0, 1, 1] }] }))).toBeNull()
         expect(parseOutline(JSON.stringify({ ...valid, nodes: [{ id: "x", kind: "box", box: [0, 0, 1] }] }))).toBeNull()
         expect(parseOutline(JSON.stringify({ ...valid, frame: { ...frame, width: -1 } }))).toBeNull()
+        const logged = warnings()
+        expect(logged).toHaveLength(4)
+        expect(logged[0]).toBe("[outline] Ignored the request's outline: not valid JSON (21 characters)")
+        expect(logged[1]).toMatch(/^\[outline\] Ignored the request's outline: nodes\.0\.kind: /)
+        expect(logged[2]).toMatch(/^\[outline\] Ignored the request's outline: nodes\.0\.box/)
+        expect(logged[3]).toMatch(/^\[outline\] Ignored the request's outline: frame\.width: /)
+        expect(logged.join("\n")).not.toContain("Secret plans")
     })
 
     it("refuses outlines too deep or too big, and cuts long ones down to the limit", () => {
+        vi.spyOn(console, "warn").mockImplementation(() => {})
         let deep: OutlineNode = { id: "leaf", kind: "box", box: [0, 0, 1, 1] }
         for (let level = 0; level < 9; level++) deep = { id: `level-${level}`, kind: "box", box: [0, 0, 100, 100], children: [deep] }
         expect(parseOutline(JSON.stringify(outlineOf([deep])))).toBeNull()
         const huge = Array.from({ length: 101 }, (_, row) => [0, 25, 50, 75].map((left, column) => ({ id: `${row}-${column}`, kind: "box" as const, box: [left, row, left + 20, row + 0.5] as [number, number, number, number] }))).flat()
         expect(parseOutline(JSON.stringify(outlineOf(huge)))).toBeNull()
+        const [tooDeep, tooBig] = warnings()
+        expect(tooDeep).toBe("[outline] Ignored the request's outline: 10 levels deep, over the limit of 8")
+        // 404 rows at the top level: the schema's own limit on the list catches it first
+        expect(tooBig).toMatch(/^\[outline\] Ignored the request's outline: nodes: /)
         // 20 rows of 4 shorter cards: 240 nodes
         const short = (id: string, left: number, top: number): OutlineNode => ({
             id, kind: "box", box: [left, top, left + 20, top + 4],

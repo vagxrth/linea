@@ -19,7 +19,8 @@ export const COLOR_ROLES = [
 ] as const
 export type ColorRole = (typeof COLOR_ROLES)[number]
 
-// Each surface with the text that sits on it, the pairs a design may use
+// Each surface with the text that sits on it, the pairs a design may use. Muted text is also the
+// secondary text of pages and cards (captions, hints, timestamps), so it's checked on those too.
 export const CONTRAST_PAIRS: readonly (readonly [ColorRole, ColorRole])[] = [
     ["background", "foreground"],
     ["card", "cardForeground"],
@@ -27,6 +28,8 @@ export const CONTRAST_PAIRS: readonly (readonly [ColorRole, ColorRole])[] = [
     ["primary", "primaryForeground"],
     ["secondary", "secondaryForeground"],
     ["muted", "mutedForeground"],
+    ["background", "mutedForeground"],
+    ["card", "mutedForeground"],
     ["accent", "accentForeground"],
     ["destructive", "destructiveForeground"],
 ]
@@ -59,7 +62,8 @@ export type ContrastCheck = {
     ratio: number
     normalText: boolean
     largeText: boolean
-    // Set when the pair fails for normal text: the text color the contract uses instead
+    // Set when the contract changed the text color, because this pair or another with the same text
+    // fails for normal text: the color it uses instead, and its ratio on this pair's background
     corrected?: { foreground: string; ratio: number; original: string }
 }
 
@@ -163,6 +167,19 @@ export const correctedForeground = (background: string, foreground: string, targ
         return mix(foreground, end, high)
     }
     return textOn(background)
+}
+
+// The same for text that sits on several backgrounds, corrected against the worst of its pairs, so
+// it passes on all of them when they're all lighter or all darker than it. When they're on both sides
+// (a light page with a dark card) and that leaves another pair failing, it's the color whose worst
+// pair is best, the nearest such color on a tie.
+export const correctedForegroundOn = (backgrounds: string[], foreground: string, target = NORMAL_TEXT_CONTRAST) => {
+    const worstRatio = (color: string) => Math.min(...backgrounds.map((background) => contrastRatio(background, color)))
+    const worst = backgrounds.reduce((lowest, background) => (contrastRatio(background, foreground) < contrastRatio(lowest, foreground) ? background : lowest))
+    const corrected = correctedForeground(worst, foreground, target)
+    if (worstRatio(corrected) >= target) return corrected
+    const candidates = ["#000000", "#FFFFFF"].flatMap((end) => Array.from({ length: 65 }, (_, step) => mix(foreground, end, step / 64)))
+    return candidates.reduce((best, candidate) => (worstRatio(candidate) > worstRatio(best) ? candidate : best), corrected)
 }
 
 // What the five color sections hold, in order, as the style guide route asks for them. Guides whose
@@ -297,10 +314,10 @@ const colorRoles = (guide: StyleGuide, notes: string[]) => {
     return found as Record<ColorRole, string>
 }
 
-const contrastChecks = (colors: Record<ColorRole, string>, notes: string[]) =>
-    CONTRAST_PAIRS.map(([background, foreground]): ContrastCheck => {
+const contrastChecks = (colors: Record<ColorRole, string>, notes: string[]) => {
+    const checks = CONTRAST_PAIRS.map(([background, foreground]): ContrastCheck => {
         const ratio = contrastRatio(colors[background], colors[foreground])
-        const check: ContrastCheck = {
+        return {
             background,
             foreground,
             colors: [colors[background], colors[foreground]],
@@ -308,16 +325,28 @@ const contrastChecks = (colors: Record<ColorRole, string>, notes: string[]) =>
             normalText: ratio >= NORMAL_TEXT_CONTRAST,
             largeText: ratio >= LARGE_TEXT_CONTRAST,
         }
-        if (!check.normalText) {
-            const corrected = correctedForeground(colors[background], colors[foreground])
-            check.corrected = { foreground: corrected, ratio: round2(contrastRatio(colors[background], corrected)), original: colors[foreground] }
-            notes.push(
-                `${foreground} ${colors[foreground]} on ${background} ${colors[background]} is ${check.ratio}:1, under ${NORMAL_TEXT_CONTRAST}:1 for normal text` +
-                `${check.largeText ? ` (enough for large text)` : ` and ${LARGE_TEXT_CONTRAST}:1 for large text`}; corrected to ${corrected} (${check.corrected.ratio}:1).`
-            )
-        }
-        return check
     })
+    // Each text color is corrected once, against every background it sits on
+    for (const foreground of new Set(checks.map((check) => check.foreground))) {
+        const own = checks.filter((check) => check.foreground === foreground)
+        const failing = own.filter((check) => !check.normalText)
+        if (failing.length === 0) continue
+        const original = colors[foreground]
+        const corrected = correctedForegroundOn(own.map((check) => colors[check.background]), original)
+        for (const check of own) {
+            check.corrected = { foreground: corrected, ratio: round2(contrastRatio(colors[check.background], corrected)), original }
+        }
+        const fails = failing.map((check) =>
+            `on ${check.background} ${colors[check.background]} is ${check.ratio}:1, under ${NORMAL_TEXT_CONTRAST}:1 for normal text` +
+            `${check.largeText ? ` (enough for large text)` : ` and ${LARGE_TEXT_CONTRAST}:1 for large text`}`
+        )
+        const outcome = own.length === 1
+            ? `${own[0].corrected!.ratio}:1`
+            : own.map((check) => `${check.corrected!.ratio}:1 on ${check.background}`).join(", ")
+        notes.push(`${foreground} ${original} ${fails.join("; ")}; corrected to ${corrected} (${outcome}).`)
+    }
+    return checks
+}
 
 // --- Typography -------------------------------------------------------------------------------
 
@@ -475,6 +504,6 @@ export const buildDesignContract = (guide: StyleGuide): DesignContract => {
     }
 }
 
-// The contract's corrections, for the server log
+// The pairs the guide fails and the contract corrected, for the server log
 export const contractCorrections = (contract: DesignContract) =>
-    contract.contrast.filter((check) => check.corrected)
+    contract.contrast.filter((check) => check.corrected && !check.normalText)
