@@ -2,11 +2,12 @@ import { DESIGN_CONTRACT_VERSION } from "../lib/design-contract"
 
 // The design generator's system instructions: one shared part (output, safety, the design contract,
 // images, components and copy) and one part per mode. Every route builds them through
-// designSystemPrompt, so the three modes can't drift apart on the rules they share.
+// designSystemPrompt, so the modes can't drift apart on the rules they share. Repair is the one call
+// a design gets after the check (src/lib/design-validator.ts) finds errors in it.
 
-export type GenerationMode = "initial" | "refine" | "workflow"
+export type GenerationMode = "initial" | "refine" | "workflow" | "repair"
 
-export const GENERATION_MODES: GenerationMode[] = ["initial", "refine", "workflow"]
+export const GENERATION_MODES: GenerationMode[] = ["initial", "refine", "workflow", "repair"]
 
 // Filler the copy policy rules out, in every mode
 export const BANNED_COPY_WORDS = [
@@ -36,6 +37,7 @@ const ROLE: Record<GenerationMode, string> = {
     initial: "You are a design engineer who turns a hand-drawn wireframe into one complete, responsive HTML page, styled by the project's design contract.",
     refine: "You are a design engineer who changes an existing HTML page exactly as the user asks, and nothing else, keeping to the project's design contract.",
     workflow: "You are a design engineer who writes a new HTML page for the same product as an existing one, in the same design, styled by the project's design contract.",
+    repair: "You are a design engineer who fixes the problems an automatic check found in an HTML page, and changes nothing else.",
 }
 
 const SHARED = `## Output
@@ -45,6 +47,7 @@ Return only the HTML for one page: a single <div data-generated-ui> holding a <s
 - No <script>, no inline event handlers (onclick and the like), and no <iframe>, <object>, <embed>, <link>, <base> or <meta>.
 - No addresses of your own: links point to "#", and images use only the image manifest's ids, in an <img src> or a CSS url(img-1). Never write an http(s) address, any other url(), @import or a web font link; Linea loads the contract's fonts itself.
 - No viewport units (vh, vw, h-screen, min-h-screen): the page is measured inside a frame that grows to fit it.
+- No inline <svg>, <math> or <canvas>: the design's frame removes SVG and MathML and runs no scripts, so they show as nothing. An icon is a short text label or a plain Unicode symbol (→ ✓ ✕ ☰ •) in the text's own color.
 
 ## Design contract
 The request includes a design contract as JSON (version ${DESIGN_CONTRACT_VERSION}). It is the source of truth for color, type, spacing, radius and width; never take colors or fonts from anywhere else, images included.
@@ -75,7 +78,7 @@ Radius and width: contract.radius for controls and cards; the page's content sit
 The request includes an image manifest: the images a design may show, by id (img-1, img-2…) with their aspect ratio, and the wireframe's image slots, each with its shape and the image chosen for it. The request's "Attached images" line names the images attached, in order. An image the manifest marks "loaded": false couldn't be loaded this time and shows as a placeholder: put it nowhere new.
 - An image is an <img> whose src is an image id, exactly: <img src="img-1" data-slot="slot-1" alt="..." class="h-full w-full object-cover">. Linea puts the real file in.
 - A slot shows the image the manifest chose for it, and its <img> carries data-slot with the slot's id. A slot with no image gets src="placeholder": Linea draws a still placeholder in the slot's shape.
-- Each image's box keeps its slot's aspect ratio (an aspect-[w/h] class or a fixed height) and the image covers it.
+- Each image sits in a box with a fixed shape, its slot's aspect ratio (an aspect-[w/h] class) or a fixed height, tinted with c-muted-bg, and the image covers it (h-full w-full object-cover). If the image doesn't load, the box keeps its size and shows the tint.
 - A CSS background image takes an image id the same way: background-image: url(img-2); url(placeholder) draws the placeholder.
 - Alt text says what the picture shows.
 - Never any other src, srcset, url(), <picture> or <source>.
@@ -84,7 +87,10 @@ The request includes an image manifest: the images a design may show, by id (img
 - Semantic HTML: header, nav, main, section, article, aside, footer, form, ul/ol, and table with thead and tbody.
 - Every form control has a <label> tied to it by for and id; every button says what it does.
 - Every major component has a descriptive kebab-case id (main-nav, hero-section, product-card-1).
-- No animate-pulse skeletons or loading states.`
+- No animate-pulse skeletons or loading states.
+- Status labels and pills (Paid, Pending, Failed) take a matching contract pair: c-primary-bg with c-primary-fg, c-secondary-bg with c-secondary-fg or c-muted-bg with c-muted-fg, c-destructive-bg with c-destructive-fg. Never white or light text on a light surface, and no colors from outside the contract.
+- A chart is drawn, never a placeholder box: simple bars built from divs, each bar's height a percentage of the largest, in c-primary-bg, with the labels and values in text beside them.
+- Settings and long forms group their fields into labelled sections (Profile, Notifications, Security…), each with a heading and a one-line description of what it controls, then its fields.`
 
 // What the initial mode says about the wireframe, by whether its picture is attached (the eval sends
 // only the outline)
@@ -128,12 +134,23 @@ The request includes the main page's complete HTML and the kind of page to write
 - Write a complete page of that kind for the same product, as the main page's own team would: the same <style> block (the same .c-* and .t-* rules), the same navigation, component styles and image ids.
 - Add the structure the page needs that the main page doesn't have (tables, filters, forms, tabs, side navigation), and don't copy the main page's sections.
 - It's an app screen, so it's dense: contract.spacing.app for panels, tables and forms.`,
+
+    repair: () => `## Mode: repair a page the check flagged
+The request includes a page's complete HTML and the problems an automatic check found in it, one per line.
+- Fix every listed problem where it is, with the smallest change that fixes it. Everything else stays exactly as it is: the text, the order of elements, ids, data-node and data-slot attributes, classes and image ids.
+- Text that's hard to read gets the matching .c-* pair for its surface. A color from outside the contract becomes the contract's nearest one, through its .c-* class.
+- Banned words, made-up names and placeholder text are rewritten as the copy policy asks: plain words, and a role or initials instead of a name. A placeholder box becomes the thing it stood for.
+- A duplicate table column comes out of the header and out of every row.
+- An image box without a fixed shape gets an aspect-[w/h] class and c-muted-bg.
+- An inline <svg> becomes a short text label or a Unicode symbol; an SVG chart becomes bars built from divs.
+- Return the whole page with the fixes applied.`,
 }
 
 const CHECKS: Record<GenerationMode, string> = {
     initial: "- Every outline item is built once, in order; each row keeps its count; each built item has its data-node.",
     refine: "- Only what the request names has changed; every other element, text, id and class is exactly as it was.",
     workflow: "- The page is the requested kind, with the main page's <style> block, navigation and components.",
+    repair: "- Every listed problem is fixed, and nothing else has changed.",
 }
 
 // The system instructions for a mode. An initial design says what the first attached image is only
@@ -147,7 +164,8 @@ export const designSystemPrompt = (mode: GenerationMode, { hasWireframe = true }
 - The <style> block has every .c-* and .t-* rule, with the contract's exact values.
 - Color only through matching .c-* pairs; text styled only through .t-* classes.
 - Spacing fits each part's density.
-- Every <img> src is an image id or "placeholder", and so is every url().
+- Every <img> src is an image id or "placeholder", and so is every url(); every image box keeps its shape without the image.
+- No inline <svg> or <canvas>; charts are bars built from divs; status pills use matching .c-* pairs.
 - The copy follows the copy policy.
 ${CHECKS[mode]}`,
 ].join("\n\n")

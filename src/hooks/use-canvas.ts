@@ -11,7 +11,7 @@ import { pasteOffset, shapesFromClipboard, shapesToClipboard } from '@/lib/clipb
 import { resizeBox } from '@/lib/resize-box'
 import { contentBounds, fitToContent, getShapeBounds } from '@/lib/shape-bounds'
 import { frameOutline } from '@/lib/frame-outline'
-import { INCOMPLETE_DESIGN_MESSAGE, INCOMPLETE_REFINE_MESSAGE, readDesignStream } from '@/lib/design-stream'
+import { DESIGN_STREAM_HEADERS, INCOMPLETE_DESIGN_MESSAGE, INCOMPLETE_REFINE_MESSAGE, readDesignStream } from '@/lib/design-stream'
 import type { FrameOutline } from '@/lib/wireframe-outline'
 import { resizeText } from '@/lib/text-box'
 import { downloadBlob, exportGeneratedUI } from '@/lib/download'
@@ -1299,6 +1299,8 @@ export const useFrame = (shape: FrameShape) => {
 
             const response = await fetch('/api/generate', {
                 method: 'POST',
+                // Says this tab reads a repaired design sent after the first
+                headers: DESIGN_STREAM_HEADERS,
                 body: formData,
             })
 
@@ -1335,18 +1337,25 @@ export const useFrame = (shape: FrameShape) => {
             const show = (markup: string) =>
                 dispatch(updateShape({ id: generatedUIId, patch: { uiSpecData: markup }, skipHistory: true }))
             try {
-                const markup = await readDesignStream(response, (markup) => {
-                    const now = Date.now()
-                    if (now - lastUpdateTime >= UPDATE_THROTTLE_MS) {
-                        show(markup)
-                        lastUpdateTime = now
-                    }
-                })
+                const markup = await readDesignStream(
+                    response,
+                    (markup) => {
+                        const now = Date.now()
+                        if (now - lastUpdateTime >= UPDATE_THROTTLE_MS) {
+                            show(markup)
+                            lastUpdateTime = now
+                        }
+                    },
+                    // The design is whole, and the server is fixing what its check found
+                    () => toast.loading('Fixing a few problems in the design...', { id: 'design-repair' })
+                )
                 show(markup)
             } catch (error) {
                 // A design that stopped partway isn't kept, and neither is the undo step that added it
                 dispatch(discardShape(generatedUIId))
                 throw new Error(INCOMPLETE_DESIGN_MESSAGE, { cause: error })
+            } finally {
+                toast.dismiss('design-repair')
             }
         } catch (error) {
             toast.error(`Failed to generate design: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -1436,7 +1445,7 @@ export const useWorkflowGeneration = () => {
                 try {
                     const response = await fetch('/api/generate/workflow', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 'Content-Type': 'application/json', ...DESIGN_STREAM_HEADERS },
                         body: JSON.stringify({
                             generatedUIId,
                             currentHTML: currentShape.uiSpecData,
@@ -1672,6 +1681,7 @@ export const useChatWindow = (generatedUIId: string, isOpen: boolean) => {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    ...DESIGN_STREAM_HEADERS,
                 },
                 body: JSON.stringify(requestData),
             })
@@ -1690,7 +1700,8 @@ export const useChatWindow = (generatedUIId: string, isOpen: boolean) => {
             dispatch(updateStreamingContent({ generatedUIId, messageId: responseId, content: 'Regenerating design...' }))
             let markup: string
             try {
-                markup = await readDesignStream(response)
+                markup = await readDesignStream(response, undefined, () =>
+                    dispatch(updateStreamingContent({ generatedUIId, messageId: responseId, content: 'Fixing a few problems in the new version...' })))
             } catch (error) {
                 throw new Error(INCOMPLETE_REFINE_MESSAGE, { cause: error })
             }

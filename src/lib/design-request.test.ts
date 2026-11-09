@@ -204,3 +204,41 @@ describe("the request text", () => {
         expect(DESIGN_PROVIDER_OPTIONS).toEqual({ google: { thinkingConfig: { thinkingBudget: 4_096 } } })
     })
 })
+
+describe("the repair request", () => {
+    const page = '<div data-generated-ui><p class="t-body">Discover plants</p></div>'
+    const problems = ['Banned word "Discover": "Discover plants" in <p class="t-body">. Say it plainly instead, as the copy policy asks.', "1 inline <svg> (in #features): the design's frame removes inline SVG."]
+    const repair = designPrompt({ mode: "repair", contract, manifest, html: page, problems })
+
+    it("uses the repair instructions, which change nothing but the problems", () => {
+        expect(repair.system).toBe(designSystemPrompt("repair"))
+        expect(repair.system).toContain("## Mode: repair a page the check flagged")
+        expect(repair.system).toContain("Fix every listed problem where it is, with the smallest change that fixes it. Everything else stays exactly as it is")
+        expect(repair.system).toContain("- Every listed problem is fixed, and nothing else has changed.")
+        expect(repair.system).not.toMatch(/wireframe defines|first attached image/i)
+    })
+
+    it("lists the problems, then the contract, the manifest and the page, with nothing attached", () => {
+        expect(repair.text.startsWith(`Mode: repair. A check of the page below found these problems. Fix only these, and change nothing else:\n- ${problems[0]}\n- ${problems[1]}\n\nNo images are attached.`)).toBe(true)
+        const [contractJson, manifestJson] = jsonBlocks(repair.text)
+        expect(contractJson.colors).toEqual(contract.colors)
+        expect(manifestJson.images.map((image: { id: string }) => image.id)).toEqual(["img-1"])
+        expect(repair.text).toContain(`Page to fix (complete HTML): fix the problems listed above and keep everything else exactly as it is.\n${page}`)
+        expect(repair.text).not.toContain("Wireframe outline")
+        expect(repair.text.endsWith(COPY_REMINDER)).toBe(true)
+    })
+})
+
+describe("what every mode says about icons, status pills, charts, images and forms", () => {
+    it("bans inline SVG, which the frame removes, and asks for pills on matching pairs, charts from divs, image boxes that keep their shape and labelled form sections", () => {
+        for (const mode of GENERATION_MODES) {
+            const system = designSystemPrompt(mode)
+            expect(system, mode).toContain("No inline <svg>, <math> or <canvas>: the design's frame removes SVG and MathML and runs no scripts, so they show as nothing.")
+            expect(system, mode).toContain("Status labels and pills (Paid, Pending, Failed) take a matching contract pair")
+            expect(system, mode).toContain("Never white or light text on a light surface")
+            expect(system, mode).toContain("A chart is drawn, never a placeholder box: simple bars built from divs")
+            expect(system, mode).toContain("Each image sits in a box with a fixed shape, its slot's aspect ratio (an aspect-[w/h] class) or a fixed height, tinted with c-muted-bg")
+            expect(system, mode).toContain("Settings and long forms group their fields into labelled sections (Profile, Notifications, Security…), each with a heading and a one-line description")
+        }
+    })
+})

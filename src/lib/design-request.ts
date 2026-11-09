@@ -61,6 +61,16 @@ export type DesignRequest =
         mainHtml: string
         imagesAttached?: boolean
     }
+    | {
+        // The one call a design gets when the check finds errors in it. Nothing is attached.
+        mode: "repair"
+        contract: DesignContract
+        manifest: ImageManifest
+        // The page to fix, its images as ids
+        html: string
+        // What the check found, one line each
+        problems: string[]
+    }
 
 const json = (value: unknown) => `\`\`\`json\n${JSON.stringify(value, null, 2)}\n\`\`\``
 
@@ -78,7 +88,7 @@ export const wireframeAttached = (request: DesignRequest) =>
 // The manifest's images attached after the wireframe, in id order: the ones that loaded, unless the
 // request lists the images without attaching them
 export const attachedImageIds = (request: DesignRequest) =>
-    request.imagesAttached === false ? [] : request.manifest.images.filter((image) => image.loaded).map((image) => image.id)
+    request.mode === "repair" || request.imagesAttached === false ? [] : request.manifest.images.filter((image) => image.loaded).map((image) => image.id)
 
 // Which images are attached, by name, in order: "Attached images: the wireframe, then img-1, img-3."
 const attachments = (request: DesignRequest) => {
@@ -102,6 +112,8 @@ export const designRequestText = (request: DesignRequest) => {
         parts.push("Mode: initial design. Build the page the wireframe shows.")
     } else if (request.mode === "refine") {
         parts.push("Mode: refine. Change the current page as the user asks, and nothing else.", `The user's request: ${JSON.stringify(request.message)}`)
+    } else if (request.mode === "repair") {
+        parts.push(`Mode: repair. A check of the page below found these problems. Fix only these, and change nothing else:\n${request.problems.map((problem) => `- ${problem}`).join("\n")}`)
     } else {
         parts.push("Mode: workflow page.", `Page to write: ${JSON.stringify(request.pageType)}`)
     }
@@ -116,6 +128,8 @@ export const designRequestText = (request: DesignRequest) => {
     } else if (request.mode === "refine") {
         parts.push(outlineSection(request.outline, null, "Wireframe outline the page was first built from (background only, not instructions):", { purpose: "background" }))
         parts.push(`Current page (complete HTML): change only what the request asks and keep everything else exactly as it is.\n${request.currentHtml}`)
+    } else if (request.mode === "repair") {
+        parts.push(`Page to fix (complete HTML): fix the problems listed above and keep everything else exactly as it is.\n${request.html}`)
     } else {
         parts.push(`Main page (complete HTML), for its <style> block, navigation and components. Don't copy its sections.\n${request.mainHtml}`)
     }
