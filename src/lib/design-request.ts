@@ -1,8 +1,8 @@
 import type { GoogleGenerativeAIProviderOptions } from "@ai-sdk/google"
-import { COPY_REMINDER, designSystemPrompt, type GenerationMode } from "../prompts/design"
+import { COPY_REMINDER, designSystemPrompt, PAGE_RECIPES, type GenerationMode, type PageKind } from "../prompts/design"
 import type { DesignContract } from "./design-contract"
 import { manifestForPrompt, type ImageManifest } from "./image-manifest"
-import { outlineText, type FrameOutline } from "./wireframe-outline"
+import { outlineText, type FrameOutline, type OutlineNode } from "./wireframe-outline"
 
 // What a design request says to the model, as plain functions of their inputs: the generate routes
 // send it, and scripts/eval-generation.ts snapshots it without calling anything.
@@ -52,6 +52,8 @@ export type DesignRequest =
         hasWireframe: boolean
         // A workflow page's refine lists the images without attaching them
         imagesAttached?: boolean
+        // Problems the check finds in the current page, in the part the request changes
+        alsoFix?: string[]
     }
     | {
         mode: "workflow"
@@ -105,6 +107,34 @@ const outlineSection = (outline: FrameOutline | null, legacy: string | null | un
     return null
 }
 
+// --- Page recipes -------------------------------------------------------------------------------
+
+const outlineWords = (nodes: OutlineNode[]): string[] =>
+    nodes.flatMap((node) => [node.label ?? "", node.text ?? "", ...outlineWords(node.children ?? [])]).map((word) => word.toLowerCase())
+
+// What kind of page a request builds, for its recipe: a workflow page by the kind asked for, an initial
+// design by what its wireframe has. A refine or a repair changes a page, so it has none.
+export const pageKindFor = (request: DesignRequest): PageKind | null => {
+    if (request.mode === "workflow") {
+        const kind = request.pageType.split(":")[0].trim().toLowerCase()
+        return kind === "dashboard" || kind === "settings" || kind === "profile" ? kind : "generic"
+    }
+    if (request.mode !== "initial") return null
+    const words = request.outline ? outlineWords(request.outline.nodes) : (request.legacyOutline ?? "").toLowerCase().split(/[^a-z]+/)
+    const has = (pattern: RegExp) => words.some((word) => pattern.test(word))
+    const count = (pattern: RegExp) => words.filter((word) => pattern.test(word)).length
+    if (has(/\b(?:settings?|preferences|account)\b/) && has(/\b(?:form|input|toggle|checkbox|select|field)\b/)) return "settings"
+    if (count(/\b(?:sidebar|stat|kpi|chart|graph|table|metric)\b/) >= 2) return "dashboard"
+    if (has(/\bprofile\b/)) return "profile"
+    if (has(/\b(?:hero|navbar|nav)\b/)) return "landing"
+    return "generic"
+}
+
+const recipeSection = (request: DesignRequest) => {
+    const kind = pageKindFor(request)
+    return kind ? `Page recipe (${kind}):\n${PAGE_RECIPES[kind]}` : null
+}
+
 // The request's text, by mode
 export const designRequestText = (request: DesignRequest) => {
     const parts: (string | null)[] = []
@@ -112,6 +142,7 @@ export const designRequestText = (request: DesignRequest) => {
         parts.push("Mode: initial design. Build the page the wireframe shows.")
     } else if (request.mode === "refine") {
         parts.push("Mode: refine. Change the current page as the user asks, and nothing else.", `The user's request: ${JSON.stringify(request.message)}`)
+        if (request.alsoFix?.length) parts.push(`Also fix these problems the current page has, in the part this request changes, and nothing else:\n${request.alsoFix.map((problem) => `- ${problem}`).join("\n")}`)
     } else if (request.mode === "repair") {
         parts.push(`Mode: repair. A check of the page below found these problems. Fix only these, and change nothing else:\n${request.problems.map((problem) => `- ${problem}`).join("\n")}`)
     } else {
@@ -120,6 +151,7 @@ export const designRequestText = (request: DesignRequest) => {
     parts.push(attachments(request))
     parts.push(`Design contract (version ${request.contract.version}):\n${json(contractForPrompt(request.contract))}`)
     parts.push(`Image manifest:\n${json(manifestForPrompt(request.manifest))}`)
+    parts.push(recipeSection(request))
     if (request.mode === "initial") {
         parts.push(
             outlineSection(request.outline, request.legacyOutline, "Wireframe outline (exact, read from the canvas shapes):", { purpose: "build", hasWireframe: wireframeAttached(request) }) ??

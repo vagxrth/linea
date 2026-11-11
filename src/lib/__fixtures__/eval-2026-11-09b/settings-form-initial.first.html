@@ -1,0 +1,129 @@
+<div data-generated-ui class="c-bg c-fg min-h-screen">
+  <style>
+    [data-generated-ui] { font-family: 'Work Sans', ui-sans-serif, system-ui, sans-serif }
+    .c-bg { background-color: #FBFAF7 }
+    .c-fg { color: #1D1D1F }
+    .c-card-bg { background-color: #FBFAF7 }
+    .c-card-fg { color: #1D1D1F }
+    .c-popover-bg { background-color: #FBFAF7 }
+    .c-popover-fg { color: #1D1D1F }
+    .c-primary-bg { background-color: #4F6F52 }
+    .c-primary-fg { color: #FFFFFF }
+    .c-secondary-bg { background-color: #E7E5E0 }
+    .c-secondary-fg { color: #3A3A3C }
+    .c-muted-bg { background-color: #EEEDEA }
+    .c-muted-fg { color: #6B6A6B }
+    .c-accent-bg { background-color: #C9A27E }
+    .c-accent-fg { color: #403E3C }
+    .c-destructive-bg { background-color: #A3412D }
+    .c-destructive-fg { color: #FFFFFF }
+    .c-border { border-color: #DAD9D7 }
+    .c-input-bg { background-color: #DAD9D7 }
+    .c-ring { outline-color: #4F6F52; --tw-ring-color: #4F6F52 }
+
+    .t-h1 { font-family: 'Source Serif 4', ui-serif, Georgia, serif; font-size: 2rem; font-weight: 600; line-height: 1.2; letter-spacing: normal }
+    .t-h2 { font-family: 'Source Serif 4', ui-serif, Georgia, serif; font-size: 1.875rem; font-weight: 600; line-height: 1.25; letter-spacing: normal }
+    .t-h3 { font-family: 'Source Serif 4', ui-serif, Georgia, serif; font-size: 1.5rem; font-weight: 600; line-height: 1.3; letter-spacing: normal }
+    .t-body { font-family: 'Work Sans', ui-sans-serif, system-ui, sans-serif; font-size: 1rem; font-weight: 400; line-height: 1.55; letter-spacing: normal }
+    .t-small { font-family: 'Work Sans', ui-sans-serif, system-ui, sans-serif; font-size: 0.875rem; font-weight: 400; line-height: 1.4; letter-spacing: normal }
+    .t-button { font-family: 'Work Sans', ui-sans-serif, system-ui, sans-serif; font-size: 1rem; font-weight: 500; line-height: 1.25; letter-spacing: normal }
+    .t-label { font-family: 'Work Sans', ui-sans-serif, system-ui, sans-serif; font-size: 0.875rem; font-weight: 500; line-height: 1.4; letter-spacing: normal }
+
+    @media (max-width: 639px) {
+      .t-h1 { font-size: 1.5rem; }
+      .t-h2 { font-size: 1.40625rem; }
+    }
+
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 38px;
+      height: 22px;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      transition: .4s;
+      border-radius: 34px;
+    }
+
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+
+    input:checked + .toggle-slider {
+      background-color: #4F6F52; 
+    }
+
+    input:focus + .toggle-slider {
+      box-shadow: 0 0 1px #4F6F52; 
+    }
+
+    input:checked + .toggle-slider:before {
+      transform: translateX(16px);
+    }
+  </style>
+  <main class="mx-auto max-w-7xl p-4 md:p-6">
+    <h1 data-node="ttl001" class="t-h1 mb-6 md:mb-8">Account settings</h1>
+
+    <div class="grid md:grid-cols-3 gap-6 md:gap-8">
+      <form data-node="form01" class="c-card-bg c-card-fg p-4 rounded-xl md:col-span-2 flex flex-col gap-4">
+        <div class="flex flex-col gap-1.5">
+          <label data-node="lbl-n" for="name-input" class="t-label">Name</label>
+          <input data-node="inp-n" type="text" id="name-input" class="c-input-bg c-fg c-border rounded-lg h-10 px-3 py-2 t-body focus:outline-none focus:ring-2 c-ring" value="Jane Doe">
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <label data-node="lbl-e" for="email-input" class="t-label">Email</label>
+          <input data-node="inp-e" type="email" id="email-input" class="c-input-bg c-fg c-border rounded-lg h-10 px-3 py-2 t-body focus:outline-none focus:ring-2 c-ring" value="jane.doe@example.com">
+        </div>
+
+        <div class="flex items-center gap-3 mt-4">
+          <label data-node="tgl-1" class="toggle-switch">
+            <input type="checkbox" id="email-design-ready" checked>
+            <span class="toggle-slider"></span>
+          </label>
+          <label data-node="tgl-1t" for="email-design-ready" class="t-body c-fg">Email me when a design is ready</label>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <label data-node="tgl-2" class="toggle-switch">
+            <input type="checkbox" id="weekly-summary">
+            <span class="toggle-slider"></span>
+          </label>
+          <label data-node="tgl-2t" for="weekly-summary" class="t-body c-fg">Weekly summary</label>
+        </div>
+
+        <button data-node="save01" type="submit" class="c-primary-bg c-primary-fg rounded-lg h-10 px-4 py-2 t-button mt-6 self-start">
+          <span data-node="save-t">Save changes</span>
+        </button>
+      </form>
+
+      <article data-node="plan01" class="c-card-bg c-card-fg p-4 rounded-xl flex flex-col gap-4">
+        <h3 data-node="plan-t" class="t-h3">Plan: Free</h3>
+        <p class="t-body">Your current plan includes basic features. Upgrade for more.</p>
+        <button data-node="upgr01" type="button" class="c-primary-bg c-primary-fg rounded-lg h-10 px-4 py-2 t-button mt-auto">Upgrade plan</button>
+      </article>
+    </div>
+  </main>
+</div>

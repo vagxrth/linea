@@ -1,0 +1,155 @@
+<div data-generated-ui>
+<style>
+[data-generated-ui] { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif }
+.c-bg { background-color: #F8FAFC }
+.c-fg { color: #0F172A }
+.c-card-bg { background-color: #FFFFFF }
+.c-card-fg { color: #0F172A }
+.c-popover-bg { background-color: #FFFFFF }
+.c-popover-fg { color: #0F172A }
+.c-primary-bg { background-color: #0F766E }
+.c-primary-fg { color: #FFFFFF }
+.c-secondary-bg { background-color: #E2E8F0 }
+.c-secondary-fg { color: #0F172A }
+.c-muted-bg { background-color: #F1F5F9 }
+.c-muted-fg { color: #677180 }
+.c-accent-bg { background-color: #5EEAD4 }
+.c-accent-fg { color: #5C5C5C }
+.c-destructive-bg { background-color: #DC2626 }
+.c-destructive-fg { color: #FFFFFF }
+.c-border { border-color: #E2E8F0 }
+.c-input-bg { background-color: #E2E8F0 }
+.c-ring { outline-color: #0F766E; --tw-ring-color: #0F766E }
+
+.t-h1 { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; font-size: 1.75rem; font-weight: 600; line-height: 1.25; letter-spacing: -0.01em }
+.t-h2 { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; font-size: 1.25rem; font-weight: 600; line-height: 1.3; letter-spacing: normal }
+.t-h3 { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; font-size: 1rem; font-weight: 600; line-height: 1.4; letter-spacing: normal }
+.t-body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; font-size: 0.9375rem; font-weight: 400; line-height: 1.5; letter-spacing: normal }
+.t-small { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; font-size: 0.8125rem; font-weight: 400; line-height: 1.4; letter-spacing: normal }
+.t-button { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; font-size: 0.875rem; font-weight: 500; line-height: 1.2; letter-spacing: normal }
+.t-label { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; font-size: 0.75rem; font-weight: 500; line-height: 1.3; letter-spacing: 0.02em }
+
+@media (max-width: 639px) {
+  .t-h1 { font-size: calc(1.75rem * 0.75); }
+  .t-h2 { font-size: calc(1.25rem * 0.75); }
+}
+</style>
+<div class="flex flex-col md:flex-row min-h-screen c-bg c-fg">
+  <nav data-node="side01" class="c-card-bg c-card-fg w-full md:w-56 flex-shrink-0 p-4 md:p-6 flex flex-col gap-2 md:gap-3 border-b md:border-b-0 md:border-r c-border">
+    <h2 class="t-h2 mb-4">Linea Analytics</h2>
+    <a href="#" class="t-body c-card-fg hover:c-primary-fg" data-node="nav-a">Overview</a>
+    <a href="#" class="t-body c-card-fg hover:c-primary-fg" data-node="nav-b">Orders</a>
+    <a href="#" class="t-body c-card-fg hover:c-primary-fg" data-node="nav-c">Customers</a>
+    <a href="#" class="t-body c-card-fg hover:c-primary-fg" data-node="nav-d">Reports</a>
+    <a href="#" class="t-body c-card-fg hover:c-primary-fg" data-node="nav-e">Settings</a>
+  </nav>
+
+  <main data-node="main-content" class="flex-1 p-4 md:p-6 flex flex-col gap-4 md:gap-6 mx-auto max-w-7xl w-full">
+    <header data-node="head01" class="c-card-bg c-card-fg rounded-xl p-4 flex items-center justify-between">
+      <div data-node="srch01" class="relative w-full max-w-sm">
+        <label for="search-input" class="sr-only t-label">Search</label>
+        <input type="text" id="search-input" placeholder="Search..." class="c-input-bg c-card-fg c-border rounded-lg h-10 pl-4 pr-10 w-full t-body focus:outline-none focus:ring-2 c-ring">
+        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-lg c-muted-fg">🔍</span>
+      </div>
+      <div data-node="avat01" class="h-10 w-10 rounded-full c-secondary-bg c-secondary-fg flex items-center justify-center t-button ml-4">JD</div>
+    </header>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+      <article data-node="kpi001" class="c-card-bg c-card-fg rounded-xl p-4 flex flex-col gap-1.5">
+        <p class="t-body c-muted-fg">Total Revenue</p>
+        <p class="t-h2">$12,345</p>
+      </article>
+      <article data-node="kpi002" class="c-card-bg c-card-fg rounded-xl p-4 flex flex-col gap-1.5">
+        <p class="t-body c-muted-fg">New Customers</p>
+        <p class="t-h2">2,100</p>
+      </article>
+      <article data-node="kpi003" class="c-card-bg c-card-fg rounded-xl p-4 flex flex-col gap-1.5">
+        <p class="t-body c-muted-fg">Active Projects</p>
+        <p class="t-h2">15</p>
+      </article>
+      <article data-node="kpi004" class="c-card-bg c-card-fg rounded-xl p-4 flex flex-col gap-1.5">
+        <p class="t-body c-muted-fg">Conversion Rate</p>
+        <p class="t-h2">4.7%</p>
+      </article>
+    </div>
+
+    <section data-node="chrt01" class="c-card-bg c-card-fg rounded-xl p-4 flex flex-col gap-3 md:gap-4">
+      <h2 class="t-h2">Monthly Sales Trend</h2>
+      <div class="flex justify-around items-end h-48 pt-4">
+        <div class="flex flex-col items-center gap-1">
+          <div class="w-8 c-primary-bg rounded-t-sm" style="height: 66%;"></div>
+          <span class="t-small c-muted-fg">Jan</span>
+        </div>
+        <div class="flex flex-col items-center gap-1">
+          <div class="w-8 c-primary-bg rounded-t-sm" style="height: 80%;"></div>
+          <span class="t-small c-muted-fg">Feb</span>
+        </div>
+        <div class="flex flex-col items-center gap-1">
+          <div class="w-8 c-primary-bg rounded-t-sm" style="height: 60%;"></div>
+          <span class="t-small c-muted-fg">Mar</span>
+        </div>
+        <div class="flex flex-col items-center gap-1">
+          <div class="w-8 c-primary-bg rounded-t-sm" style="height: 100%;"></div>
+          <span class="t-small c-muted-fg">Apr</span>
+        </div>
+        <div class="flex flex-col items-center gap-1">
+          <div class="w-8 c-primary-bg rounded-t-sm" style="height: 73%;"></div>
+          <span class="t-small c-muted-fg">May</span>
+        </div>
+        <div class="flex flex-col items-center gap-1">
+          <div class="w-8 c-primary-bg rounded-t-sm" style="height: 86%;"></div>
+          <span class="t-small c-muted-fg">Jun</span>
+        </div>
+      </div>
+    </section>
+
+    <section data-node="tabl01" class="c-card-bg c-card-fg rounded-xl p-4 flex flex-col gap-3 md:gap-4">
+      <h2 class="t-h2">Latest Transactions</h2>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left">
+          <thead class="c-muted-bg c-muted-fg">
+            <tr>
+              <th class="px-3 py-2 t-label">Order ID</th>
+              <th class="px-3 py-2 t-label">Customer</th>
+              <th class="px-3 py-2 t-label">Status</th>
+              <th class="px-3 py-2 t-label">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr data-node="row-1" class="border-b c-border">
+              <td class="px-3 py-2 t-body">#ORD001</td>
+              <td class="px-3 py-2 t-body">Alice Smith</td>
+              <td class="px-3 py-2"><span class="c-primary-bg c-primary-fg rounded-full t-small px-2 py-1">Completed</span></td>
+              <td class="px-3 py-2 t-body">$250.00</td>
+            </tr>
+            <tr data-node="row-2" class="border-b c-border">
+              <td class="px-3 py-2 t-body">#ORD002</td>
+              <td class="px-3 py-2 t-body">Bob Johnson</td>
+              <td class="px-3 py-2"><span class="c-muted-bg c-muted-fg rounded-full t-small px-2 py-1">Pending</span></td>
+              <td class="px-3 py-2 t-body">$120.50</td>
+            </tr>
+            <tr data-node="row-3" class="border-b c-border">
+              <td class="px-3 py-2 t-body">#ORD003</td>
+              <td class="px-3 py-2 t-body">Charlie Brown</td>
+              <td class="px-3 py-2"><span class="c-secondary-bg c-secondary-fg rounded-full t-small px-2 py-1">Shipped</span></td>
+              <td class="px-3 py-2 t-body">$75.25</td>
+            </tr>
+            <tr data-node="row-4" class="border-b c-border">
+              <td class="px-3 py-2 t-body">#ORD004</td>
+              <td class="px-3 py-2 t-body">Diana Prince</td>
+              <td class="px-3 py-2"><span class="c-primary-bg c-primary-fg rounded-full t-small px-2 py-1">Completed</span></td>
+              <td class="px-3 py-2 t-body">$500.00</td>
+            </tr>
+            <tr data-node="row-5" class="border-b c-border">
+              <td class="px-3 py-2 t-body">#ORD005</td>
+              <td class="px-3 py-2 t-body">Eve Adams</td>
+              <td class="px-3 py-2"><span class="c-muted-bg c-muted-fg rounded-full t-small px-2 py-1">Pending</span></td>
+              <td class="px-3 py-2 t-body">$30.00</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+</div>

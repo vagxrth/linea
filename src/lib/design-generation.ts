@@ -1,7 +1,7 @@
 import { streamText, type LanguageModel, type UserContent } from "ai"
 import { DESIGN_MAX_OUTPUT_TOKENS, DESIGN_PROVIDER_OPTIONS, DESIGN_TEMPERATURE, designPrompt, type DesignRequest } from "./design-request"
 import { REPLACEMENT_MARK } from "./design-stream"
-import { errorCount, issueSummary, repairProblems, validate, type Issue, type ValidationContext } from "./design-validator"
+import { errorCount, issueSummary, repairProblems, touchedBy, validate, type Issue, type ValidationContext } from "./design-validator"
 import { elementsOf, parseHtml } from "./html-tree"
 import { designHtmlForPrompt, resolveDesignImages } from "./image-manifest"
 import type { OutlineNode } from "./wireframe-outline"
@@ -75,6 +75,7 @@ export const validationContextFor = (design: DesignRequest): ValidationContext =
                 suppliedText: [design.message, ...(design.outline ? copyText(design.outline.nodes) : [])].join("\n"),
                 previousHtml: design.currentHtml,
                 colorRequested: ASKS_FOR_COLOR.test(design.message),
+                request: design.message,
                 width: frameWidth(design.outline),
             }
         case "workflow":
@@ -163,6 +164,22 @@ const checked = (html: string, design: GenerateDesignOptions["design"], context:
     }
 }
 
+// A refine with the errors the current page already has in the part the request changes, for the model
+// to fix too: they'd count as errors in the refined page. A check that throws adds nothing.
+export const withCarriedProblems = <T extends GenerateDesignOptions["design"]>(design: T): T => {
+    if (design.mode !== "refine") return design
+    try {
+        const { previousHtml, mode, ...context } = validationContextFor(design)
+        void previousHtml
+        void mode
+        const carried = validate(design.currentHtml, design.contract, context).filter((issue) => issue.severity === "error" && touchedBy(issue, design.message))
+        return carried.length ? { ...design, alsoFix: repairProblems(carried) } : design
+    } catch (error) {
+        console.warn("[design-check] Checking the current page failed, so the refine goes without it:", error)
+        return design
+    }
+}
+
 // --- Generating a design -----------------------------------------------------------------------
 
 // The design as it streams, then, when a repair beat it, REPLACEMENT_MARK and the repaired design.
@@ -170,7 +187,7 @@ const checked = (html: string, design: GenerateDesignOptions["design"], context:
 // leaves the first design as it is.
 export async function* generateDesign(options: GenerateDesignOptions): AsyncGenerator<string, void> {
     const { design } = options
-    const first = callModel(options, design, options.attachments, 1)
+    const first = callModel(options, withCarriedProblems(design), options.attachments, 1)
     let html = ''
     for await (const chunk of first.chunks) {
         html += chunk

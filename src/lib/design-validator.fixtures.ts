@@ -40,3 +40,16 @@ export const DASHBOARD_REPAIRED = edited(DASHBOARD_INITIAL, [
     ['<p class="t-body c-muted-fg">Placeholder for a detailed sales chart.</p>', `<div class="flex items-end gap-3 h-48 w-full">${bar("Mon", 45)}${bar("Tue", 62)}${bar("Wed", 54)}${bar("Thu", 80)}${bar("Fri", 100)}</div>`],
     [/<svg[\s\S]*?<\/svg>/, '<span aria-hidden="true">⌕</span>'],
 ])
+
+// Run 2 of the live eval, on 027f276 (2026-11-09), as it came back: the kept designs, and as .first the
+// ones the check repaired
+const run2 = (name: string) => readFileSync(new URL(`./__fixtures__/eval-2026-11-09b/${name}.html`, import.meta.url), "utf8")
+
+// The chart's bars at 66%, 80%… of columns with no set height, so 0px tall; customers as "Customer 1…5"
+export const RUN2_DASHBOARD_INITIAL = run2("dense-dashboard-initial")
+export const RUN2_DASHBOARD_REFINE = run2("dense-dashboard-refine")
+export const RUN2_LANDING_INITIAL = run2("landing-initial")
+export const RUN2_LANDING_REFINE = run2("landing-refine")
+// value="Your Name" and your.email@example.com, left after its repair
+export const RUN2_SETTINGS_INITIAL = run2("settings-form-initial")
+export const RUN2_SETTINGS_REFINE = run2("settings-form-refine")

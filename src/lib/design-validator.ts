@@ -11,7 +11,7 @@ import { clipText, describeElement, elementChildren, elementsOf, isWithin, neare
 // the same issues. An error is worth one repair call (src/lib/design-generation.ts); a warning is
 // only reported.
 
-export type IssueKind = "contrast" | "color" | "copy" | "name" | "placeholder" | "duplicate-column" | "image-size" | "inline-svg"
+export type IssueKind = "contrast" | "color" | "copy" | "name" | "placeholder" | "duplicate-column" | "image-size" | "collapsed-height" | "inline-svg"
 
 export type Issue = {
     kind: IssueKind
@@ -22,6 +22,9 @@ export type Issue = {
     key: string
     // How many places it's in
     count: number
+    // Words for the parts of the page it's in (its section's heading, ids and data-nodes, and what kind
+    // of element it is), for telling whether a refine's request touches it
+    regions?: string[]
 }
 
 export type ValidationContext = {
@@ -35,6 +38,8 @@ export type ValidationContext = {
     colorRequested?: boolean
     // The frame's width in px, for media queries and sm:/md: classes
     width?: number
+    // A refine's request: a problem the page already had stays an error when the request touches its part
+    request?: string
 }
 
 export const DEFAULT_FRAME_WIDTH = 1280
@@ -73,6 +78,52 @@ const places = (count: number) => (count > 1 ? ` (${count} places)` : "")
 
 const quote = (text: string) => `"${clipText(text, 60)}"`
 
+// --- Regions: which part of the page an issue is in ------------------------------------------------
+
+// What a request would call an element of each kind
+const TAG_WORDS: Record<string, string[]> = {
+    table: ["table", "row", "column", "cell"], thead: ["table", "header", "column"], tbody: ["table", "row"], tr: ["table", "row"], td: ["table", "row", "cell", "column"], th: ["table", "column", "header"],
+    nav: ["nav", "navigation", "menu", "link"], aside: ["sidebar", "side", "panel"], header: ["header", "top", "bar"], footer: ["footer", "bottom"],
+    form: ["form", "field", "input"], input: ["form", "field", "input"], select: ["form", "field"], textarea: ["form", "field"], label: ["form", "field", "label"],
+    button: ["button"], img: ["image", "photo", "picture"], h1: ["headline", "heading", "title"], blockquote: ["quote", "testimonial"],
+}
+// A table's part of the page is the section around it, with that section's heading
+const SECTION_TAGS = new Set(["section", "article", "aside", "header", "nav", "footer", "form"])
+// The outline's short ids for components, as a request would name them
+const NODE_WORDS: Record<string, string> = { chrt: "chart", tabl: "table", srch: "search", btn: "button", kpi: "stat", img: "image", avat: "avatar", side: "sidebar", head: "header", tgl: "toggle", inp: "input", lbl: "label" }
+// Words too general to say which part of a page is meant
+const GENERAL_WORDS = new Set(["section", "page", "part", "area", "block", "container", "wrapper", "content", "main", "item", "text", "the", "and", "for", "with"])
+
+const wordsOf = (text: string) =>
+    text.toLowerCase().split(/[^a-z]+/).filter((word) => word.length >= 3).map((word) => (word.length > 4 && word.endsWith("s") ? word.slice(0, -1) : word)).filter((word) => !GENERAL_WORDS.has(word))
+
+// The part of the page around an element, as words: its own kind and its ancestors', their ids, and
+// the nearest section's heading and the data-nodes in it (hero01 is "hero")
+const regionWords = (node: HtmlElement) => {
+    const words = new Set<string>()
+    let section: HtmlElement | null = null
+    for (let at: HtmlElement | null = node; at && at.tag !== ROOT; at = at.parent) {
+        for (const word of TAG_WORDS[at.tag] ?? []) words.add(word)
+        for (const word of wordsOf(at.attributes.get("id") ?? "")) words.add(word)
+        if (!section && SECTION_TAGS.has(at.tag)) section = at
+    }
+    if (section) {
+        for (const inner of elementsOf(section)) {
+            for (const word of wordsOf((inner.attributes.get("data-node") ?? "").replace(/\d+/g, " "))) words.add(NODE_WORDS[word] ?? word)
+            if (/^h[1-3]$/.test(inner.tag)) for (const word of wordsOf(textContent(inner))) words.add(word)
+        }
+    }
+    return words
+}
+
+const regionsOf = (nodes: HtmlElement[]) => [...new Set(nodes.flatMap((node) => [...regionWords(node)]))].sort()
+
+// Whether a refine's request names the part of the page an issue is in
+export const touchedBy = (issue: Issue, request: string) => {
+    const asked = new Set(wordsOf(request))
+    return (issue.regions ?? []).some((word) => asked.has(word))
+}
+
 // --- Contrast ----------------------------------------------------------------------------------
 
 const BACKGROUND_CLASS: Partial<Record<ColorRole, string>> = {
@@ -101,7 +152,7 @@ const isDisabled = (node: HtmlElement) => {
 
 // One issue for each pair of colors that fails, with up to three of the places it's in
 const contrastIssues = (page: Page, contract: DesignContract): Issue[] => {
-    const groups = new Map<string, { fg: string; bg: string; ratio: number; needed: number; count: number; samples: Map<string, string> }>()
+    const groups = new Map<string, { fg: string; bg: string; ratio: number; needed: number; count: number; samples: Map<string, string>; nodes: HtmlElement[] }>()
     for (const node of page.all) {
         const text = ownText(node)
         if (!/[\p{L}\p{N}]/u.test(text) || isWithin(node, NOT_COPY) || node.tag === "option" || node.tag === "textarea") continue
@@ -115,8 +166,9 @@ const contrastIssues = (page: Page, contract: DesignContract): Issue[] => {
         const needed = large ? LARGE_TEXT_CONTRAST : NORMAL_TEXT_CONTRAST
         if (ratio >= needed) continue
         const key = `contrast|${fg}|${bg}|${needed}`
-        const group = groups.get(key) ?? { fg, bg, ratio, needed, count: 0, samples: new Map<string, string>() }
+        const group = groups.get(key) ?? { fg, bg, ratio, needed, count: 0, samples: new Map<string, string>(), nodes: [] }
         group.count++
+        group.nodes.push(node)
         const spot = where(node)
         if (group.samples.size < 3 && !group.samples.has(spot)) group.samples.set(spot, text)
         groups.set(key, group)
@@ -126,6 +178,7 @@ const contrastIssues = (page: Page, contract: DesignContract): Issue[] => {
         severity: "error",
         key,
         count: group.count,
+        regions: regionsOf(group.nodes),
         message: `Contrast ${group.ratio.toFixed(2)}:1, under ${group.needed}:1: ${group.fg} text on ${group.bg}${places(group.count)}: ${[...group.samples].map(([spot, text]) => `${quote(text)} in ${spot}`).join("; ")}. ${contrastFix(group.bg, contract)}`,
     }))
 }
@@ -270,6 +323,7 @@ const copyIssues = (copy: Copy[], context: ValidationContext): Issue[] => {
             severity: prose ? "error" : "warning",
             key: `copy|${word}`,
             count: hits.length,
+            regions: regionsOf(hits.map((hit) => hit.item.node)),
             message: `Banned word ${quote(shown.form)}${places(hits.length)}: ${quote(shown.item.text)} in ${where(shown.item.node)}. Say it plainly instead, as the copy policy asks.`,
         })
     }
@@ -386,7 +440,8 @@ const nameIssues = (copy: Copy[], context: ValidationContext): Issue[] => {
             severity: testimonial ? "warning" : "error",
             key: testimonial ? "name|testimonial" : "name",
             count: names.size,
-            message: `Made-up people's names${testimonial ? " in a testimonial" : ""}: ${listed.join(", ")}${names.size > 5 ? ` and ${names.size - 5} more` : ""} (in ${spots.join(", ")}). Use roles, initials or labels like "Customer 1" instead, as the copy policy asks.`,
+            regions: regionsOf([...names.values()].map((item) => item.node)),
+            message: `Made-up people's names${testimonial ? " in a testimonial" : ""}: ${listed.join(", ")}${names.size > 5 ? ` and ${names.size - 5} more` : ""} (in ${spots.join(", ")}). Use realistic company names (Northwind Traders) or roles instead, as the copy policy asks.`,
         }]
     }
     return [...issue(prose, false), ...issue(quotes, true)]
@@ -418,34 +473,53 @@ const PLACEHOLDER_TEXT: { pattern: RegExp; fix: (item: Copy) => string }[] = [
     { pattern: /\blorem\b|\bipsum\b|\bdolor sit amet\b/i, fix: () => COPY_FIX },
     { pattern: /\bplaceholder\b|\b(?:goes|go|will go|will appear|will be shown) here\b/i, fix: placeholderFix },
     { pattern: /\[[^\]]*\b(?:insert|your|name|company|logo|image|chart|title|text|here|placeholder)\b[^\]]*\]/i, fix: () => COPY_FIX },
-    { pattern: /\b(?:john|jane) doe\b|[\w.+-]+@example\.(?:com|org|net)\b/i, fix: () => "Use a role or a label instead, as the copy policy asks." },
+    { pattern: /\b(?:john|jane) doe\b|[\w.+-]+@example\.(?:com|org|net)\b|^your (?:full |first |last )?(?:name|e-?mail(?: address)?|company|business|phone(?: number)?|title|address)$/i, fix: () => SAMPLE_FIX },
 ]
+
+const SAMPLE_FIX = "Use a realistic sample value: an address at the brand's own domain (hello@terrabloom.co), a business or team name where a name goes, as the copy policy asks."
+
+// "Customer 1", "Customer 2": a list numbered instead of filled in
+const NUMBERED = /^(customer|user|item|client|product|project)\s*#?\s*(\d+)$/i
 
 const placeholderIssues = (page: Page, copy: Copy[], context: ValidationContext): Issue[] => {
     const supplied = context.suppliedText ?? ""
-    const groups = new Map<string, { message: string; count: number }>()
-    const add = (key: string, message: string) => {
-        const group = groups.get(key)
-        if (group) group.count++
-        else groups.set(key, { message, count: 1 })
+    const groups = new Map<string, { message: string; count: number; nodes: HtmlElement[]; severity: Issue["severity"] }>()
+    const add = (key: string, message: string, node: HtmlElement, severity: Issue["severity"] = "error") => {
+        const group = groups.get(key) ?? { message, count: 0, nodes: [], severity }
+        group.count++
+        group.nodes.push(node)
+        groups.set(key, group)
     }
     for (const item of copy) {
         for (const { pattern, fix } of PLACEHOLDER_TEXT) {
             const match = pattern.exec(item.text)
             if (!match || pattern.test(supplied)) continue
-            add(`placeholder|${match[0].toLowerCase()}`, `Placeholder text ${quote(item.text)} in ${where(item.node)}. ${fix(item)}`)
+            add(`placeholder|${match[0].toLowerCase()}`, `Placeholder text ${quote(item.text)} in ${where(item.node)}. ${fix(item)}`, item.node)
             break
+        }
+    }
+    // A numbered sequence is a warning: the page works, it just reads as unfinished
+    const numbered = new Map<string, Copy[]>()
+    for (const item of copy) {
+        const match = NUMBERED.exec(item.text.trim())
+        if (match) numbered.set(match[1].toLowerCase(), [...(numbered.get(match[1].toLowerCase()) ?? []), item])
+    }
+    for (const [word, items] of numbered) {
+        if (new Set(items.map((item) => item.text.trim().toLowerCase())).size < 2) continue
+        const listed = items.slice(0, 3).map((item) => `"${item.text.trim()}"`).join(", ")
+        for (const item of items) {
+            add(`placeholder|numbered|${word}`, `Numbered stand-ins ${listed}${items.length > 3 ? "…" : ""} in ${nearestLandmark(item.node) ?? describeElement(item.node)}: use realistic, varied sample values (company names such as Northwind Traders for customers).`, item.node, "warning")
         }
     }
     for (const node of page.all) {
         if (isWithin(node, NOT_COPY) || page.styles.get(node)?.hidden) continue
-        if (node.tag === "canvas") add("placeholder|canvas", `<canvas> in ${where(node)} draws nothing: scripts don't run in the design's frame. Draw the chart as bars from divs, with labels.`)
+        if (node.tag === "canvas") add("placeholder|canvas", `<canvas> in ${where(node)} draws nothing: scripts don't run in the design's frame. Draw the chart as bars from divs, with labels.`, node)
         const named = [node.attributes.get("id") ?? "", ...node.classes].some((name) => CHART_BOX.test(name))
         if (named && elementChildren(node).length === 0 && !textContent(node) && !/gradient/i.test(node.attributes.get("style") ?? "")) {
-            add(`placeholder|empty|${describeElement(node)}`, `Empty chart box ${where(node)}. ${CHART_FIX}`)
+            add(`placeholder|empty|${describeElement(node)}`, `Empty chart box ${where(node)}. ${CHART_FIX}`, node)
         }
     }
-    return [...groups.entries()].map(([key, group]) => ({ kind: "placeholder", severity: "error", key, count: group.count, message: `${group.message}${group.count > 1 ? ` (${group.count} places)` : ""}` }))
+    return [...groups.entries()].map(([key, group]) => ({ kind: "placeholder", severity: group.severity, key, count: group.count, regions: regionsOf(group.nodes), message: `${group.message}${group.count > 1 ? ` (${group.count} places)` : ""}` }))
 }
 
 // --- Tables ------------------------------------------------------------------------------------
@@ -500,7 +574,7 @@ const tableIssues = (page: Page, context: ValidationContext): Issue[] => {
         for (const [normal, times] of seen) {
             if (times < 2) continue
             const text = headers.find((header) => header.normal === normal)!.text
-            issues.push({ kind: "duplicate-column", severity: "error", key: `duplicate-column|${normal}`, count: times, message: `Table ${label} has the column ${quote(text)} ${times === 2 ? "twice" : `${times} times`}. Keep one, and drop the others from the header and every row.` })
+            issues.push({ kind: "duplicate-column", severity: "error", key: `duplicate-column|${normal}`, count: times, regions: regionsOf([table]), message: `Table ${label} has the column ${quote(text)} ${times === 2 ? "twice" : `${times} times`}. Keep one, and drop the others from the header and every row.` })
         }
         if (context.mode !== "refine") return
         const unique = [...new Map(headers.map((header) => [header.normal, header])).values()]
@@ -508,7 +582,7 @@ const tableIssues = (page: Page, context: ValidationContext): Issue[] => {
             for (let j = i + 1; j < unique.length; j++) {
                 if (!nearDuplicates(unique[i].normal, unique[j].normal)) continue
                 const pair = [unique[i].normal, unique[j].normal].sort()
-                issues.push({ kind: "duplicate-column", severity: "error", key: `duplicate-column|${pair.join("|")}`, count: 1, message: `Table ${label} has the columns ${quote(unique[i].text)} and ${quote(unique[j].text)}, which say the same thing. Keep one, and drop the other from the header and every row.` })
+                issues.push({ kind: "duplicate-column", severity: "error", key: `duplicate-column|${pair.join("|")}`, count: 1, regions: regionsOf([table]), message: `Table ${label} has the columns ${quote(unique[i].text)} and ${quote(unique[j].text)}, which say the same thing. Keep one, and drop the other from the header and every row.` })
             }
         }
     })
@@ -543,10 +617,53 @@ const imageIssues = (page: Page): Issue[] => {
             severity: "error",
             key: `image-size|${alt}|${node.attributes.get("data-slot") ?? ""}`,
             count: 1,
+            regions: regionsOf([node]),
             message: `${where(node)} has no height or aspect ratio, so it collapses to nothing when the image doesn't load. Give its box an aspect-[w/h] class (the slot's shape) with c-muted-bg behind it.`,
         })
     }
     return issues
+}
+
+// --- Heights that resolve to nothing --------------------------------------------------------------
+
+// Whether an element's height is set: a length, an aspect ratio, or a percentage of a parent whose
+// height is set in turn. auto, min-height alone and fit-content aren't.
+const definiteHeight = (node: HtmlElement | null, styles: Map<HtmlElement, ComputedStyle>): boolean => {
+    for (let at = node; at && at.tag !== ROOT; at = at.parent) {
+        const values = styles.get(at)!.values
+        const aspect = values.get("aspect-ratio")?.trim().toLowerCase()
+        if (aspect && aspect !== "auto") return true
+        const height = values.get("height")?.trim().toLowerCase()
+        if (!height || height === "auto" || /content|inherit|initial|unset/.test(height)) return false
+        if (height.endsWith("%")) continue
+        return parseFloat(height.replace(/^[a-z]+\(/, "")) > 0
+    }
+    return false
+}
+
+// An empty element sized as a percentage of a box with no set height draws 0px tall: a chart's bars
+// in columns that only fit their content
+const collapsedHeightIssues = (page: Page): Issue[] => {
+    const groups = new Map<string, HtmlElement[]>()
+    for (const node of page.all) {
+        if (node.tag === "img" || node.tag === ROOT || isWithin(node, new Set(["svg", "math"]))) continue
+        const style = page.styles.get(node)!
+        const height = style.values.get("height")?.trim()
+        if (style.hidden || !height?.endsWith("%") || parseFloat(height) <= 0) continue
+        if (/^(absolute|fixed)$/.test(style.values.get("position")?.trim() ?? "")) continue
+        if (elementChildren(node).length > 0 || textContent(node)) continue
+        if (definiteHeight(node.parent, page.styles)) continue
+        const key = `collapsed-height|${describeElement(node)}`
+        groups.set(key, [...(groups.get(key) ?? []), node])
+    }
+    return [...groups.entries()].map(([key, nodes]) => ({
+        kind: "collapsed-height",
+        severity: "error",
+        key,
+        count: nodes.length,
+        regions: regionsOf(nodes),
+        message: `${describeElement(nodes[0])}${places(nodes.length)}${nearestLandmark(nodes[0].parent) ? ` in ${nearestLandmark(nodes[0].parent)}` : ""} has a percentage height inside a box with no set height, so it draws 0px tall. Give each bar's column h-full and justify-end inside a row with a fixed height (h-48), or give the bars fixed px heights.`,
+    }))
 }
 
 // --- Inline SVG --------------------------------------------------------------------------------
@@ -560,6 +677,7 @@ const svgIssues = (page: Page): Issue[] => {
         severity: "error",
         key: "inline-svg",
         count: svgs.length,
+        regions: regionsOf(svgs),
         message: `${svgs.length} inline <svg>${svgs.length === 1 ? "" : "s"} (in ${spots.join(", ")}): the design's frame removes inline SVG, so ${svgs.length === 1 ? "it shows" : "they show"} as nothing. Use a short text label or a plain Unicode symbol (→ ✓ ✕ •) for each icon, and draw any chart from divs.`,
     }]
 }
@@ -577,6 +695,7 @@ const findIssues = (html: string, contract: DesignContract, context: ValidationC
         ...placeholderIssues(page, copy, context),
         ...tableIssues(page, context),
         ...imageIssues(page),
+        ...collapsedHeightIssues(page),
         ...svgIssues(page),
     ]
 }
@@ -589,7 +708,10 @@ export const validate = (html: string, contract: DesignContract, context: Valida
     const earlier = new Map(findIssues(context.previousHtml, contract, { ...context, previousHtml: undefined }).map((issue) => [issue.key, issue]))
     return issues.map((issue) => {
         const before = earlier.get(issue.key)
-        return before && before.count >= issue.count && issue.severity === "error" ? { ...issue, severity: "warning", message: `${issue.message} (It was already there.)` } : issue
+        if (!before || before.count < issue.count || issue.severity !== "error") return issue
+        // Carried over: still an error where the refine's request works, a warning anywhere else
+        if (context.mode === "refine" && context.request && touchedBy(issue, context.request)) return { ...issue, message: `${issue.message} (It was already there, in the part this request changes.)` }
+        return { ...issue, severity: "warning", message: `${issue.message} (It was already there.)` }
     })
 }
 
@@ -598,7 +720,7 @@ export const errorCount = (issues: Issue[]) => issues.filter((issue) => issue.se
 // The errors as the repair request lists them, one per line, most important first
 export const REPAIR_LIST_LIMIT = 20
 
-const KIND_ORDER: IssueKind[] = ["contrast", "duplicate-column", "image-size", "inline-svg", "placeholder", "name", "copy", "color"]
+const KIND_ORDER: IssueKind[] = ["contrast", "duplicate-column", "image-size", "collapsed-height", "inline-svg", "placeholder", "name", "copy", "color"]
 
 export const repairProblems = (issues: Issue[]) => {
     const errors = issues
