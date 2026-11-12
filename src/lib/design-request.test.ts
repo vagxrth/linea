@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest"
 import type { StyleGuide } from "@/redux/api/style-guide"
-import { BANNED_COPY_WORDS, COPY_POLICY, COPY_REMINDER, designSystemPrompt, GENERATION_MODES } from "@/prompts"
+import { BANNED_COPY_WORDS, COPY_POLICY, COPY_REMINDER, designSystemPrompt, GENERATION_MODES, PAGE_KINDS, PAGE_RECIPES } from "@/prompts"
+import { EVAL_FIXTURES } from "../../scripts/eval-fixtures"
 import { buildDesignContract } from "./design-contract"
-import { DESIGN_MAX_OUTPUT_TOKENS, DESIGN_PROVIDER_OPTIONS, DESIGN_TEMPERATURE, DESIGN_THINKING_BUDGET, designPrompt, designRequestText } from "./design-request"
+import { DESIGN_MAX_OUTPUT_TOKENS, DESIGN_PROVIDER_OPTIONS, DESIGN_TEMPERATURE, DESIGN_THINKING_BUDGET, designPrompt, designRequestText, pageKindFor, WORKFLOW_PAGE_TYPES } from "./design-request"
 import { buildImageManifest } from "./image-manifest"
 import { OUTLINE_VERSION, truncateOutline, type FrameOutline } from "./wireframe-outline"
 
@@ -240,5 +241,76 @@ describe("what every mode says about icons, status pills, charts, images and for
             expect(system, mode).toContain("Each image sits in a box with a fixed shape, its slot's aspect ratio (an aspect-[w/h] class) or a fixed height, tinted with c-muted-bg")
             expect(system, mode).toContain("Settings and long forms group their fields into labelled sections (Profile, Notifications, Security…), each with a heading and a one-line description")
         }
+    })
+})
+
+describe("page recipes", () => {
+    const initial = (nodes: FrameOutline["nodes"]) => ({ mode: "initial" as const, contract, manifest, outline: { ...outline, nodes } })
+
+    it("are chosen from the wireframe for each kind of brief", () => {
+        const [landing, dashboard, settings] = EVAL_FIXTURES
+        expect(pageKindFor(initial(landing.outline.nodes))).toBe("landing")
+        expect(pageKindFor(initial(dashboard.outline.nodes))).toBe("dashboard")
+        expect(pageKindFor(initial(settings.outline.nodes))).toBe("settings")
+        expect(pageKindFor(initial([{ id: "p", kind: "text", text: "Your profile", box: [0, 0, 10, 5] }, { id: "a", kind: "circle", label: "avatar", box: [0, 10, 5, 15] }]))).toBe("profile")
+        expect(pageKindFor(initial([{ id: "b", kind: "box", label: "card", box: [0, 0, 50, 50] }]))).toBe("generic")
+        expect(pageKindFor({ mode: "initial", contract, manifest, outline: null, legacyOutline: "box \"navbar\" at the top, box \"hero\" below" })).toBe("landing")
+        expect(pageKindFor({ mode: "initial", contract, manifest, outline: null })).toBe("generic")
+    })
+
+    it("are chosen by the kind of workflow page, and a refine or a repair gets none", () => {
+        expect(WORKFLOW_PAGE_TYPES.map((pageType) => pageKindFor({ mode: "workflow", contract, manifest, pageType, mainHtml: "" }))).toEqual(["dashboard", "settings", "profile", "generic"])
+        expect(pageKindFor({ mode: "refine", contract, manifest, message: "x", currentHtml: "", outline: null, hasWireframe: false })).toBeNull()
+        expect(pageKindFor({ mode: "repair", contract, manifest, html: "", problems: [] })).toBeNull()
+    })
+
+    it("go in the request as concrete things to build, and the modes that use them say so", () => {
+        const text = designRequestText(initial(EVAL_FIXTURES[1].outline.nodes))
+        expect(text).toContain(`Page recipe (dashboard):\n${PAGE_RECIPES.dashboard}`)
+        expect(PAGE_RECIPES.dashboard).toContain("never a person's name or \"Customer 1\"")
+        expect(PAGE_RECIPES.settings).toContain("max-w-3xl")
+        expect(PAGE_RECIPES.landing).toContain("Never a made-up rating, customer count or quote")
+        expect(PAGE_KINDS.every((kind) => PAGE_RECIPES[kind].split("\n").every((line) => line.startsWith("- ")))).toBe(true)
+        expect(designRequestText({ mode: "refine", contract, manifest, message: "x", currentHtml: "<div></div>", outline: null, hasWireframe: false })).not.toContain("Page recipe")
+        expect(designSystemPrompt("initial")).toContain("Follow it inside the wireframe's structure: it shapes how each box is filled, and never adds or drops a box.")
+        expect(designSystemPrompt("workflow")).toContain("Follow the request's page recipe for this kind of page.")
+    })
+})
+
+describe("the rules run 2 asked for", () => {
+    it("say how bars get their height, and ban example.com and Your Name values in every mode", () => {
+        for (const mode of GENERATION_MODES) {
+            const system = designSystemPrompt(mode)
+            expect(system, mode).toContain("every bar's wrapper column is h-full with justify-end")
+            expect(system, mode).toContain("no address at example.com (or .org, .net), and no \"Your Name\"")
+            expect(system, mode).toContain("never \"Customer 1\"-style numbering")
+        }
+    })
+
+    it("list a refine's carried-over problems as also to fix", () => {
+        const text = designRequestText({ mode: "refine", contract, manifest, message: "Compact the table", currentHtml: "<div></div>", outline: null, hasWireframe: false, alsoFix: ["Contrast 1.00:1 in the table."] })
+        expect(text).toContain('The user\'s request: "Compact the table"\n\nAlso fix these problems the current page has, in the part this request changes, and nothing else:\n- Contrast 1.00:1 in the table.')
+    })
+})
+
+describe("page recipes: telling a dashboard or a landing page from settings", () => {
+    const kind = (...nodes: [label: string | undefined, text?: string][]) =>
+        pageKindFor({ mode: "initial", contract, manifest, outline: { ...outline, nodes: nodes.map(([label, text], index) => ({ id: `n${index}`, kind: text ? "text" : "box", ...(label ? { label } : {}), ...(text ? { text } : {}), box: [0, index * 5, 50, index * 5 + 4] })) } })
+
+    it("reads a dashboard with an account menu and a search input as a dashboard", () => {
+        expect(kind(["sidebar"], ["kpi card"], ["chart"], ["search input"], ["account menu"])).toBe("dashboard")
+        expect(kind(["charts"], ["tables"])).toBe("dashboard")
+        expect(kind(["stats"], ["kpis"], ["metrics"])).toBe("dashboard")
+    })
+
+    it("reads a landing page with a sign-up form as a landing page", () => {
+        expect(kind(["navbar"], ["hero"], [undefined, "Create account"], ["email input"])).toBe("landing")
+    })
+
+    it("reads settings only with their words and two or more controls", () => {
+        expect(kind([undefined, "Account settings"], ["toggles"], ["toggle"])).toBe("settings")
+        expect(kind([undefined, "Account settings"], ["checkboxes"], ["input"])).toBe("settings")
+        expect(kind([undefined, "Settings"], ["input"])).toBe("generic")
+        expect(kind([undefined, "Account settings"], ["toggle"], ["input"], ["sidebar"], ["chart"])).toBe("dashboard")
     })
 })

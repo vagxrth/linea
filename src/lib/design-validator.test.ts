@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest"
 import { EVAL_FIXTURES } from "../../scripts/eval-fixtures"
 import { BANNED_COPY_WORDS } from "../prompts/design"
 import { buildDesignContract } from "./design-contract"
-import { BANNED_PATTERNS, errorCount, issueSummary, REPAIR_LIST_LIMIT, repairProblems, validate, type Issue, type ValidationContext } from "./design-validator"
-import { DASHBOARD_INITIAL, DASHBOARD_REFINE, DASHBOARD_REPAIRED, LANDING_INITIAL, LANDING_REFINE, SETTINGS_INITIAL } from "./design-validator.fixtures"
+import { BANNED_PATTERNS, errorCount, touchedBy, issueSummary, REPAIR_LIST_LIMIT, repairProblems, validate, type Issue, type ValidationContext } from "./design-validator"
+import { DASHBOARD_INITIAL, DASHBOARD_REFINE, DASHBOARD_REPAIRED, LANDING_INITIAL, LANDING_REFINE, RUN2_DASHBOARD_INITIAL, RUN2_DASHBOARD_REFINE, RUN2_LANDING_INITIAL, RUN2_SETTINGS_INITIAL, SETTINGS_INITIAL } from "./design-validator.fixtures"
 
 const [landingFixture, dashboardFixture, settingsFixture] = EVAL_FIXTURES
 const [landing, dashboard, settings] = EVAL_FIXTURES.map((fixture) => buildDesignContract(fixture.guide))
@@ -316,5 +316,117 @@ describe("the repair request's list, and the logs", () => {
         const summary = issueSummary(check(DASHBOARD_INITIAL))
         expect(summary).toEqual({ errors: 4, warnings: 0, kinds: { contrast: 1, "inline-svg": 1, placeholder: 1, name: 1 } })
         expect(JSON.stringify(summary)).not.toMatch(/Alice|Processing|Placeholder for/)
+    })
+})
+
+describe("run 2 of the live eval (027f276)", () => {
+    it("dashboard: the chart's bars draw 0px tall, in columns with no set height", () => {
+        const [issue, ...others] = ofKind(check(RUN2_DASHBOARD_INITIAL), "collapsed-height")
+        expect(others).toEqual([])
+        expect(issue).toMatchObject({ severity: "error", count: 6 })
+        expect(issue.message).toMatch(/^<div class="w-8 c-primary-bg rounded-t-sm"> \(6 places\) in \[data-node="chrt01"\] has a percentage height inside a box with no set height, so it draws 0px tall\. Give each bar's column h-full and justify-end/)
+    })
+
+    it("dashboard: Customer 1 to 5 is a warning, not an error", () => {
+        const numbered = ofKind(check(RUN2_DASHBOARD_INITIAL), "placeholder")
+        expect(numbered).toEqual([expect.objectContaining({ key: "placeholder|numbered|customer", severity: "warning", count: 5 })])
+        expect(errors(check(RUN2_DASHBOARD_INITIAL)).map((issue) => issue.kind)).toEqual(["collapsed-height"])
+    })
+
+    it("settings: the Your Name and example.com values left after its repair", () => {
+        expect(errors(validate(RUN2_SETTINGS_INITIAL, settings, { mode: "initial" })).map((issue) => quoted(issue)[0])).toEqual(["Your Name", "your.email@example.com"])
+    })
+
+    it("landing: the perfect its repair left in a card", () => {
+        expect(errors(validate(RUN2_LANDING_INITIAL, landing, { mode: "initial" })).map((issue) => issue.key)).toEqual(["copy|perfect"])
+    })
+})
+
+describe("bars and other empty boxes sized by percentage", () => {
+    const bars = (column: string, row = "flex items-end h-48") => ofKind(check(card(`<div class="${row}"><div class="${column}"><div class="w-8 c-primary-bg" style="height: 60%"></div><span>Jan</span></div></div>`)), "collapsed-height")
+
+    it("pass when every column is h-full in a row with a set height, or the bars have px heights", () => {
+        expect(bars("flex flex-col h-full justify-end")).toEqual([])
+        expect(bars("flex flex-col h-full justify-end", "flex items-end h-full")).toHaveLength(1)
+        expect(ofKind(check(card('<div class="flex items-end"><div class="w-8 c-primary-bg" style="height: 120px"></div></div>')), "collapsed-height")).toEqual([])
+        expect(ofKind(check(DASHBOARD_REPAIRED), "collapsed-height")).toEqual([])
+    })
+
+    it("flags bars in columns that only fit their content, and leaves boxes with content alone", () => {
+        expect(bars("flex flex-col items-center")).toHaveLength(1)
+        expect(ofKind(check(card('<aside class="h-full"><p>Has content</p></aside>')), "collapsed-height")).toEqual([])
+    })
+})
+
+describe("a refine's carried-over errors", () => {
+    const refine = (request: string) => check(DASHBOARD_REFINE, { mode: "refine", previousHtml: DASHBOARD_INITIAL, request })
+
+    it("stay errors in the part the request touches, and are warnings everywhere else", () => {
+        const issues = refine(dashboardFixture.refine)
+        expect(issues.map((issue) => [issue.kind, issue.severity])).toEqual([
+            ["contrast", "error"], ["name", "error"], ["placeholder", "warning"], ["duplicate-column", "error"], ["inline-svg", "warning"],
+        ])
+        expect(issues[0].message).toMatch(/\(It was already there, in the part this request changes\.\)$/)
+    })
+
+    it("follow the request: one about the chart keeps the chart's placeholder an error instead", () => {
+        const issues = refine("Make the sales chart taller")
+        expect(issues.filter((issue) => issue.severity === "error").map((issue) => issue.kind)).toEqual(["placeholder", "duplicate-column"])
+    })
+
+    it("on run 2: the 0px bars stay a warning for a table request and are an error for a chart one", () => {
+        const severity = (request: string) => ofKind(check(RUN2_DASHBOARD_REFINE, { mode: "refine", previousHtml: RUN2_DASHBOARD_INITIAL, request }), "collapsed-height")[0].severity
+        expect(severity(dashboardFixture.refine)).toBe("warning")
+        expect(severity("Make the monthly sales chart taller")).toBe("error")
+    })
+
+    it("match by the words of the part an issue is in", () => {
+        const [chart] = ofKind(check(RUN2_DASHBOARD_INITIAL), "collapsed-height")
+        expect(chart.regions).toEqual(expect.arrayContaining(["chart", "monthly", "sale", "trend"]))
+        expect(touchedBy(chart, "Give the chart labels")).toBe(true)
+        expect(touchedBy(chart, "Change the page section colors")).toBe(false)
+    })
+})
+
+describe("P4c follow-ups", () => {
+    it("checks a 3,000-row table with contrast failures in one section in under 500ms", () => {
+        const rows = Array.from({ length: 3000 }, (_, index) => `<tr data-node="row-${index}"><td class="text-white">Order ${index}</td><td>$12.00</td></tr>`).join("")
+        const page = card(`<h2 class="t-h2">Recent orders</h2><table><tbody>${rows}</tbody></table>`)
+        check(page)
+        const started = performance.now()
+        const [issue] = ofKind(check(page), "contrast")
+        expect(performance.now() - started).toBeLessThan(500)
+        expect(issue).toMatchObject({ count: 3000 })
+        expect(issue.regions).toEqual(expect.arrayContaining(["table", "recent", "order"]))
+    })
+
+    it("only calls 'Your Name'-style text a stand-in when a form field holds it", () => {
+        expect(ofKind(check(card('<label for="e">Your email</label><input id="e" type="email"><h3>Your address</h3>')), "placeholder")).toEqual([])
+        expect(ofKind(check(card('<label for="n">Name</label><input id="n" value="Your Name">')), "placeholder")).toEqual([expect.objectContaining({ severity: "error", key: "placeholder|your name" })])
+        expect(ofKind(check(card('<input aria-label="Email" placeholder="Your email">')), "placeholder")).toHaveLength(1)
+    })
+
+    describe("bars in boxes whose height comes from a flex or grid container", () => {
+        const bars = (outer: string, wrapper: string) => ofKind(check(card(`<div class="${outer}"><div class="${wrapper}"><div class="w-8 c-primary-bg" style="height: 60%"></div></div></div>`)), "collapsed-height")
+
+        it("pass inside a stretched flex item or a grid item of a container with a set height", () => {
+            expect(bars("flex h-48", "flex-1")).toEqual([])
+            expect(bars("grid h-48", "")).toEqual([])
+            expect(bars("flex flex-col h-48", "flex-1")).toEqual([])
+        })
+
+        it("still fail where the item isn't stretched, or the container's height isn't set", () => {
+            expect(bars("flex items-end h-48", "")).toHaveLength(1)
+            expect(bars("flex h-48", "self-end")).toHaveLength(1)
+            expect(bars("flex flex-col h-48", "")).toHaveLength(1)
+            expect(bars("flex", "flex-1")).toHaveLength(1)
+            // The run-2 dashboard's columns sit in an items-end row
+            expect(ofKind(check(RUN2_DASHBOARD_INITIAL), "collapsed-height")).toHaveLength(1)
+        })
+
+        it("doesn't count a calc() with a percentage in it as a set height", () => {
+            expect(bars("h-[calc(100%-2rem)]", "h-full")).toHaveLength(1)
+            expect(bars("h-[calc(12rem+8px)]", "h-full")).toEqual([])
+        })
     })
 })

@@ -1,13 +1,13 @@
 // Snapshots the design generator's contracts and prompts for three fixtures (a landing page, a dense
 // dashboard and a settings form), and optionally runs them against the model.
 //
-//   npm run eval:generation                 Dry run, the default: no model calls and no network. Prints
+//   npm run eval:generation                 Dry run, the default: no model calls and no network. Prints the planned live call count and
 //                                           each fixture's design contract and its prompt.
 //   npm run eval:generation -- --live       Runs the fixtures through the app's own generation
 //                                           (src/lib/design-generation.ts: streaming, the incomplete-
 //                                           design check, the validator and its one repair call) with
 //                                           EVAL_GOOGLE_API_KEY, which must be set and must not be the
-//                                           app's key. Initial, refine and workflow rounds: a design is
+//                                           app's key. Initial, workflow and refine rounds: a design is
 //                                           one model call, or two with its repair, and the SDK retries
 //                                           nothing, so the cap counts real calls. Every call is logged
 //                                           with its route, fixture, run, attempt and finish reason, and
@@ -83,6 +83,28 @@ const option = (args: string[], name: string) => {
 
 // --- Live runs ----------------------------------------------------------------------------------
 
+// What a design's check and repair came to, for the eval's log and totals: a kept repair that still has
+// errors is "residual" (better, not done; there's no second repair), and a repair the cap left no room
+// for is "not-made (cap)"
+export const repairOutcome = (check: CheckReport | null, repairFits: boolean) => {
+    const before = check?.before ?? []
+    const after = check?.repair === "kept" ? check.after ?? [] : before
+    const residual = check?.repair === "kept" && errorCount(after) > 0
+    const outcome: Outcome["repair"] = residual ? "residual" : check?.repair ?? "not-needed"
+    const shown = residual ? "residual" : check?.repair === "not-sent" && !repairFits ? "not-made (cap)" : check?.repair
+    return { before, after, residual, outcome, shown }
+}
+
+// The calls a live run plans, printed before any call, and by a dry run too: initial and refine for each
+// fixture, and three workflow pages from the first
+export const livePlan = (fixtures: number, repeat: number, cap: number) => {
+    const designsPerRun = fixtures * 2 + 3
+    const designs = designsPerRun * repeat
+    return `Planned: ${designs} designs (${designsPerRun} a run × ${repeat} run${repeat === 1 ? "" : "s"}: initial, then workflow, then refine), one model call each or ${CALLS_PER_DESIGN} with a repair: ` +
+        `${designs} to ${designs * CALLS_PER_DESIGN} calls. Cap: ${cap}, so at most ${Math.min(cap, designs * CALLS_PER_DESIGN)} calls are made` +
+        `${designs * CALLS_PER_DESIGN > cap ? "; designs past the cap are skipped, and a repair that wouldn't fit isn't made" : ""}.`
+}
+
 // The app's own key, from the environment or the env files `next` reads, to make sure the eval
 // never runs on it. The values are compared, never printed.
 const appKeys = () => {
@@ -118,7 +140,7 @@ const review = (html: string, request: DesignRequest, previous?: string) => {
     }
 }
 
-type Outcome = {
+export type Outcome = {
     design: string
     route: string
     run: number
@@ -126,7 +148,7 @@ type Outcome = {
     // Errors in the first design, and in the one kept; null when the design didn't finish
     errorsBefore: number | null
     errorsAfter: number | null
-    repair: CheckReport["repair"] | "incomplete" | "skipped"
+    repair: CheckReport["repair"] | "incomplete" | "skipped" | "residual"
 }
 
 const issueLines = (title: string, issues: Issue[]) =>
@@ -142,15 +164,8 @@ const live = async (prepared: Prepared[], out: string | null, repeat: number, ca
         console.error("EVAL_GOOGLE_API_KEY is the app's GOOGLE_GENERATIVE_AI_API_KEY. Use a separate key for evals.")
         return 2
     }
-    // Initial and refine for each fixture, and three workflow pages from the first, before any call
-    const designsPerRun = prepared.length * 2 + 3
-    const designs = designsPerRun * repeat
     console.log(rule("Live run"))
-    console.log(
-        `Planned: ${designs} designs (${designsPerRun} a run × ${repeat} run${repeat === 1 ? "" : "s"}), one model call each or ${CALLS_PER_DESIGN} with a repair: ` +
-        `${designs} to ${designs * CALLS_PER_DESIGN} calls. Cap: ${cap}, so at most ${Math.min(cap, designs * CALLS_PER_DESIGN)} calls are made` +
-        `${designs * CALLS_PER_DESIGN > cap ? "; designs past the cap are skipped, and a repair that wouldn't fit isn't made" : ""}.`
-    )
+    console.log(livePlan(prepared.length, repeat, cap))
 
     // Only a live run loads the Google provider. A dry run loads the app's generation code too, and calls nothing.
     const { createGoogleGenerativeAI } = await import("@ai-sdk/google")
@@ -209,13 +224,12 @@ const live = async (prepared: Prepared[], out: string | null, repeat: number, ca
         writeFileSync(path.join(directory, `${name}.html`), html)
         if (html !== first) writeFileSync(path.join(directory, `${name}.first.html`), first)
         const result = check as CheckReport | null
-        const before = result?.before ?? []
-        const after = result?.repair === "kept" ? result.after ?? [] : before
-        outcomes.push({ design: label, route, run: number, calls: attempts.length, errorsBefore: errorCount(before), errorsAfter: errorCount(after), repair: result?.repair ?? "not-needed" })
-        const repair = result?.repair === "not-sent" && !repairFits ? "not-made (cap)" : result?.repair
+        const { before, after, residual, outcome, shown: repair } = repairOutcome(result, repairFits)
+        outcomes.push({ design: label, route, run: number, calls: attempts.length, errorsBefore: errorCount(before), errorsAfter: errorCount(after), repair: outcome })
         console.log(JSON.stringify({ design: name, route, calls: attempts.length, characters: html.length, check: issueSummary(before), repair, ...(result?.discarded ? { discarded: result.discarded } : {}), ...(result?.after ? { afterRepair: issueSummary(result.after) } : {}), ...review(html, request, previous) }))
         for (const line of issueLines("Issues in the first design", before)) console.log(line)
         if (result?.after) for (const line of issueLines(`Issues in the repair (${result.repair})`, result.after)) console.log(line)
+        if (residual) for (const line of issueLines("Residual errors, left after the repair", after.filter((issue) => issue.severity === "error"))) console.log(line)
         return html
     }
 
@@ -229,6 +243,13 @@ const live = async (prepared: Prepared[], out: string | null, repeat: number, ca
             for (const item of prepared) {
                 initial.push(await run(number, "/api/generate", item.fixture.name, `${item.fixture.name}-initial`, { ...item.initial, hasWireframe: false, imagesAttached: false }))
             }
+            // Workflow before refine, so a 9-call cap still reaches the workflow route
+            const main = prepared[0]
+            if (initial[0]) {
+                for (const pageType of WORKFLOW_PAGE_TYPES.slice(0, 3)) {
+                    await run(number, "/api/generate/workflow", main.fixture.name, `workflow-${pageType.split(":")[0].toLowerCase()}`, { mode: "workflow", contract: main.contract, manifest: main.manifest, pageType, mainHtml: designHtmlForPrompt(initial[0], main.manifest), imagesAttached: false })
+                }
+            }
             for (const [index, item] of prepared.entries()) {
                 const html = initial[index]
                 if (!html) continue
@@ -236,12 +257,6 @@ const live = async (prepared: Prepared[], out: string | null, repeat: number, ca
                     mode: "refine", contract: item.contract, manifest: item.manifest, message: item.fixture.refine,
                     currentHtml: designHtmlForPrompt(html, item.manifest), outline: item.initial.outline, hasWireframe: false, imagesAttached: false,
                 }, html)
-            }
-            const main = prepared[0]
-            if (initial[0]) {
-                for (const pageType of WORKFLOW_PAGE_TYPES.slice(0, 3)) {
-                    await run(number, "/api/generate/workflow", main.fixture.name, `workflow-${pageType.split(":")[0].toLowerCase()}`, { mode: "workflow", contract: main.contract, manifest: main.manifest, pageType, mainHtml: designHtmlForPrompt(initial[0], main.manifest), imagesAttached: false })
-                }
             }
         }
     } finally {
@@ -254,7 +269,7 @@ const live = async (prepared: Prepared[], out: string | null, repeat: number, ca
         const finished = ofRun.filter((outcome) => outcome.errorsBefore !== null)
         const skipped = ofRun.filter((outcome) => outcome.repair === "skipped").length
         const sum = (values: (number | null)[]) => values.reduce<number>((total, value) => total + (value ?? 0), 0)
-        const repairs = ["kept", "discarded", "failed"].map((kind) => `${ofRun.filter((outcome) => outcome.repair === kind).length} ${kind}`).join(", ")
+        const repairs = ["kept", "residual", "discarded", "failed"].map((kind) => `${ofRun.filter((outcome) => outcome.repair === kind).length} ${kind}`).join(", ")
         console.log(`Run ${number}: ${finished.length}/${ofRun.length} designs finished${skipped ? ` (${skipped} skipped at the cap)` : ""}; errors ${sum(finished.map((outcome) => outcome.errorsBefore))} before repair, ${sum(finished.map((outcome) => outcome.errorsAfter))} after; repairs ${repairs}; ${sum(ofRun.map((outcome) => outcome.calls))} calls`)
     }
     if (repeat > 1) {
@@ -300,6 +315,7 @@ export const main = async (args: string[]) => {
         console.log(`${fixture.name}: ${corrected.length} contrast correction${corrected.length === 1 ? "" : "s"}${corrected.length ? ` (${corrected.join(", ")})` : ""}; ${contract.notes.length} note${contract.notes.length === 1 ? "" : "s"}`)
     }
     if (!isLive) {
+        console.log(`\n${livePlan(prepared.length, repeat, cap)}`)
         console.log(`\nDry run: no model calls were made. Add --live (with EVAL_GOOGLE_API_KEY) to run the fixtures against the model: at most ${DEFAULT_CAP} calls, or --cap <n> up to ${MAX_CAP}, and --repeat <n> to run them n times.`)
         return 0
     }

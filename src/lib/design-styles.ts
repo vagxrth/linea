@@ -414,7 +414,17 @@ export const utility = (className: string, width: number, variable: (name: strin
     const result: Utility = { applies, important, rank, declarations: [], colors: [] }
     const set = (property: string, value: string) => result.declarations.push({ property, value, important })
 
+    const FLEX_ALIGN: Record<string, string> = { start: "flex-start", end: "flex-end", center: "center", baseline: "baseline", stretch: "stretch", auto: "auto", normal: "normal" }
     if (base === "hidden") set("display", "none")
+    else if (base === "flex-col" || base === "flex-col-reverse") set("flex-direction", base.replace("flex-col", "column"))
+    else if (base === "flex-row" || base === "flex-row-reverse") set("flex-direction", base.replace("flex-row", "row"))
+    else if (base === "flex-1") set("flex", "1 1 0%")
+    else if (base === "flex-auto") set("flex", "1 1 auto")
+    else if (base === "flex-none") set("flex", "none")
+    else if (base === "grow" || base === "flex-grow") set("flex-grow", "1")
+    else if (base === "grow-0" || base === "flex-grow-0") set("flex-grow", "0")
+    else if (/^items-/.test(base) && FLEX_ALIGN[base.slice(6)]) set("align-items", FLEX_ALIGN[base.slice(6)])
+    else if (/^self-/.test(base) && FLEX_ALIGN[base.slice(5)]) set("align-self", FLEX_ALIGN[base.slice(5)])
     else if (DISPLAYS.has(base)) set("display", base)
     else if (base === "sr-only") set("--linea-sr-only", "1")
     else if (base === "not-sr-only") set("--linea-sr-only", "0")

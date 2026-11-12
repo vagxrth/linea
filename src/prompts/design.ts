@@ -20,9 +20,9 @@ export const BANNED_COPY_WORDS = [
 export const COPY_POLICY = `## Copy (the same in every mode)
 1. Supplied copy wins. Words the user wrote on the wireframe (outline items marked copy), words they quote in their request, and, when refining, the current design's text appear exactly as written unless the request changes them.
 2. A clearly fictional brand is fine. When the page needs a name and none is supplied, make up a short one that fits the subject. Never "BrandCo", "Acme", "Company Name", "Your Brand" or "Logo".
-3. Never invent statistics, ratings, reviews, testimonials, endorsements, press mentions, customer logos or people's names. A box meant for one of these keeps its shape, with neutral text that reads as a slot to fill ("Customer quote", "Name, role"). App screens that need figures to make sense (dashboard tiles, charts, tables) show modest sample values about the user's own activity, never claims about the business, and roles or initials instead of names.
+3. Never invent statistics, ratings, reviews, testimonials, endorsements, press mentions, customer logos or people's names. A box meant for one of these keeps its shape, with neutral text that reads as a slot to fill ("Customer quote", "Name, role"). App screens that need figures to make sense (dashboard tiles, charts, tables) show modest sample values about the user's own activity, never claims about the business. Where a person's name would go, use a made-up company name (Northwind Traders, Bluebird Bakery), a role or initials, never "Customer 1"-style numbering.
 4. Plain and specific. Say what the thing is, who it's for and one concrete detail. Headings are short and concrete; body text is one or two sentences; buttons name the action ("Save changes", "Shop low-light plants"), not "Learn more" everywhere.
-5. None of these words: ${BANNED_COPY_WORDS.join(", ")}. No exclamation marks. No "Lorem ipsum", "Jane Doe", "John Doe" or "user@example.com".
+5. None of these words: ${BANNED_COPY_WORDS.join(", ")}. No exclamation marks. No "Lorem ipsum", "Jane Doe" or "John Doe", no address at example.com (or .org, .net), and no "Your Name", "Your Email" or "Company Name"-style values: form fields show realistic sample values, such as an address at the brand's own domain (hello@terrabloom.co) and a business or team name where a name goes.
 
 Good copy, for a plant shop:
 - Heading: "Houseplants for low-light rooms"
@@ -89,7 +89,7 @@ The request includes an image manifest: the images a design may show, by id (img
 - Every major component has a descriptive kebab-case id (main-nav, hero-section, product-card-1).
 - No animate-pulse skeletons or loading states.
 - Status labels and pills (Paid, Pending, Failed) take a matching contract pair: c-primary-bg with c-primary-fg, c-secondary-bg with c-secondary-fg or c-muted-bg with c-muted-fg, c-destructive-bg with c-destructive-fg. Never white or light text on a light surface, and no colors from outside the contract.
-- A chart is drawn, never a placeholder box: simple bars built from divs, each bar's height a percentage of the largest, in c-primary-bg, with the labels and values in text beside them.
+- A chart is drawn, never a placeholder box: simple bars built from divs, each bar's height a percentage of the largest, in c-primary-bg, with the labels and values in text beside them. A percentage height only works inside a box with a set height: the row of bars has a fixed height (h-48), and every bar's wrapper column is h-full with justify-end (flex flex-col h-full justify-end). Otherwise give the bars fixed px heights.
 - Settings and long forms group their fields into labelled sections (Profile, Notifications, Security…), each with a heading and a one-line description of what it controls, then its fields.`
 
 // What the initial mode says about the wireframe, by whether its picture is attached (the eval sends
@@ -117,6 +117,7 @@ ${picture.opening}
 - "row of N side by side": exactly N items in one row on wide screens, stacking only on narrow ones. "N columns side by side": N columns next to each other, each holding its items top to bottom (a hero's text beside its image), stacking only on narrow ones.
 - Text outside any box is a heading or copy at that spot; scribbles and short lines stand for lines of text. Positions place things but don't size text: a "headline" is the section's main heading at the contract's h1 or h2 size, however small it was drawn.
 - The element built for each outline item carries data-node with the item's id (the [id] in the outline), so later changes can find it.
+- The request's page recipe says how this kind of page is built well. Follow it inside the wireframe's structure: it shapes how each box is filled, and never adds or drops a box.
 - ${picture.incomplete}
 - What labels mean: "navbar" or "nav" → a <nav> with links; "hero" → the page's opening section; "image", or a crossed box → an image slot; "button" or "cta" → a button; "card" → an article with what's drawn inside it; "sidebar" → side navigation or a panel; "form" or "input" → form controls; numbers written in a box → a figure display showing those numbers.`
     },
@@ -133,13 +134,14 @@ The request includes the current page's complete HTML and what the user wants ch
 The request includes the main page's complete HTML and the kind of page to write.
 - Write a complete page of that kind for the same product, as the main page's own team would: the same <style> block (the same .c-* and .t-* rules), the same navigation, component styles and image ids.
 - Add the structure the page needs that the main page doesn't have (tables, filters, forms, tabs, side navigation), and don't copy the main page's sections.
-- It's an app screen, so it's dense: contract.spacing.app for panels, tables and forms.`,
+- It's an app screen, so it's dense: contract.spacing.app for panels, tables and forms.
+- Follow the request's page recipe for this kind of page.`,
 
     repair: () => `## Mode: repair a page the check flagged
 The request includes a page's complete HTML and the problems an automatic check found in it, one per line.
 - Fix every listed problem where it is, with the smallest change that fixes it. Everything else stays exactly as it is: the text, the order of elements, ids, data-node and data-slot attributes, classes and image ids.
 - Text that's hard to read gets the matching .c-* pair for its surface. A color from outside the contract becomes the contract's nearest one, through its .c-* class.
-- Banned words, made-up names and placeholder text are rewritten as the copy policy asks: plain words, and a role or initials instead of a name. A placeholder box becomes the thing it stood for.
+- Banned words, made-up names and placeholder text are rewritten as the copy policy asks: plain words, and a made-up company name, a role or initials instead of a person's name. A placeholder box becomes the thing it stood for.
 - A duplicate table column comes out of the header and out of every row.
 - An image box without a fixed shape gets an aspect-[w/h] class and c-muted-bg.
 - An inline <svg> becomes a short text label or a Unicode symbol; an SVG chart becomes bars built from divs.
@@ -169,3 +171,31 @@ export const designSystemPrompt = (mode: GenerationMode, { hasWireframe = true }
 - The copy follows the copy policy.
 ${CHECKS[mode]}`,
 ].join("\n\n")
+
+
+// --- Page recipes -------------------------------------------------------------------------------
+
+// What a good page of each kind has, in things to build rather than adjectives. The request names one,
+// chosen from the wireframe's outline or the workflow page's kind (pageKindFor in src/lib/design-request.ts).
+export type PageKind = "landing" | "dashboard" | "settings" | "profile" | "generic"
+
+export const PAGE_KINDS: PageKind[] = ["landing", "dashboard", "settings", "profile", "generic"]
+
+export const PAGE_RECIPES: Record<PageKind, string> = {
+    landing: `- The hero makes one specific claim (what it is, for whom) and backs it with proof that's a fact about the product: what ships, how many kinds, a guarantee or delivery time, or a row of partner names. Never a made-up rating, customer count or quote.
+- At least one section breaks from a 3-up card grid where the wireframe leaves room: a split row (text beside an image), a stat strip of product facts, or a testimonial slot with neutral text ("Customer quote").
+- Feature copy names concrete things (plant names, materials, sizes, delivery days), one short sentence each.`,
+    dashboard: `- KPI cards: a label, the figure, and a delta with its direction ("+12% vs last month", "↓ 3 from last week") in c-muted-fg.
+- A real chart: bars built from divs with the value above or beside each bar and labels on the axis (months, days), in a row with a fixed height.
+- Table rows with varied, realistic sample data: customers are made-up company names (Northwind Traders, Bluebird Bakery, Harbor & Pine), never a person's name or "Customer 1"; amounts, dates and statuses differ row to row.`,
+    settings: `- Sectioned cards, one per topic (Profile, Notifications, Plan), each with a title, a one-line description of what it controls, then its fields.
+- Inputs use the contract's surface and border (c-card-bg or c-input-bg with border c-border), not a flat grey block, each with a label tied to it.
+- One save action: a sticky bar at the bottom, or a save button at the end of each section.
+- The plan card shows the current plan, 2-3 things it includes, and the upgrade button.
+- No empty half-screen: a single max-w-3xl column, or a 2-column grid whose columns have balanced heights.`,
+    profile: `- A header card: initials in a circle, the account's business or team name, its role and one fact (member since, plan).
+- Detail rows as label and value pairs (email at the brand's domain, location, time zone), with an edit action.
+- Recent activity as a short list with dates, varied entries, no person's names.`,
+    generic: `- The first heading says what the page is for. Related things sit together in titled sections; no filler sections.
+- Real, varied sample values wherever data shows; no numbered stand-ins ("Item 1", "Item 2").`,
+}
