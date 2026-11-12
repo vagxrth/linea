@@ -99,20 +99,45 @@ const wordsOf = (text: string) =>
 
 // The part of the page around an element, as words: its own kind and its ancestors', their ids, and
 // the nearest section's heading and the data-nodes in it (hero01 is "hero")
-const regionWords = (node: HtmlElement) => {
-    const words = new Set<string>()
-    let section: HtmlElement | null = null
-    for (let at: HtmlElement | null = node; at && at.tag !== ROOT; at = at.parent) {
-        for (const word of TAG_WORDS[at.tag] ?? []) words.add(word)
-        for (const word of wordsOf(at.attributes.get("id") ?? "")) words.add(word)
-        if (!section && SECTION_TAGS.has(at.tag)) section = at
-    }
-    if (section) {
+// A section's own words (its data-nodes and headings), read once per section however many issues
+// sit in it: rescanning the section for every element made a long table quadratic
+const sectionWordCache = new WeakMap<HtmlElement, Set<string>>()
+const sectionWords = (section: HtmlElement) => {
+    let words = sectionWordCache.get(section)
+    if (!words) {
+        words = new Set<string>()
         for (const inner of elementsOf(section)) {
             for (const word of wordsOf((inner.attributes.get("data-node") ?? "").replace(/\d+/g, " "))) words.add(NODE_WORDS[word] ?? word)
             if (/^h[1-3]$/.test(inner.tag)) for (const word of wordsOf(textContent(inner))) words.add(word)
         }
+        sectionWordCache.set(section, words)
     }
+    return words
+}
+
+// Each element's words from itself and its ancestors (their kinds and ids), with its nearest section,
+// worked out once per element from its parent's: an element that adds nothing shares its parent's set
+const ancestryCache = new WeakMap<HtmlElement, { words: Set<string>; section: HtmlElement | null }>()
+const ancestry = (node: HtmlElement) => {
+    // The uncached ancestors, nearest first, then filled in from the top down
+    const pending: HtmlElement[] = []
+    for (let at: HtmlElement | null = node; at && at.tag !== ROOT && !ancestryCache.has(at); at = at.parent) pending.push(at)
+    for (let index = pending.length - 1; index >= 0; index--) {
+        const at = pending[index]
+        const above = at.parent && at.parent.tag !== ROOT ? ancestryCache.get(at.parent)! : { words: new Set<string>(), section: null }
+        const own = [...(TAG_WORDS[at.tag] ?? []), ...wordsOf(at.attributes.get("id") ?? "")].filter((word) => !above.words.has(word))
+        ancestryCache.set(at, {
+            words: own.length ? new Set([...above.words, ...own]) : above.words,
+            section: SECTION_TAGS.has(at.tag) ? at : above.section,
+        })
+    }
+    return ancestryCache.get(node) ?? { words: new Set<string>(), section: null }
+}
+
+const regionWords = (node: HtmlElement) => {
+    const { words: around, section } = ancestry(node)
+    const words = new Set(around)
+    if (section) for (const word of sectionWords(section)) words.add(word)
     return words
 }
 
@@ -246,7 +271,8 @@ const colorIssues = (page: Page, contract: DesignContract, context: ValidationCo
 // --- Copy --------------------------------------------------------------------------------------
 
 // A piece of the page's copy and the element it's in: text, and what form fields show
-type Copy = { text: string; node: HtmlElement }
+// field: a form field's value or placeholder, rather than text on the page
+type Copy = { text: string; node: HtmlElement; field?: boolean }
 
 const copyOf = (page: Page): Copy[] => {
     const copy: Copy[] = []
@@ -259,7 +285,7 @@ const copyOf = (page: Page): Copy[] => {
             if (type === "hidden" || type === "password") continue
             for (const attribute of ["value", "placeholder"]) {
                 const value = node.attributes.get(attribute)
-                if (value) copy.push({ text: value, node })
+                if (value) copy.push({ text: value, node, field: true })
             }
         }
     }
@@ -469,11 +495,13 @@ const placeholderFix = (item: Copy) => {
     return COPY_FIX
 }
 
-const PLACEHOLDER_TEXT: { pattern: RegExp; fix: (item: Copy) => string }[] = [
+// fieldsOnly: "Your email" is a fine label or heading, and a stand-in only as what a field holds
+const PLACEHOLDER_TEXT: { pattern: RegExp; fix: (item: Copy) => string; fieldsOnly?: boolean }[] = [
     { pattern: /\blorem\b|\bipsum\b|\bdolor sit amet\b/i, fix: () => COPY_FIX },
     { pattern: /\bplaceholder\b|\b(?:goes|go|will go|will appear|will be shown) here\b/i, fix: placeholderFix },
     { pattern: /\[[^\]]*\b(?:insert|your|name|company|logo|image|chart|title|text|here|placeholder)\b[^\]]*\]/i, fix: () => COPY_FIX },
-    { pattern: /\b(?:john|jane) doe\b|[\w.+-]+@example\.(?:com|org|net)\b|^your (?:full |first |last )?(?:name|e-?mail(?: address)?|company|business|phone(?: number)?|title|address)$/i, fix: () => SAMPLE_FIX },
+    { pattern: /\b(?:john|jane) doe\b|[\w.+-]+@example\.(?:com|org|net)\b/i, fix: () => SAMPLE_FIX },
+    { pattern: /^your (?:full |first |last )?(?:name|e-?mail(?: address)?|company|business|phone(?: number)?|title|address)$/i, fix: () => SAMPLE_FIX, fieldsOnly: true },
 ]
 
 const SAMPLE_FIX = "Use a realistic sample value: an address at the brand's own domain (hello@terrabloom.co), a business or team name where a name goes, as the copy policy asks."
@@ -491,7 +519,8 @@ const placeholderIssues = (page: Page, copy: Copy[], context: ValidationContext)
         groups.set(key, group)
     }
     for (const item of copy) {
-        for (const { pattern, fix } of PLACEHOLDER_TEXT) {
+        for (const { pattern, fix, fieldsOnly } of PLACEHOLDER_TEXT) {
+            if (fieldsOnly && !item.field) continue
             const match = pattern.exec(item.text)
             if (!match || pattern.test(supplied)) continue
             add(`placeholder|${match[0].toLowerCase()}`, `Placeholder text ${quote(item.text)} in ${where(item.node)}. ${fix(item)}`, item.node)
@@ -626,16 +655,44 @@ const imageIssues = (page: Page): Issue[] => {
 
 // --- Heights that resolve to nothing --------------------------------------------------------------
 
-// Whether an element's height is set: a length, an aspect ratio, or a percentage of a parent whose
-// height is set in turn. auto, min-height alone and fit-content aren't.
+const STRETCH = new Set(["", "auto", "normal", "stretch"])
+
+// Whether a flex or grid item takes its height from its container: stretched across a row's cross
+// axis (align-items and align-self left to stretch), grown along a column (flex-1, grow), or a grid
+// item, which stretches by default
+const takesContainerHeight = (node: HtmlElement, styles: Map<HtmlElement, ComputedStyle>) => {
+    if (!node.parent) return false
+    const own = styles.get(node)!.values
+    const container = styles.get(node.parent)!.values
+    const display = container.get("display")?.trim().toLowerCase() ?? ""
+    const alignSelf = own.get("align-self")?.trim().toLowerCase() ?? ""
+    const alignItems = container.get("align-items")?.trim().toLowerCase() ?? ""
+    const stretched = STRETCH.has(alignSelf) && (alignSelf === "stretch" || STRETCH.has(alignItems))
+    if (display === "grid" || display === "inline-grid") return stretched
+    if (display !== "flex" && display !== "inline-flex") return false
+    if ((container.get("flex-direction")?.trim().toLowerCase() ?? "row").startsWith("column")) {
+        const grow = own.get("flex-grow") ?? own.get("flex")?.trim().split(/\s+/)[0]
+        return Number.parseFloat(grow ?? "0") > 0
+    }
+    return stretched
+}
+
+// Whether an element's height is set: a length, an aspect ratio, a percentage of a parent whose height
+// is set in turn, or a flex or grid item sized by a container whose height is set. auto, min-height
+// alone, fit-content and a calc() with a percentage in it aren't.
 const definiteHeight = (node: HtmlElement | null, styles: Map<HtmlElement, ComputedStyle>): boolean => {
     for (let at = node; at && at.tag !== ROOT; at = at.parent) {
         const values = styles.get(at)!.values
         const aspect = values.get("aspect-ratio")?.trim().toLowerCase()
         if (aspect && aspect !== "auto") return true
         const height = values.get("height")?.trim().toLowerCase()
-        if (!height || height === "auto" || /content|inherit|initial|unset/.test(height)) return false
+        if (!height || height === "auto") {
+            if (takesContainerHeight(at, styles)) continue
+            return false
+        }
+        if (/content|inherit|initial|unset/.test(height)) return false
         if (height.endsWith("%")) continue
+        if (height.includes("%")) return false
         return parseFloat(height.replace(/^[a-z]+\(/, "")) > 0
     }
     return false

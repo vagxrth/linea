@@ -292,3 +292,25 @@ describe("the rules run 2 asked for", () => {
         expect(text).toContain('The user\'s request: "Compact the table"\n\nAlso fix these problems the current page has, in the part this request changes, and nothing else:\n- Contrast 1.00:1 in the table.')
     })
 })
+
+describe("page recipes: telling a dashboard or a landing page from settings", () => {
+    const kind = (...nodes: [label: string | undefined, text?: string][]) =>
+        pageKindFor({ mode: "initial", contract, manifest, outline: { ...outline, nodes: nodes.map(([label, text], index) => ({ id: `n${index}`, kind: text ? "text" : "box", ...(label ? { label } : {}), ...(text ? { text } : {}), box: [0, index * 5, 50, index * 5 + 4] })) } })
+
+    it("reads a dashboard with an account menu and a search input as a dashboard", () => {
+        expect(kind(["sidebar"], ["kpi card"], ["chart"], ["search input"], ["account menu"])).toBe("dashboard")
+        expect(kind(["charts"], ["tables"])).toBe("dashboard")
+        expect(kind(["stats"], ["kpis"], ["metrics"])).toBe("dashboard")
+    })
+
+    it("reads a landing page with a sign-up form as a landing page", () => {
+        expect(kind(["navbar"], ["hero"], [undefined, "Create account"], ["email input"])).toBe("landing")
+    })
+
+    it("reads settings only with their words and two or more controls", () => {
+        expect(kind([undefined, "Account settings"], ["toggles"], ["toggle"])).toBe("settings")
+        expect(kind([undefined, "Account settings"], ["checkboxes"], ["input"])).toBe("settings")
+        expect(kind([undefined, "Settings"], ["input"])).toBe("generic")
+        expect(kind([undefined, "Account settings"], ["toggle"], ["input"], ["sidebar"], ["chart"])).toBe("dashboard")
+    })
+})

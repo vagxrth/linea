@@ -169,9 +169,8 @@ const checked = (html: string, design: GenerateDesignOptions["design"], context:
 export const withCarriedProblems = <T extends GenerateDesignOptions["design"]>(design: T): T => {
     if (design.mode !== "refine") return design
     try {
-        const { previousHtml, mode, ...context } = validationContextFor(design)
-        void previousHtml
-        void mode
+        // The same checks the refined page gets, near-duplicate columns included, with nothing to compare against
+        const context = { ...validationContextFor(design), previousHtml: undefined }
         const carried = validate(design.currentHtml, design.contract, context).filter((issue) => issue.severity === "error" && touchedBy(issue, design.message))
         return carried.length ? { ...design, alsoFix: repairProblems(carried) } : design
     } catch (error) {

@@ -123,10 +123,15 @@ export const pageKindFor = (request: DesignRequest): PageKind | null => {
     const words = request.outline ? outlineWords(request.outline.nodes) : (request.legacyOutline ?? "").toLowerCase().split(/[^a-z]+/)
     const has = (pattern: RegExp) => words.some((word) => pattern.test(word))
     const count = (pattern: RegExp) => words.filter((word) => pattern.test(word)).length
-    if (has(/\b(?:settings?|preferences|account)\b/) && has(/\b(?:form|input|toggle|checkbox|select|field)\b/)) return "settings"
-    if (count(/\b(?:sidebar|stat|kpi|chart|graph|table|metric)\b/) >= 2) return "dashboard"
+    // Settings needs its words, at least two form controls, and nothing a dashboard or a landing page has
+    // ("account menu" on a dashboard, "create account" on a landing page)
+    const dashboardParts = count(/\b(?:sidebar|stats?|kpis?|charts?|graphs?|tables?|metrics?)\b/)
+    const controls = count(/\b(?:forms?|inputs?|toggles?|checkbox(?:es)?|selects?|fields?|switch(?:es)?)\b/)
+    if (has(/\b(?:settings?|preferences)\b|\baccount settings\b/) && controls >= 2 && !has(/\b(?:sidebar|charts?|tables?|hero)\b/)) return "settings"
+    if (dashboardParts >= 2) return "dashboard"
     if (has(/\bprofile\b/)) return "profile"
     if (has(/\b(?:hero|navbar|nav)\b/)) return "landing"
+    if (has(/\b(?:settings?|preferences)\b/) && controls >= 2) return "settings"
     return "generic"
 }
 

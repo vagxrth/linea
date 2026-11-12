@@ -387,3 +387,46 @@ describe("a refine's carried-over errors", () => {
         expect(touchedBy(chart, "Change the page section colors")).toBe(false)
     })
 })
+
+describe("P4c follow-ups", () => {
+    it("checks a 3,000-row table with contrast failures in one section in under 500ms", () => {
+        const rows = Array.from({ length: 3000 }, (_, index) => `<tr data-node="row-${index}"><td class="text-white">Order ${index}</td><td>$12.00</td></tr>`).join("")
+        const page = card(`<h2 class="t-h2">Recent orders</h2><table><tbody>${rows}</tbody></table>`)
+        check(page)
+        const started = performance.now()
+        const [issue] = ofKind(check(page), "contrast")
+        expect(performance.now() - started).toBeLessThan(500)
+        expect(issue).toMatchObject({ count: 3000 })
+        expect(issue.regions).toEqual(expect.arrayContaining(["table", "recent", "order"]))
+    })
+
+    it("only calls 'Your Name'-style text a stand-in when a form field holds it", () => {
+        expect(ofKind(check(card('<label for="e">Your email</label><input id="e" type="email"><h3>Your address</h3>')), "placeholder")).toEqual([])
+        expect(ofKind(check(card('<label for="n">Name</label><input id="n" value="Your Name">')), "placeholder")).toEqual([expect.objectContaining({ severity: "error", key: "placeholder|your name" })])
+        expect(ofKind(check(card('<input aria-label="Email" placeholder="Your email">')), "placeholder")).toHaveLength(1)
+    })
+
+    describe("bars in boxes whose height comes from a flex or grid container", () => {
+        const bars = (outer: string, wrapper: string) => ofKind(check(card(`<div class="${outer}"><div class="${wrapper}"><div class="w-8 c-primary-bg" style="height: 60%"></div></div></div>`)), "collapsed-height")
+
+        it("pass inside a stretched flex item or a grid item of a container with a set height", () => {
+            expect(bars("flex h-48", "flex-1")).toEqual([])
+            expect(bars("grid h-48", "")).toEqual([])
+            expect(bars("flex flex-col h-48", "flex-1")).toEqual([])
+        })
+
+        it("still fail where the item isn't stretched, or the container's height isn't set", () => {
+            expect(bars("flex items-end h-48", "")).toHaveLength(1)
+            expect(bars("flex h-48", "self-end")).toHaveLength(1)
+            expect(bars("flex flex-col h-48", "")).toHaveLength(1)
+            expect(bars("flex", "flex-1")).toHaveLength(1)
+            // The run-2 dashboard's columns sit in an items-end row
+            expect(ofKind(check(RUN2_DASHBOARD_INITIAL), "collapsed-height")).toHaveLength(1)
+        })
+
+        it("doesn't count a calc() with a percentage in it as a set height", () => {
+            expect(bars("h-[calc(100%-2rem)]", "h-full")).toHaveLength(1)
+            expect(bars("h-[calc(12rem+8px)]", "h-full")).toEqual([])
+        })
+    })
+})

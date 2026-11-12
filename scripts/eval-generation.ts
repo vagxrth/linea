@@ -83,6 +83,18 @@ const option = (args: string[], name: string) => {
 
 // --- Live runs ----------------------------------------------------------------------------------
 
+// What a design's check and repair came to, for the eval's log and totals: a kept repair that still has
+// errors is "residual" (better, not done; there's no second repair), and a repair the cap left no room
+// for is "not-made (cap)"
+export const repairOutcome = (check: CheckReport | null, repairFits: boolean) => {
+    const before = check?.before ?? []
+    const after = check?.repair === "kept" ? check.after ?? [] : before
+    const residual = check?.repair === "kept" && errorCount(after) > 0
+    const outcome: Outcome["repair"] = residual ? "residual" : check?.repair ?? "not-needed"
+    const shown = residual ? "residual" : check?.repair === "not-sent" && !repairFits ? "not-made (cap)" : check?.repair
+    return { before, after, residual, outcome, shown }
+}
+
 // The calls a live run plans, printed before any call, and by a dry run too: initial and refine for each
 // fixture, and three workflow pages from the first
 export const livePlan = (fixtures: number, repeat: number, cap: number) => {
@@ -128,7 +140,7 @@ const review = (html: string, request: DesignRequest, previous?: string) => {
     }
 }
 
-type Outcome = {
+export type Outcome = {
     design: string
     route: string
     run: number
@@ -212,12 +224,8 @@ const live = async (prepared: Prepared[], out: string | null, repeat: number, ca
         writeFileSync(path.join(directory, `${name}.html`), html)
         if (html !== first) writeFileSync(path.join(directory, `${name}.first.html`), first)
         const result = check as CheckReport | null
-        const before = result?.before ?? []
-        const after = result?.repair === "kept" ? result.after ?? [] : before
-        // A kept repair that still has errors: better, not done. There's no second repair.
-        const residual = result?.repair === "kept" && errorCount(after) > 0
-        outcomes.push({ design: label, route, run: number, calls: attempts.length, errorsBefore: errorCount(before), errorsAfter: errorCount(after), repair: residual ? "residual" : result?.repair ?? "not-needed" })
-        const repair = residual ? "residual" : result?.repair === "not-sent" && !repairFits ? "not-made (cap)" : result?.repair
+        const { before, after, residual, outcome, shown: repair } = repairOutcome(result, repairFits)
+        outcomes.push({ design: label, route, run: number, calls: attempts.length, errorsBefore: errorCount(before), errorsAfter: errorCount(after), repair: outcome })
         console.log(JSON.stringify({ design: name, route, calls: attempts.length, characters: html.length, check: issueSummary(before), repair, ...(result?.discarded ? { discarded: result.discarded } : {}), ...(result?.after ? { afterRepair: issueSummary(result.after) } : {}), ...review(html, request, previous) }))
         for (const line of issueLines("Issues in the first design", before)) console.log(line)
         if (result?.after) for (const line of issueLines(`Issues in the repair (${result.repair})`, result.after)) console.log(line)
